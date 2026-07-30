@@ -239,8 +239,29 @@ function handleFocusChange() {
 // ── Wallpaper injection ────────────────────────────────────────────────────────
 
 function removeWallpaperElements() {
+    if (activeVideo) {
+        try {
+            activeVideo.pause();
+            activeVideo.removeAttribute("src");
+            activeVideo.src = "";
+            activeVideo.load();
+        } catch { }
+        activeVideo = null;
+    }
+    const container = document.getElementById(CONTAINER_ID);
+    if (container) {
+        const videos = container.getElementsByTagName("video");
+        for (let i = 0; i < videos.length; i++) {
+            try {
+                videos[i].pause();
+                videos[i].removeAttribute("src");
+                videos[i].src = "";
+                videos[i].load();
+            } catch { }
+        }
+        container.remove();
+    }
     document.getElementById(STYLE_ID)?.remove();
-    document.getElementById(CONTAINER_ID)?.remove();
 }
 
 async function applyWallpaper() {
@@ -330,4 +351,3 @@ export default definePlugin({
         activeVideo = null;
     },
 });
-

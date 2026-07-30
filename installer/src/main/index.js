@@ -1,7 +1,9 @@
 import {app, BrowserWindow, shell} from "electron";
 import path from "path";
 import URL from "url";
-import updateInstaller from "./update_installer";
+
+// Instant window rendering initialization
+app.disableHardwareAcceleration();
 
 const isDevelopment = process.env.NODE_ENV !== "production";
 app.name = "Guncord";
@@ -18,7 +20,7 @@ function createMainWindow() {
         fullscreenable: false,
         maximizable: false,
         backgroundColor: "#0c0d10",
-        show: false,
+        show: true,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
@@ -28,9 +30,6 @@ function createMainWindow() {
 
     if (isDevelopment) {
         window.webContents.openDevTools({mode: "detach"});
-    }
-
-    if (isDevelopment) {
         window.loadURL(`http://localhost:${process.env.ELECTRON_WEBPACK_WDS_PORT}`);
     }
     else {
@@ -48,13 +47,6 @@ function createMainWindow() {
 
     window.on("closed", () => {
         mainWindow = null;
-    });
-
-    window.webContents.on("devtools-opened", () => {
-        window.focus();
-        setImmediate(() => {
-            window.focus();
-        });
     });
 
     window.webContents.on("new-window", (e, url) => {
@@ -77,6 +69,10 @@ app.on("activate", () => {
 
 app.on("ready", async () => {
     mainWindow = createMainWindow();
-    if (!process.env.BD_SKIP_UPDATECHECK) updateInstaller();
+    // Run update check in background asynchronously without blocking UI startup
+    setTimeout(() => {
+        if (!process.env.BD_SKIP_UPDATECHECK) {
+            import("./update_installer").then(m => m.default?.()).catch(() => {});
+        }
+    }, 2000);
 });
-

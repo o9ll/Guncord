@@ -82,7 +82,6 @@ function buildGuncordFromDiscord(discordApp) {
     if (existsSync(buildInfoSrc)) {
         const buildInfo = JSON.parse(readFileSync(buildInfoSrc, "utf8"));
         buildInfo.newUpdater = false;
-        buildInfo.localModulesRoot = "modules";
         writeFileSync(join(outRes, "build_info.json"), JSON.stringify(buildInfo, null, 2));
     }
 
@@ -110,7 +109,6 @@ const path = require("path");
 const fs = require("fs");
 const { app } = require("electron");
 
-app.setPath("userData", path.join(app.getPath("appData"), "Guncord"));
 app.setAppUserModelId("com.squirrel.Discord.Discord");
 
 const bundledModulesPath = path.join(path.dirname(process.execPath), "modules");
@@ -119,13 +117,12 @@ require(path.join(__dirname, "..", "app", "dist", "desktop", "patcher.js"));
 
     const outApp = join(outRes, "app");
     mkdirSync(outApp, { recursive: true });
-    writeFileSync(join(outApp, "package.json"), JSON.stringify({ name: "guncord", main: "index.js", version: "1.18.0" }, null, 2));
+    writeFileSync(join(outApp, "package.json"), JSON.stringify({ name: "discord", main: "index.js", version: "1.18.0" }, null, 2));
     writeFileSync(join(outApp, "index.js"), `
 "use strict";
 const path = require("path");
 const { app } = require("electron");
 
-app.setPath("userData", path.join(app.getPath("appData"), "Guncord"));
 app.setAppUserModelId("com.squirrel.Discord.Discord");
 
 require(path.join(__dirname, "dist", "desktop", "patcher.js"));
@@ -213,4 +210,3 @@ module.exports = {
         requestedExecutionLevel: "asInvoker"
     }
 };
-

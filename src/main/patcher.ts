@@ -76,19 +76,26 @@ if (!IS_VANILLA) {
 
     class BrowserWindow extends electron.BrowserWindow {
         constructor(options: BrowserWindowConstructorOptions) {
+            const titleLower = (options?.title ?? "").toLowerCase();
+            const preloadLower = (options?.webPreferences?.preload ?? "").toLowerCase();
+            const isOverlay = titleLower.includes("overlay") || preloadLower.includes("overlay") || (options as any)?.isOverlay;
+
+            if (isOverlay) {
+                options.transparent = true;
+                options.backgroundColor = "#00000000";
+                options.hasShadow = false;
+                options.frame = false;
+                super(options);
+                try {
+                    this.setBackgroundColor("#00000000");
+                } catch {}
+                return;
+            }
+
             // On n'injecte le preload Guncord QUE dans les fenêtres Discord/Guncord légitimes.
-            // Toutes les autres (overlay in-game, popups OAuth/connexion Spotify/Steam/GitHub/etc.,
-            // fenêtres de profil tierces) passent en super() sans modification pour éviter
-            // l'écran blanc / la fenêtre bloquée.
-            //
-            // Règle : on injecte SEULEMENT si le preload vient de nous (pointe vers notre preload.js).
-            // Toute fenêtre créée par Discord avec son propre preload ou un preload tiers est laissée intacte.
             const ourPreload = join(__dirname, "preload.js");
             const preloadIsOurs = options.webPreferences.preload === ourPreload;
-            // Exception : la fenêtre principale Discord a un preload à elle (l'original Discord),
-            // et c'est précisément ce qu'on veut remplacer — donc on accepte aussi le cas où
-            // le titre est une fenêtre Guncord/Equicord/Discord connue.
-            const KNOWN_TITLES = /^(Discord|Vesktop|Equibop)$|^(Guncord|Equicord)/;
+            const KNOWN_TITLES = /^(Discord|Vesktop|Equibop)$|^(Guncord|Equicord)|Overlay/i;
             const isTrustedTitle = !!(options.title && KNOWN_TITLES.test(options.title));
             const isVBCable = !!(options.title && options.title.includes("VB-Cable"));
 
@@ -204,11 +211,6 @@ if (!IS_VANILLA) {
                     return superIsFullScreen();
                 };
 
-                // ── Fullscreen via HTML5 (vidéo plein écran, etc.) ──
-                // On branche enter/leave-html-full-screen dans les deux modes pour que
-                // les vrais plein écrans HTML5 fonctionnent correctement.
-                // DISCORD_WINDOW_TOGGLE_FULLSCREEN est neutralisé plus bas — il ne
-                // passera JAMAIS par setFullScreen natif.
                 if (isTransparent) {
                     this.on("enter-html-full-screen", () => {
                         if (!isFakeFullScreen) this.setFullScreen(true);
@@ -225,9 +227,6 @@ if (!IS_VANILLA) {
                     });
                 }
 
-                // ── F11 géré ici, côté main process ──
-                // On intercepte F11 via before-input-event pour basculer le fullscreen
-                // utilisateur. C'est la SEULE source légitime de toggle fullscreen manuel.
                 this.webContents.on("before-input-event", (event, input) => {
                     if (input.type === "keyDown" && input.key === "F11" && !input.control && !input.shift && !input.alt && !input.meta) {
                         event.preventDefault();
@@ -235,16 +234,13 @@ if (!IS_VANILLA) {
                     }
                 });
 
-                // Apply Windows background material after window creation.
                 if (process.platform === "win32" && winMaterial && winMaterial !== "none") {
                     try {
                         let applied = false;
-                        // @ts-ignore
                         if (typeof this.setBackgroundMaterial === "function") {
                             this.setBackgroundMaterial(winMaterial);
                             applied = true;
                         }
-                        // @ts-ignore
                         if (!applied && typeof this.setVibrancy === "function") {
                             this.setVibrancy(winMaterial === "acrylic" ? "acrylic" : "under-window");
                             applied = true;
@@ -260,12 +256,10 @@ if (!IS_VANILLA) {
                 if (settings.disableMinSize) {
                     this.setMinimumSize = (_width: number, _height: number) => { };
                 }
-
-                // NOTE : le setWindowOpenHandler / will-navigate pour les liens externes
-                // est géré exclusivement par guncord-index.js (app.on("web-contents-created"))
-                // afin d'éviter qu'un second handler ici n'écrase la logique did-create-window
-                // qui patche les fenêtres enfants about:blank (popups TikTok, settings, etc.).
             } else {
+                if (options && options.title !== "Discord") {
+                    options.backgroundColor ??= "#1e1f22";
+                }
                 super(options);
             }
         }
@@ -273,7 +267,6 @@ if (!IS_VANILLA) {
     Object.assign(BrowserWindow, electron.BrowserWindow);
     Object.defineProperty(BrowserWindow, "name", { value: "BrowserWindow", configurable: true });
 
-    // Replace electrons exports with our custom BrowserWindow
     const electronPath = require.resolve("electron");
     delete require.cache[electronPath]!.exports;
     require.cache[electronPath]!.exports = {
@@ -281,16 +274,186 @@ if (!IS_VANILLA) {
         BrowserWindow
     };
 
-    // Enable DevTools always for modders
     onceDefined(global, "appSettings", s => {
         s.set("DANGEROUS_ENABLE_DEVTOOLS_ONLY_ENABLE_IF_YOU_KNOW_WHAT_YOURE_DOING", true);
     });
 
-    process.env.DATA_DIR = join(app.getPath("userData"), "..", "Guncord");
+function isInternalAppUrl(rawUrl: string): boolean {
+    if (!rawUrl || rawUrl === "about:blank") return true;
+    if (rawUrl.startsWith("file://") || rawUrl.startsWith("devtools://") || rawUrl.startsWith("about:")) return true;
 
-    app.whenReady().then(() => {
-        registerMediaPermissionsForSession(session.defaultSession);
+    try {
+        const u = new URL(rawUrl);
+        const host = u.hostname.toLowerCase();
+        const path = u.pathname.toLowerCase();
+
+        // Captchas inside Discord
+        if (host.includes("hcaptcha.com") || host.includes("recaptcha.net")) return true;
+        if (host.includes("google.com") && path.startsWith("/recaptcha")) return true;
+        if ((host === "discord.com" || host.endsWith(".discord.com")) && path.startsWith("/cdn-cgi/")) return true;
+
+        // Legitimate Discord App windows (Main Client & Chat/Voice Popouts)
+        if (host === "discord.com" || host === "canary.discord.com" || host === "ptb.discord.com") {
+            if (path.startsWith("/channels/") || path === "/popout" || path.startsWith("/popout/")) {
+                return true;
+            }
+        }
+    } catch {}
+
+    return false;
+}
+
+function patchWebContents(wc: electron.WebContents) {
+    if ((wc as any)._guncordPatched) return;
+    (wc as any)._guncordPatched = true;
+
+    wc.setWindowOpenHandler(({ url, frameName }) => {
+        const isOverlay = frameName && (frameName.toLowerCase().includes("overlay") || frameName.startsWith("DISCORD_"));
+        if (isOverlay) {
+            return {
+                action: "allow",
+                overrideBrowserWindowOptions: {
+                    transparent: true,
+                    backgroundColor: "#00000000",
+                    frame: false,
+                    hasShadow: false
+                }
+            };
+        }
+        if (!url || url === "about:blank" || url.startsWith("devtools://")) {
+            return {
+                action: "allow",
+                overrideBrowserWindowOptions: {
+                    show: false,
+                    width: 0,
+                    height: 0,
+                    x: -9999,
+                    y: -9999,
+                    skipTaskbar: true,
+                    frame: false,
+                    transparent: true,
+                    backgroundColor: "#00000000"
+                }
+            };
+        }
+        if (!isInternalAppUrl(url)) {
+            electron.shell.openExternal(url).catch(() => {});
+            return { action: "deny" };
+        }
+        return { action: "allow" };
     });
+
+    wc.on("did-create-window", (childWin, details) => {
+        const title = childWin.getTitle();
+        const isOverlay = title && title.toLowerCase().includes("overlay");
+
+        if (isOverlay) {
+            try {
+                childWin.setBackgroundColor("#00000000");
+            } catch {}
+            return;
+        }
+
+        try {
+            childWin.hide();
+            childWin.setOpacity(0);
+            childWin.setSkipTaskbar(true);
+        } catch {}
+
+        childWin.on("page-title-updated", (_e, t) => {
+            if (t && (t === "discord" || t === "Discord Popup")) {
+                try { childWin.destroy(); } catch {}
+            } else if (t && t.toLowerCase().includes("overlay")) {
+                try { childWin.setBackgroundColor("#00000000"); } catch {}
+            }
+        });
+
+        const childWc = childWin.webContents;
+        if ((childWc as any)._guncordPatched) return;
+        (childWc as any)._guncordPatched = true;
+
+        const openUrl = details && details.url;
+        if (openUrl && openUrl !== "about:blank" && !openUrl.startsWith("devtools://") && !isInternalAppUrl(openUrl)) {
+            electron.shell.openExternal(openUrl).catch(() => {});
+            try { childWin.destroy(); } catch (_) {}
+            return;
+        }
+
+        childWc.once("will-navigate", (event, url) => {
+            if (!isInternalAppUrl(url)) {
+                event.preventDefault();
+                electron.shell.openExternal(url).catch(() => {});
+                try { childWin.destroy(); } catch (_) {}
+            }
+        });
+
+        childWc.once("did-navigate", (_event, url) => {
+            if (!isInternalAppUrl(url)) {
+                electron.shell.openExternal(url).catch(() => {});
+                try { childWin.destroy(); } catch (_) {}
+            }
+        });
+
+        childWc.setWindowOpenHandler(({ url }) => {
+            if (!url || url === "about:blank" || url.startsWith("devtools://")) {
+                return {
+                    action: "allow",
+                    overrideBrowserWindowOptions: {
+                        show: false,
+                        skipTaskbar: true
+                    }
+                };
+            }
+            electron.shell.openExternal(url).catch(() => {});
+            return { action: "deny" };
+        });
+
+        childWc.once("did-finish-load", () => {
+            const url = childWc.getURL();
+            if (url && url !== "about:blank" && !isInternalAppUrl(url)) {
+                electron.shell.openExternal(url).catch(() => {});
+                try { childWin.destroy(); } catch (_) {}
+            }
+        });
+
+        setImmediate(() => {
+            try {
+                if (!childWin.isDestroyed()) {
+                    const u = childWc.getURL();
+                    const t = childWin.getTitle();
+                    if (!u || u === "about:blank" || u.includes("/popup") || t === "discord" || t === "Discord Popup") {
+                        try { childWin.destroy(); } catch (_) {}
+                    }
+                }
+            } catch (_) {}
+        });
+    });
+
+    wc.on("will-navigate", (event, url) => {
+        const currentUrl = wc.getURL();
+        if (url !== currentUrl && !isInternalAppUrl(url)) {
+            event.preventDefault();
+            electron.shell.openExternal(url).catch(() => {});
+        }
+    });
+}
+
+app.on("browser-window-created", (_, win) => {
+    patchWebContents(win.webContents);
+});
+
+app.on("web-contents-created", (_, wc) => {
+    patchWebContents(wc);
+});
+
+process.env.DATA_DIR = join(app.getPath("userData"), "..", "Guncord");
+
+app.whenReady().then(() => {
+    registerMediaPermissionsForSession(session.defaultSession);
+    for (const wc of electron.webContents.getAllWebContents()) {
+        patchWebContents(wc);
+    }
+});
 
     // ── Neutralisation de DISCORD_WINDOW_TOGGLE_FULLSCREEN ──
     //
@@ -355,4 +518,3 @@ if (!IS_VANILLA) {
 
 console.log("[Guncord] Loading original Discord app.asar");
 require(require.main!.filename);
-

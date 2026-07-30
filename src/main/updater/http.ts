@@ -26,7 +26,7 @@ let isApplying = false;
 async function githubGet<T = any>(endpoint: string): Promise<T> {
     return fetchJson<T>(API_BASE + endpoint, {
         headers: {
-            Accept: "application/json",
+            Accept: "application/vnd.github+json",
             "User-Agent": VENCORD_USER_AGENT
         }
     });

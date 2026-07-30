@@ -65,7 +65,7 @@ async function fetchCommitsBetween(
             `${GITHUB_API_BASE}/${repoSlug}/compare/${fromHash}...${toHash}`,
             {
                 headers: {
-                    Accept: "application/json",
+                    Accept: "application/vnd.github+json",
                     "Cache-Control": "no-cache",
                 },
             },

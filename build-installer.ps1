@@ -1,77 +1,54 @@
-# build-installer.ps1 — Build Guncord-Installer.exe (Electron + electron-builder)
+# build-installer.ps1 — Build Guncord-Installer.exe (Electron Portable)
 # Usage: .\build-installer.ps1
 
 $ErrorActionPreference = "Stop"
-$Root      = $PSScriptRoot
-$SrcDir    = Join-Path $Root "installer"
-$OutDir    = Join-Path $Root "release\installer"
-$OutExe    = Join-Path $OutDir "Guncord-Installer.exe"
+$Root = $PSScriptRoot
+$InstallerSrc = Join-Path $Root "installer"
+$OutDir = Join-Path $Root "release\installer"
+$OutExe = Join-Path $OutDir "Guncord-Installer.exe"
 
 Write-Host ""
 Write-Host "  [Guncord] Building Electron installer..." -ForegroundColor Cyan
 
-# ── Prerequis ───────────────────────────────────────────────────────────────
-$nodeOk = $null
-try { $nodeOk = & node --version 2>$null } catch {}
-if (-not $nodeOk) {
-    Write-Host "  [ERREUR] Node.js introuvable. Installez-le depuis https://nodejs.org" -ForegroundColor Red
-    exit 1
-}
-Write-Host "  Node.js : $nodeOk" -ForegroundColor DarkGray
+# ── Fermeture des processus verrouilles ─────────────────────────────────────────
+try { Stop-Process -Name "Guncord", "Guncord-Installer" -Force -ErrorAction SilentlyContinue } catch {}
 
 # ── Dossier de sortie ────────────────────────────────────────────────────────
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
-# ── Installer les dependances si besoin ──────────────────────────────────────
-$nodeModules = Join-Path $SrcDir "node_modules"
-if (-not (Test-Path $nodeModules)) {
-    Write-Host "  [1/3] npm install --legacy-peer-deps..." -ForegroundColor DarkGray
-    Push-Location $SrcDir
+Set-Location $InstallerSrc
+
+# ── Check dependencies ───────────────────────────────────────────────────────
+if (-not (Test-Path "node_modules")) {
+    Write-Host "  [1/3] npm install..." -ForegroundColor DarkGray
     & npm install --legacy-peer-deps
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  [ERREUR] npm install a echoue." -ForegroundColor Red
-        Pop-Location
-        exit 1
-    }
-    Pop-Location
-    Write-Host "  [1/3] Dependances installees." -ForegroundColor Green
-} else {
-    Write-Host "  [1/3] node_modules present, installation ignoree." -ForegroundColor DarkGray
+    if ($LASTEXITCODE -ne 0) { exit 1 }
 }
 
 # ── Compilation webpack ──────────────────────────────────────────────────────
-Write-Host "  [2/3] electron-webpack (compilation)..." -ForegroundColor DarkGray
-Push-Location $SrcDir
+Write-Host "  [2/3] npm run compile (electron-webpack)..." -ForegroundColor DarkGray
 & npm run compile
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "  [ERREUR] Compilation webpack echouee." -ForegroundColor Red
-    Pop-Location
-    exit 1
-}
-Pop-Location
-Write-Host "  [2/3] Webpack OK." -ForegroundColor Green
+if ($LASTEXITCODE -ne 0) { exit 1 }
 
 # ── Packaging electron-builder ───────────────────────────────────────────────
-Write-Host "  [3/3] electron-builder --win (packaging)..." -ForegroundColor DarkGray
-Push-Location $SrcDir
+try { Stop-Process -Name "Guncord", "Guncord-Installer" -Force -ErrorAction SilentlyContinue } catch {}
+$unpacked = Join-Path $OutDir "win-unpacked"
+if (Test-Path $unpacked) { Remove-Item -Recurse -Force $unpacked -ErrorAction SilentlyContinue }
+
+Write-Host "  [3/3] npx electron-builder..." -ForegroundColor DarkGray
 & npx electron-builder --win -p never
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "  [ERREUR] electron-builder a echoue." -ForegroundColor Red
-    Pop-Location
-    exit 1
-}
-Pop-Location
-Write-Host "  [3/3] Packaging OK." -ForegroundColor Green
+if ($LASTEXITCODE -ne 0) { exit 1 }
+
+Set-Location $Root
 
 # ── Verification ─────────────────────────────────────────────────────────────
 if (Test-Path $OutExe) {
-    $size = [math]::Round((Get-Item $OutExe).Length / 1KB, 0)
+    $size = [math]::Round((Get-Item $OutExe).Length / 1MB, 2)
     Write-Host ""
-    Write-Host "  OK  Guncord-Installer.exe compile ($size KB)" -ForegroundColor Green
+    Write-Host "  OK  Guncord-Installer.exe compile ($size MB)" -ForegroundColor Green
     Write-Host "    -> $OutExe" -ForegroundColor DarkGray
     Write-Host ""
 } else {
     Write-Host "  [ERREUR] Guncord-Installer.exe introuvable apres compilation." -ForegroundColor Red
     exit 1
 }
-

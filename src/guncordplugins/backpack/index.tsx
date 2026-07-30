@@ -257,6 +257,17 @@ const BackpackChatBarButton: ChatBarButtonFactory = props => {
     );
 };
 
+async function isExistingUser(): Promise<boolean> {
+    try {
+        if (await DataStore.get<boolean>("Guncord_installed")) return true;
+        if ((await DataStore.get<any>("Vencord_existingPlugins")) !== undefined) return true;
+        if ((await DataStore.get<any>("TokenImporter_accounts")) !== undefined) return true;
+        if ((await DataStore.get<any>("SaveProfile_presets")) !== undefined) return true;
+        if ((await DataStore.get<any>("Vencord_cloudSecret")) !== undefined) return true;
+    } catch { }
+    return false;
+}
+
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 export default definePlugin({
@@ -272,19 +283,26 @@ export default definePlugin({
     },
 
     async start() {
-        // Check if we have saved data (null = first install, [] = manually emptied)
+        // Check if we have saved data (null = first install/update, [] = manually emptied)
         const rawPacked = await DataStore.get<string[] | null>(STORE_KEY);
-        const firstRun = rawPacked === null || rawPacked === undefined;
 
-        if (firstRun) {
-            // First install: pack all chat bar buttons except Backpack itself
-            // We wait a short tick so that all plugins have had time to register
-            await new Promise(r => setTimeout(r, 500));
-            const allIds = Array.from(ChatBarButtonMap.keys()).filter(id => id !== "Backpack");
-            for (const id of allIds) BackpackedButtons.add(id);
-            await savePacked([...BackpackedButtons]);
+        if (rawPacked === null || rawPacked === undefined) {
+            const existingUser = await isExistingUser();
+            if (existingUser) {
+                // Existing user updating Guncord: keep buttons unpacked
+                await savePacked([]);
+                await DataStore.set("Guncord_installed", true);
+            } else {
+                // Fresh install: pack chat bar buttons except Backpack itself
+                await new Promise(r => setTimeout(r, 500));
+                const allIds = Array.from(ChatBarButtonMap.keys()).filter(id => id !== "Backpack");
+                for (const id of allIds) BackpackedButtons.add(id);
+                await savePacked([...BackpackedButtons]);
+                await DataStore.set("Guncord_installed", true);
+            }
         } else {
             for (const id of rawPacked) BackpackedButtons.add(id);
+            await DataStore.set("Guncord_installed", true);
         }
         notifyBackpackChange();
     },
@@ -294,4 +312,3 @@ export default definePlugin({
         notifyBackpackChange();
     },
 });
-

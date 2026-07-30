@@ -83,7 +83,7 @@ const UserPluginContributorBadge: ProfileBadge = {
 
 let DonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
 let EquicordDonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
-let GuncordBadges = {} as Record<string, Array<{ icon: string; placeholder: string; uuid: string; }>>;
+let GuncordBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
 
 async function loadBadges(url: string, noCache = false) {
     const init = {} as RequestInit;
@@ -95,7 +95,7 @@ async function loadBadges(url: string, noCache = false) {
 async function loadAllBadges(noCache = false) {
     const vencordBadges = await loadBadges("https://badges.vencord.dev/badges.json", noCache).catch(() => ({}));
     const equicordBadges = await loadBadges("https://badge.equicord.org/badges.json", noCache).catch(() => ({}));
-    const guncordBadges = await loadBadges(`https://raw.githubusercontent.com/o9ll/Guncord/refs/heads/main/assets/badges.json`, noCache).catch(() => ({}));
+    const guncordBadges = await loadBadges("https://raw.githubusercontent.com/o9ll/Guncord/refs/heads/master/assets/badges.json", noCache).catch(() => ({}));
 
     DonorBadges = vencordBadges;
     EquicordDonorBadges = equicordBadges;
@@ -336,30 +336,34 @@ export default definePlugin({
             const userBadges = GuncordBadges[userId];
             if (!userBadges || !Array.isArray(userBadges)) return [];
 
-            return userBadges
-                .filter(badge => badge && badge.icon)
-                .map(badge => ({
-                    iconSrc: badge.icon,
-                    description: badge.placeholder ?? "Guncord Badge",
+            const results: ProfileBadge[] = [];
+            for (const badge of userBadges) {
+                if (!badge) continue;
+
+                const iconSrc = (badge as any).badge || (badge as any).iconSrc || (badge as any).icon || (badge as any).url;
+                if (!iconSrc || typeof iconSrc !== "string") continue;
+
+                results.push({
+                    iconSrc: iconSrc,
+                    description: (badge as any).tooltip || (badge as any).description || (badge as any).label || "Guncord Badge",
+                    link: (badge as any).link || "",
                     position: BadgePosition.START,
                     props: {
                         style: {
-                            borderRadius: "50%",
+                            borderRadius: "0%",
                             maxHeight: "22px",
                             maxWidth: "22px"
                         }
                     },
                     onContextMenu(event, b) {
                         ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={b as any} />);
-                    },
-                    onClick() {
-                        return GenericBadgeModal(badge, "Guncord");
                     }
-                } satisfies ProfileBadge));
+                });
+            }
+            return results;
         } catch (e) {
-            console.error("[BadgeAPI] Error processing guncord badges for", userId, e);
+            console.error("[BadgeAPI] Error processing badges for", userId, e);
             return [];
         }
     }
 });
-

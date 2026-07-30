@@ -11,5 +11,6 @@ export default {
     "/install": PerformActionPage,
     "/repair": PerformActionPage,
     "/uninstall": PerformActionPage,
+    "/uninject_thirdparty": PerformActionPage,
     "*": LoadingPage,
 };

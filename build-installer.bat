@@ -3,9 +3,9 @@ title Guncord Installer - Build
 cd /d "%~dp0"
 
 echo.
-echo  ================================
-echo   Guncord Installer - Build
-echo  ================================
+echo  ====================================
+echo   Guncord Installer - Build (Electron)
+echo  ====================================
 echo.
 
 :: Verifie que node est disponible
@@ -16,16 +16,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: Ferme toute instance de l'installeur en cours d'execution pour debloquer les fichiers
+taskkill /F /IM Guncord.exe /IM Guncord-Installer.exe >nul 2>&1
+
 :: Cree le dossier de sortie si besoin
 if not exist "release\installer" mkdir "release\installer"
 
-:: Entre dans le dossier installer
+:: Entre dans installer
 cd installer
 
 :: Installe les dependances si node_modules absent
 if not exist "node_modules" (
     echo  [1/3] Installation des dependances npm...
-    npm install --legacy-peer-deps
+    call npm install --legacy-peer-deps
     if errorlevel 1 (
         echo  [ERREUR] npm install a echoue.
         cd ..
@@ -34,12 +37,12 @@ if not exist "node_modules" (
     )
     echo  [1/3] Dependances installees.
 ) else (
-    echo  [1/3] Dependances deja presentes, on passe.
+    echo  [1/3] Dependances deja presentes.
 )
 
-:: Compile avec electron-webpack
+:: Compilation webpack
 echo.
-echo  [2/3] Compilation webpack (electron-webpack)...
+echo  [2/3] Compilation electron-webpack...
 call npm run compile
 if errorlevel 1 (
     echo  [ERREUR] Compilation webpack echouee.
@@ -49,7 +52,15 @@ if errorlevel 1 (
 )
 echo  [2/3] Compilation webpack reussie.
 
-:: Build electron-builder -> Guncord-Installer.exe dans ../release/installer/
+:: Re-ferme toute instance de l'installeur avant le packaging
+taskkill /F /IM Guncord.exe /IM Guncord-Installer.exe >nul 2>&1
+
+:: Tente de nettoyer win-unpacked s'il existe
+if exist "..\release\installer\win-unpacked" (
+    rmdir /S /Q "..\release\installer\win-unpacked" >nul 2>&1
+)
+
+:: Packaging electron-builder -> Guncord-Installer.exe dans release/installer
 echo.
 echo  [3/3] Packaging electron-builder...
 call npx electron-builder --win -p never
@@ -65,15 +76,15 @@ cd ..
 :: Verification
 if not exist "release\installer\Guncord-Installer.exe" (
     echo.
-    echo  [ERREUR] Guncord-Installer.exe introuvable apres build.
+    echo  [ERREUR] Guncord-Installer.exe introuvable apres compilation.
     pause
     exit /b 1
 )
 
 for %%F in ("release\installer\Guncord-Installer.exe") do (
     echo.
-    echo  [OK] Build reussi ^!
-    echo  Fichier : release\installer\Guncord-Installer.exe  (%%~zF octets^)
+    echo  [OK] Build reussi !
+    echo  Fichier : release\installer\Guncord-Installer.exe (%%~zF octets)
     echo.
 )
 
@@ -81,4 +92,3 @@ for %%F in ("release\installer\Guncord-Installer.exe") do (
 explorer release\installer
 
 pause
-

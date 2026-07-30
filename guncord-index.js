@@ -5,9 +5,8 @@ const Module = require("module");
 const fs = require("fs");
 const { app } = require("electron");
 
-// ── CRITICAL: userData = Guncord folder for settings/plugins
+// Guncord mod data directory is managed by DATA_DIR in constants.ts
 const guncordData = path.join(app.getPath("appData"), "Guncord");
-app.setPath("userData", guncordData);
 
 // Unique AppUserModelId — Windows recognizes Guncord as a separate app from Discord
 app.setAppUserModelId("com.squirrel.Discord.Discord");
@@ -46,35 +45,32 @@ app.once("ready", () => {
         }
 
         function patchWebContents(wc) {
-            // Avoid patching the same webContents twice
             if (wc._guncordPatched) return;
             wc._guncordPatched = true;
 
-            // Intercept window.open():
-            // - about:blank is allowed (Discord needs it for legitimate popups)
-            //   BUT we listen to did-create-window to immediately patch the child window
-            // - devtools:// is allowed
-            // - everything else → external browser
-            wc.setWindowOpenHandler(({ url }) => {
+            wc.setWindowOpenHandler(({ url, frameName }) => {
+                if (frameName && (frameName.includes("Overlay") || frameName.startsWith("DISCORD_"))) {
+                    if (frameName.includes("Overlay")) return { action: "deny" };
+                }
                 if (!url || url === "about:blank" || url.startsWith("devtools://")) {
                     return { action: "allow" };
                 }
-                shell.openExternal(url).catch(() => {});
-                console.log("[Guncord][LINK] External open:", url);
-                return { action: "deny" };
+                if (!isDiscordUrl(url)) {
+                    shell.openExternal(url).catch(() => {});
+                    console.log("[Guncord][LINK] External link opened:", url);
+                    return { action: "deny" };
+                }
+                return { action: "allow" };
             });
 
-            // KEY FIX: when about:blank creates a child window,
-            // Discord then navigates to an external URL (TikTok, GitHub, etc.)
-            // in that child window. We patch it immediately on creation
-            // to block this navigation and open it in the browser.
             wc.on("did-create-window", (childWin, details) => {
+                // Hide immediately to prevent white popup window from rendering on screen
+                try { childWin.hide(); } catch {}
+
                 const childWc = childWin.webContents;
                 if (childWc._guncordPatched) return;
                 childWc._guncordPatched = true;
 
-                // The child window starts on about:blank but will navigate to an external URL
-                // Block any non-Discord navigation as soon as it happens
                 const openUrl = details && details.url;
                 if (openUrl && openUrl !== "about:blank" && !openUrl.startsWith("devtools://") && !isDiscordUrl(openUrl)) {
                     shell.openExternal(openUrl).catch(() => {});
@@ -83,28 +79,23 @@ app.once("ready", () => {
                     return;
                 }
 
-                // La fenêtre enfant démarre sur about:blank mais va naviguer vers une URL externe
-                // On bloque toute navigation non-Discord dès qu'elle se produit
                 childWc.on("will-navigate", (event, url) => {
                     if (!isDiscordUrl(url)) {
                         event.preventDefault();
                         shell.openExternal(url).catch(() => {});
                         console.log("[Guncord][CHILD-NAV] External redirect:", url);
-                        // Close the empty child window after redirect
-                        try { childWin.close(); } catch (_) {}
+                        try { childWin.destroy(); } catch (_) {}
                     }
                 });
 
-                // did-navigate covers cases where navigation already happened (OAuth, TikTok) before will-navigate
-                childWc.on('did-navigate', function(_event, url) {
+                childWc.on("did-navigate", (_event, url) => {
                     if (!isDiscordUrl(url)) {
-                        shell.openExternal(url).catch(function() {});
-                        console.log('[Guncord][CHILD-DID-NAV] External redirect after navigation:', url);
-                        try { childWin.close(); } catch (_) {}
+                        shell.openExternal(url).catch(() => {});
+                        console.log("[Guncord][CHILD-DID-NAV] Redirection externe:", url);
+                        try { childWin.destroy(); } catch (_) {}
                     }
                 });
 
-                // Also block new navigations via setWindowOpenHandler in the child
                 childWc.setWindowOpenHandler(({ url }) => {
                     if (!url || url === "about:blank" || url.startsWith("devtools://")) return { action: "allow" };
                     shell.openExternal(url).catch(() => {});
@@ -112,54 +103,29 @@ app.once("ready", () => {
                     return { action: "deny" };
                 });
 
-                // Also block did-finish-load if the window loaded an external URL
                 childWc.on("did-finish-load", () => {
                     const url = childWc.getURL();
                     if (url && url !== "about:blank" && !isDiscordUrl(url)) {
                         shell.openExternal(url).catch(() => {});
-                        console.log("[Guncord][CHILD-LOAD] Closing and redirecting:", url);
-                        try { childWin.close(); } catch (_) {}
-                    }
-                });
-
-                // ── FIX "Discord Popup" (fenêtre blanche) ──────────────────────────
-                // Discord crée parfois des BrowserWindow avec about:blank dont le titre
-                // devient "Discord Popup". Ces fenêtres sont des popups OAuth/Nitro/overlay
-                // qui chargent leur contenu via loadURL() côté main process (invisible pour
-                // will-navigate). On les détecte par leur titre et on intercepte loadURL.
-                function handleDiscordPopup() {
-                    const url = childWc.getURL();
-                    if (url && url !== "about:blank" && !url.startsWith("devtools://") && !isDiscordUrl(url)) {
-                        shell.openExternal(url).catch(() => {});
-                        console.log("[Guncord][POPUP] Redirection popup externe:", url);
+                        console.log("[Guncord][CHILD-LOAD] Closure and redirection:", url);
                         try { childWin.destroy(); } catch (_) {}
                     }
-                }
-
-                childWin.on("page-title-updated", (_event, _title) => {
-                    // Vérifier l'URL à chaque changement de titre — handleDiscordPopup
-                    // ne fait rien si l'URL est Discord ou about:blank
-                    handleDiscordPopup();
                 });
 
-                // Vérifier après un court délai si la fenêtre a chargé une URL externe
-                // (cas où loadURL() est appelé côté main process avant nos handlers)
+                // Destroy any lingering blank popup after 100ms
                 setTimeout(() => {
                     try {
-                        if (childWin.isDestroyed()) return;
-                        handleDiscordPopup();
+                        if (!childWin.isDestroyed()) {
+                            const u = childWc.getURL();
+                            const title = childWin.getTitle();
+                            if (!u || u === "about:blank" || u.includes("/popup") || title === "discord" || title === "Discord Popup") {
+                                try { childWin.destroy(); } catch (_) {}
+                            }
+                        }
                     } catch (_) {}
-                }, 300);
-
-                setTimeout(() => {
-                    try {
-                        if (childWin.isDestroyed()) return;
-                        handleDiscordPopup();
-                    } catch (_) {}
-                }, 1500);
+                }, 100);
             });
 
-            // Block parent window navigations to external URLs
             wc.on("will-navigate", (event, url) => {
                 const currentUrl = wc.getURL();
                 if (url !== currentUrl && !isDiscordUrl(url)) {
@@ -220,7 +186,7 @@ app.once("ready", () => {
 // When Discord crashes during a localStorage write, the LevelDB file can
 // become corrupted and freeze the renderer on next startup.
 try {
-    const lsPath = path.join(guncordData, "Local Storage", "leveldb");
+    const lsPath = path.join(app.getPath("userData"), "Local Storage", "leveldb");
     if (fs.existsSync(lsPath)) {
         // Detect corruption: locked LOCK file or missing LOG file
         const lockFile = path.join(lsPath, "LOCK");
@@ -369,26 +335,18 @@ global.mainAppDirname = fs.existsSync(coreModuleDir)
         : path.join(moduleDataPath, "discord_desktop_core");
 console.log("[Guncord] mainAppDirname:", global.mainAppDirname);
 
-// ── NATIVE AUDIO FIX: patch build_info.json so Discord finds modules ──
-// Only patch once (quick check before any disk reads)
+// Cleanup legacy localModulesRoot in build_info.json so Discord uses its native voice modules and preserves audio settings
 try {
-    const buildInfoPath = path.join(
-        path.dirname(process.execPath), "resources", "build_info.json"
-    );
-    const nativeModulesDir = path.join(path.dirname(process.execPath), "modules");
-    // Only read the file if the modules folder exists
-    if (fs.existsSync(nativeModulesDir)) {
+    const buildInfoPath = path.join(path.dirname(process.execPath), "resources", "build_info.json");
+    if (fs.existsSync(buildInfoPath)) {
         const buildInfoRaw = fs.readFileSync(buildInfoPath, "utf-8");
-        const buildInfo = JSON.parse(buildInfoRaw);
-        if (!buildInfo.localModulesRoot) {
-            buildInfo.localModulesRoot = nativeModulesDir;
+        if (buildInfoRaw.includes('"localModulesRoot"')) {
+            const buildInfo = JSON.parse(buildInfoRaw);
+            delete buildInfo.localModulesRoot;
             fs.writeFileSync(buildInfoPath, JSON.stringify(buildInfo, null, 2));
-            console.log("[Guncord] build_info.json patched → localModulesRoot:", nativeModulesDir);
+            console.log("[Guncord] Cleaned legacy localModulesRoot from build_info.json");
         }
     }
-} catch (e) {
-    console.warn("[Guncord] Could not patch build_info.json:", e.message);
-}
+} catch { }
 
 require(path.join(__dirname, "dist", "desktop", "patcher.js"));
-

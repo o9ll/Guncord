@@ -4,3 +4,10 @@ wordBomb
 multiInstance
 soundcloudPlayer
 youtubePlayer
+autoTranslateGuncord
+fixScreenshare
+mullvadDNS
+streamProof
+voiceDictation
+guncordUpdater
+stereoInstaller

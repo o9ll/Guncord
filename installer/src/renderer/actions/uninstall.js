@@ -27,6 +27,24 @@ async function shouldAutoRestart() {
     } catch { return true; }
 }
 
+async function safeMoveOrCopy(src, dest) {
+    if (await safeExists(dest)) await safeDelete(dest);
+    for (let i = 0; i < 10; i++) {
+        try {
+            await fs.rename(src, dest);
+            return true;
+        } catch (err) {
+            try {
+                await fs.copyFile(src, dest);
+                await safeDelete(src);
+                return true;
+            } catch (_) {}
+            await new Promise(r => setTimeout(r, 300));
+        }
+    }
+    return false;
+}
+
 async function deleteShims(paths) {
     process.noAsar = true;
     const progressPerLoop = (DELETE_SHIM_PROGRESS - progress.value) / paths.length;
@@ -38,13 +56,13 @@ async function deleteShims(paths) {
             const appAsar = path.join(resPath, "app.asar");
 
             log("Closing Discord...");
-            killDiscord(resPath, log);
+            await killDiscord(resPath, log);
 
             log("1. Removing injected folder...");
             if (await safeExists(appDir)) {
                 const pkg = path.join(appDir, "package.json");
                 if (await safeExists(pkg)) {
-                    const content = await fs.readFile(pkg, "utf-8");
+                    const content = await fs.readFile(pkg, "utf-8").catch(() => "");
                     if (content.includes('"guncord"')) {
                         try { await fs.rm(appDir, { recursive: true, force: true }); } catch {}
                     }
@@ -59,7 +77,7 @@ async function deleteShims(paths) {
 
             if (await safeExists(backup)) {
                 if (!(await safeExists(appAsar))) {
-                    await fs.rename(backup, appAsar);
+                    await safeMoveOrCopy(backup, appAsar);
                 } else {
                     await safeDelete(backup);
                 }
@@ -126,4 +144,3 @@ export default async function(paths) {
         return false;
     }
 }
-

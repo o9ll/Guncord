@@ -25,7 +25,7 @@ export interface ReleaseData {
 export async function githubGet(endpoint: string) {
     const opts: RequestInit = {
         headers: {
-            Accept: "application/json",
+            Accept: "application/vnd.github+json",
             "User-Agent": USER_AGENT
         }
     };

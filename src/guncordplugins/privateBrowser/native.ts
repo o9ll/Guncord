@@ -18,48 +18,6 @@ export function setup() {
     const mainWindow = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
     if (!mainWindow) return;
 
-    // Intercept new-window requests and decide based on referrer and destination URL:
-    // - If the destination is a Discord URL (popout, etc.) → let Electron handle it internally
-    // - If the referrer is a real website (from inside our iframe) → redirect to iframe
-    // - If the referrer is Discord itself (discord.com, file://, etc.) → open in real browser
-    mainWindow.webContents.setWindowOpenHandler(({ url, referrer }) => {
-        if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
-            return { action: "allow" };
-        }
-
-        // ALWAYS let Discord's own internal URLs open inside Electron
-        // (popout windows, video calls, stream previews, etc.)
-        const isDiscordDestination =
-            url.includes("discord.com") ||
-            url.includes("discordapp.com") ||
-            url.includes("discord.gg") ||
-            url.startsWith("discord://");
-        if (isDiscordDestination) {
-            return { action: "allow" };
-        }
-
-        const ref = referrer?.url ?? "";
-        const isFromDiscord =
-            !ref ||
-            ref === "" ||
-            ref.startsWith("file://") ||
-            ref.startsWith("about:") ||
-            ref.includes("discord.com") ||
-            ref.includes("discordapp.com");
-
-        if (isFromDiscord) {
-            // Non-Discord link clicked inside Discord → open in the user's real browser
-            shell.openExternal(url).catch(() => {});
-            return { action: "deny" };
-        }
-
-        // Coming from a web page inside our iframe → stay inside the private browser
-        mainWindow.webContents.executeJavaScript(
-            `(typeof window.__privateBrowserNavigate === "function") && window.__privateBrowserNavigate(${JSON.stringify(url)})`
-        ).catch(() => {});
-        return { action: "deny" };
-    });
-
     // Track iframe navigation in real-time bypassing cross-origin restrictions.
     // IMPORTANT: this listener fires for EVERY subframe in Discord, including
     // YoutubePlayer, QxChat, etc.  We must only forward
@@ -412,4 +370,3 @@ export async function pickExtensionFolder(): Promise<string | null> {
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
 }
-

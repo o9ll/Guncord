@@ -27,6 +27,91 @@ import Zip from "zip-local";
 import { BUILD_TIMESTAMP, commonOpts, globPlugins, IS_DEV, IS_REPORTER, IS_COMPANION_TEST, VERSION, commonRendererPlugins, buildOrWatchAll, stringifyValues, IS_ANTI_CRASH_TEST } from "./common.mjs";
 
 /**
+ * Combined esbuild plugin that replaces several heavy data-only modules with
+ * tiny stubs for the Firefox / Chromium extension build.
+ *
+ * Modules stubbed and why:
+ *  - autoTranslateGuncord (~1.9 MB)  – huge translation table; extension
+ *    users already have the browser's own language, so we just echo the key.
+ *  - guncordNews/icon.ts (~256 KB)   – base64-encoded SVG; a simple inline
+ *    SVG or empty string is fine in extension context.
+ *  - sekaiStickers/characters.json.ts (~110 KB) – sticker character list.
+ *    Replaced with an empty array; the plugin gracefully handles no data.
+ *
+ * @type {import("esbuild").Plugin}
+ */
+const extensionStubPlugin = {
+    name: "extension-heavy-module-stubs",
+    setup(build) {
+        // ── autoTranslateGuncord ──────────────────────────────────────────
+        build.onResolve({ filter: /autoTranslateGuncord/ }, args => ({
+            path: args.path,
+            namespace: "ext-stub-autoTranslate"
+        }));
+        build.onLoad({ filter: /.*/, namespace: "ext-stub-autoTranslate" }, () => ({
+            loader: "js",
+            contents: `
+export function t(key) { return key; }
+export function useTranslation() { return { t }; }
+export const translations = {};
+export default {};
+`
+        }));
+
+        // ── guncordNews/icon.ts ───────────────────────────────────────────
+        // The import is `from "../icon"` so args.path = "../icon" — we must
+        // also check args.importer to confirm it's coming from guncordNews.
+        build.onResolve({ filter: /icon/ }, args => {
+            if (/guncordNews/.test(args.importer) && /[/\\]?icon$/.test(args.path)) {
+                return { path: args.path, namespace: "ext-stub-ncNewsIcon" };
+            }
+        });
+        build.onLoad({ filter: /.*/, namespace: "ext-stub-ncNewsIcon" }, () => ({
+            loader: "js",
+            // Empty string — GuncordNewsButton falls back gracefully
+            contents: `export const newsIconBase64 = "";`
+        }));
+
+
+        // ── sekaiStickers/characters.json.ts ───────────────────────────────
+        build.onResolve({ filter: /sekaiStickers[/\\]characters/ }, args => ({
+            path: args.path,
+            namespace: "ext-stub-sekaiChars"
+        }));
+        build.onLoad({ filter: /.*/, namespace: "ext-stub-sekaiChars" }, () => ({
+            loader: "js",
+            contents: `export const characters = [];`
+        }));
+
+        // ── src/api/pluginI18n.ts (~1.1 MB i18n table) ────────────────────
+        // This is a massive serialised i18n data blob.  In the extension build
+        // we stub it with an empty object so the PluginI18n API still exists
+        // but no pre-bundled translations are shipped.
+        build.onResolve({ filter: /api[/\\]pluginI18n/ }, args => ({
+            path: args.path,
+            namespace: "ext-stub-pluginI18n"
+        }));
+        build.onLoad({ filter: /.*/, namespace: "ext-stub-pluginI18n" }, () => ({
+            loader: "js",
+            contents: `export function tPlugin(key) { return key; }`
+        }));
+
+        // ── src/api/illegalcord_base64.ts (~135 KB base64 image) ──────────
+        build.onResolve({ filter: /illegalcord_base64/ }, args => ({
+            path: args.path,
+            namespace: "ext-stub-illegalB64"
+        }));
+        build.onLoad({ filter: /.*/, namespace: "ext-stub-illegalB64" }, () => ({
+            loader: "js",
+            contents: `export const ILLEGALCORD_ICON_DATA_URI = "";`
+        }));
+
+    }
+};
+
+
+
+/**
  * @type {import("esbuild").BuildOptions}
  */
 const commonOptions = {
@@ -91,6 +176,12 @@ const buildConfigs = [
     {
         ...commonOptions,
         outfile: "dist/browser/extension.js",
+        minify: true,
+        plugins: [
+            extensionStubPlugin,
+            globPlugins("web"),
+            ...commonRendererPlugins
+        ],
         define: {
             ...commonOptions.define,
             IS_EXTENSION: "true"
@@ -151,13 +242,17 @@ async function loadDir(dir, basePath = "") {
 }
 
 /**
-  * @type {(target: string, files: string[]) => Promise<void>}
+  * @type {(target: string, files: string[], includeMonaco?: boolean) => Promise<void>}
  */
-async function buildExtension(target, files) {
+async function buildExtension(target, files, includeMonaco = true) {
+    const monacoEntries = includeMonaco
+        ? await loadDir("dist/browser/vendor/monaco", "dist/browser/")
+        : {};
+
     const entries = {
         "dist/Equicord.js": await readFile("dist/browser/extension.js"),
         "dist/Equicord.css": await readFile("dist/browser/extension.css"),
-        ...await loadDir("dist/browser/vendor/monaco", "dist/browser/"),
+        ...monacoEntries,
         ...Object.fromEntries(await Promise.all(files.map(async f => {
             let content = await readFile(join("browser", f));
             if (f.startsWith("manifest")) {
@@ -173,7 +268,7 @@ async function buildExtension(target, files) {
         })))
     };
 
-    await rm(target, { recursive: true, force: true });
+    await rm(join("dist/browser", target), { recursive: true, force: true });
     await Promise.all(Object.entries(entries).map(async ([file, content]) => {
         const dest = join("dist/browser", target, file);
         const parentDirectory = join(dest, "..");
@@ -193,8 +288,8 @@ const appendCssRuntime = readFile("dist/Equicord.user.css", "utf-8").then(conten
 if (!process.argv.includes("--skip-extension")) {
     await Promise.all([
         appendCssRuntime,
-        buildExtension("chromium-unpacked", ["modifyResponseHeaders.json", "content.js", "manifest.json", "icon.png"]),
-        buildExtension("firefox-unpacked", ["background.js", "content.js", "manifestv2.json", "icon.png"]),
+        buildExtension("chromium-unpacked", ["modifyResponseHeaders.json", "content.js", "manifest.json", "icon.png"], true),
+        buildExtension("firefox-unpacked", ["background.js", "content.js", "manifestv2.json", "icon.png"], false),
     ]);
 
     Zip.zip("dist/browser/chromium-unpacked", (_err, zip) => {

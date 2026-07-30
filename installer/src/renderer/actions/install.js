@@ -283,23 +283,25 @@ async function copyAssetsToDiscord(resPath) {
         }
     }
 
-    log("Patching build info...");
-    const buildInfoPath = path.join(resPath, "build_info.json");
-    if (await safeExists(buildInfoPath)) {
+    log("Copying assets...");
+}
+
+async function safeMoveOrCopy(src, dest) {
+    if (await safeExists(dest)) await safeDelete(dest);
+    for (let i = 0; i < 10; i++) {
         try {
-            const content = await fs.readFile(buildInfoPath, "utf-8");
-            if (!content.includes('"localModulesRoot"')) {
-                const idx = content.lastIndexOf('}');
-                if (idx !== -1) {
-                    const patched = content.substring(0, idx) + ',\n  "localModulesRoot": "modules"\n' + content.substring(idx);
-                    await fs.writeFile(buildInfoPath, patched);
-                }
-            }
-        }
-        catch (err) {
-            log(`⚠️ build_info patch error: ${err.message}`);
+            await fs.rename(src, dest);
+            return true;
+        } catch (err) {
+            try {
+                await fs.copyFile(src, dest);
+                await safeDelete(src);
+                return true;
+            } catch (_) {}
+            await new Promise(r => setTimeout(r, 300));
         }
     }
+    return false;
 }
 
 async function injectShims(paths) {
@@ -313,7 +315,7 @@ async function injectShims(paths) {
             const appAsar = path.join(resPath, "app.asar");
 
             log("Closing Discord...");
-            killDiscord(resPath, log);
+            await killDiscord(resPath, log);
 
             log("1. Removing previous mod injection (Vencord / Equicord / OpenAsar)...");
             if (await safeExists(appDir)) {
@@ -347,27 +349,9 @@ async function injectShims(paths) {
             }
 
             if (await safeExists(appAsar)) {
-                let renameSuccess = false;
-                let lastErr = null;
-                const MAX_RETRIES = 10;
-                for (let i = 0; i < MAX_RETRIES; i++) {
-                    try {
-                        if (await safeExists(backup)) await safeDelete(backup);
-                        await fs.rename(appAsar, backup);
-                        renameSuccess = true;
-                        break;
-                    } catch (err) {
-                        lastErr = err;
-                        if (err.code === "EBUSY" || err.code === "EPERM" || err.code === "EACCES") {
-                            log(`⏳ app.asar encore verrouillé (tentative ${i + 1}/${MAX_RETRIES}), on attend...`);
-                            await new Promise(r => setTimeout(r, 2000));
-                        } else {
-                            throw err;
-                        }
-                    }
-                }
-                if (!renameSuccess) {
-                    throw new Error(`Critical error: Could not rename app.asar after ${MAX_RETRIES} retries. File is locked. Please close Discord manually via Task Manager and try again. Detailed error: ${lastErr.message}`);
+                const ok = await safeMoveOrCopy(appAsar, backup);
+                if (!ok) {
+                    throw new Error("Critical error: Could not process app.asar. Please close Discord manually via Task Manager and try again.");
                 }
             }
 
@@ -422,4 +406,3 @@ export default async function(paths) {
         return false;
     }
 }
-
