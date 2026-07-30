@@ -1,0 +1,78 @@
+name: Release Guncord
+
+on:
+  push:
+    tags:
+      - "v*"          # git tag v1.0.0 && git push --tags
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build standalone
+        run: pnpm buildStandalone
+
+      - name: Build & Package Electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node electron-builder.config.cjs || true
+          npx electron-builder --config electron-builder.config.cjs --win --publish always
+
+      - name: Package guncord-dist.zip
+        shell: pwsh
+        run: |
+          $staging = "guncord-dist-staging"
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          if (Test-Path "dist\desktop") {
+            Copy-Item "dist\desktop\*" "$staging\" -Recurse -Force
+          } elseif (Test-Path "dist") {
+            Copy-Item "dist\*" "$staging\" -Recurse -Force
+          }
+          if (Test-Path "server") {
+            Copy-Item "server" "$staging\server" -Recurse
+          }
+          if (Test-Path "release\guncord-dist") {
+            Copy-Item "release\guncord-dist\*" "$staging\" -Recurse -Force
+          }
+          foreach ($f in @("guncord-index.js", "guncord-preload.js")) {
+            if (Test-Path $f) { Copy-Item $f "$staging\" }
+          }
+          if (-not (Test-Path "$staging\patcher.js")) {
+            Write-Error "BUILD ERROR: patcher.js absent de la racine du staging — l'installeur ne pourra pas fonctionner."
+            exit 1
+          }
+          Compress-Archive -Path "$staging\*" -DestinationPath "guncord-dist.zip" -Force
+          Write-Host "guncord-dist.zip created ($($(Get-Item guncord-dist.zip).Length / 1MB) MB)"
+
+      - name: Upload guncord-dist.zip to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            guncord-dist.zip
+            dist/desktop.asar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

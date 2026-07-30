@@ -1,0 +1,16 @@
+/* Stealth Mode - hide Guncord plugin UI (but NOT settings access) */
+
+/* Plugin buttons: header bar, channel toolbar, chat bar, user area */
+body.guncord-stealth .vc-header-bar-btns,
+body.guncord-stealth .vc-channel-toolbar-btns,
+body.guncord-stealth .vc-chat-bar-btns,
+body.guncord-stealth .vc-user-area-btns,
+
+/* Titlebar injected elements */
+body.guncord-stealth #guncord-titlebar-btn,
+body.guncord-stealth #guncord-titlebar-link-style,
+
+/* GuncordAI nav button */
+body.guncord-stealth .nai-nav-item {
+    display: none !important;
+}

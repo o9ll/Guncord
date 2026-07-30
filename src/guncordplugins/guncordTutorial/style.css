@@ -1,0 +1,163 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-guncord-tutorial-root {
+    display: flex;
+    container-type: inline-size;
+    width: 100%;
+    max-height: min(620px, calc(100vh - 180px));
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+}
+
+.vc-guncord-tutorial-language {
+    padding-bottom: 2px;
+}
+
+.vc-guncord-tutorial-progress {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 6px;
+    background: var(--background-modifier-accent);
+}
+
+.vc-guncord-tutorial-progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--interactive-active);
+    transition: width 180ms ease;
+}
+
+.vc-guncord-tutorial-layout {
+    display: grid;
+    grid-template-columns: minmax(140px, 170px) minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+}
+
+.vc-guncord-tutorial-step-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.vc-guncord-tutorial-step-button {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.vc-guncord-tutorial-step-index {
+    display: inline-flex;
+    min-width: 18px;
+    justify-content: center;
+    margin-right: 6px;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-guncord-tutorial-content {
+    min-width: 0;
+}
+
+.vc-guncord-tutorial-main {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.vc-guncord-tutorial-content-with-aside {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    align-items: start;
+}
+
+.vc-guncord-tutorial-panel {
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 14px 16px;
+}
+
+.vc-guncord-tutorial-bullets {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 18px;
+}
+
+.vc-guncord-tutorial-bullets li {
+    padding-left: 2px;
+}
+
+.vc-guncord-tutorial-recommendation-list {
+    display: flex;
+    max-height: 280px;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.vc-guncord-tutorial-recommendation-actions {
+    row-gap: 6px;
+}
+
+.vc-guncord-tutorial-recommendations-panel {
+    background: var(--background-secondary);
+}
+
+.vc-guncord-tutorial-recommendation-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 10px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 8px;
+    background: var(--background-primary);
+}
+
+.vc-guncord-tutorial-recommendation-row label {
+    min-width: 0;
+}
+
+@container (min-width: 720px) {
+    .vc-guncord-tutorial-content-with-aside {
+        grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+    }
+}
+
+@media (width <= 760px) {
+    .vc-guncord-tutorial-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .vc-guncord-tutorial-step-nav {
+        flex-direction: row;
+        overflow-x: auto;
+        padding-bottom: 2px;
+    }
+
+    .vc-guncord-tutorial-step-button {
+        width: auto;
+        min-width: 150px;
+    }
+
+    .vc-guncord-tutorial-recommendation-row {
+        grid-template-columns: 1fr;
+    }
+
+    .vc-guncord-tutorial-panel {
+        padding: 12px;
+    }
+}
+

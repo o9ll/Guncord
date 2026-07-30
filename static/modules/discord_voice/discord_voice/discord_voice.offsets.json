@@ -1,0 +1,376 @@
+{
+  "tool": "discord_voice_node_offset_finder",
+  "version": "5.12.0",
+  "file": "C:/Users/o9/Documents/Githubb/guncord/static/modules/discord_voice/discord_voice/discord_voice.node",
+  "file_size": 14817208,
+  "md5": "2364136f6a1cfaae2f93f3b023cf83ae",
+  "format": "pe",
+  "arch": "x86_64",
+  "file_offset_adjustment": "0xc00",
+  "offsets": {
+    "ApplySettings_BitrateCalcHigh_Channels_Mov248k": "0x596958",
+    "ApplySettings_BitrateCalcLow_Channels_Mov248k": "0x596926",
+    "ApplySettings_BitrateCalcMid_Channels_Mov248k": "0x596943",
+    "ApplySettings_MaxAvgBitrateClamp248k_Cmp": "0x596a30",
+    "ApplySettings_MaxAvgBitrateClamp248k_Mov": "0x596a36",
+    "AudioEncoderMultiChannelOpusConfig_Ctor_Bitrate_Imm248k": "0x3e5297",
+    "AudioEncoderOpusConfig_Ctor_Application_ImmAudio": "0x3e5999",
+    "CapturedAudioProcessor_MonoDownmix_NopJmp": "0xe5d66",
+    "ChannelDownmix_Entry_Ret": "0x9226d0",
+    "CodecMismatchThrow_Entry_Ret": "0x2fdb30",
+    "CommitAudioCodec_ChannelCount_Imm02": "0x5964fb",
+    "CreateAudioFrame_ChannelAssign_Mov": "0x1381a1",
+    "EnableBuiltInAEC_Entry_Ret": "0x93130",
+    "EncoderOpusImpl_RelayClamp248k_Cmp": "0x598abc",
+    "EncoderOpusImpl_RelayClamp248k_Mov": "0x598ac1",
+    "GetMultipliedBitrate_Entry_IdentityRet": "0x5992c0",
+    "GetMultipliedBitrate_Mulss_Nop7": "0x5992fd",
+    "NetEqDelayManager_MsPerLoss_Imm0": "0xaef1dd",
+    "PacerBlockAudio_Flag_XorFalse": "0x736c8a",
+    "RecreateEncoder_BitrateCalcHigh_Channels_Mov248k": "0x59b83e",
+    "RecreateEncoder_BitrateCalcLow_Channels_Mov248k": "0x59b80c",
+    "RecreateEncoder_BitrateCalcMid_Channels_Mov248k": "0x59b829",
+    "SelectSampleRate_Cmov48k_Nop3": "0x3161e0",
+    "SetAutomaticGainControlConfig_Entry_Ret": "0x94070",
+    "SetAutomaticGainControl_Entry_Ret": "0x94410",
+    "SetBitrateClamp_Max248k_Cmp": "0x59b916",
+    "SetBitrateClamp_Max248k_Mov": "0x59b91c",
+    "SetBitrate_Imm64_Imm248k": "0x598781",
+    "SetEchoCancellationPreEcho_Entry_Ret": "0x93730",
+    "SetEchoCancellation_Entry_Ret": "0x93430",
+    "SetNoiseCancellationDuringProcessing_Entry_Ret": "0x952c0",
+    "SetNoiseCancellation_Entry_Ret": "0x94730",
+    "SetNoiseSuppression_Entry_Ret": "0x93d60",
+    "SetTargetBitrate_ClampMax248k_Cmp": "0x598745",
+    "SetTargetBitrate_ClampMax248k_Mov": "0x59874b",
+    "SetTargetBitrate_Mulss_Nop6": "0x5987c1",
+    "WebRtcSplHighPass_Dispatch_MovRet": "0x5a2770",
+    "dc_reject_Callback_InjectShellcode": "0x926540",
+    "hp_cutoff_Callback_InjectShellcode": "0x926360"
+  },
+  "resolution_tiers": {
+    "CommitAudioCodec_ChannelCount_Imm02": "primary",
+    "CodecMismatchThrow_Entry_Ret": "primary",
+    "ChannelDownmix_Entry_Ret": "primary",
+    "CreateAudioFrame_ChannelAssign_Mov": "primary",
+    "AudioEncoderMultiChannelOpusConfig_Ctor_Bitrate_Imm248k": "primary",
+    "AudioEncoderOpusConfig_Ctor_Application_ImmAudio": "primary",
+    "CapturedAudioProcessor_MonoDownmix_NopJmp": "patched-fallback",
+    "GetMultipliedBitrate_Mulss_Nop7": "patched-fallback",
+    "hp_cutoff_Callback_InjectShellcode": "patched-stub-extract",
+    "ApplySettings_BitrateCalcLow_Channels_Mov248k": "derived(CommitAudioCodec_ChannelCount_Imm02+0x42B)",
+    "ApplySettings_BitrateCalcMid_Channels_Mov248k": "derived(ApplySettings_BitrateCalcLow_Channels_Mov248k+0x1D)",
+    "ApplySettings_BitrateCalcHigh_Channels_Mov248k": "derived(ApplySettings_BitrateCalcLow_Channels_Mov248k+0x32)",
+    "ApplySettings_MaxAvgBitrateClamp248k_Cmp": "derived(ApplySettings_BitrateCalcLow_Channels_Mov248k+0x10A)",
+    "ApplySettings_MaxAvgBitrateClamp248k_Mov": "derived(ApplySettings_MaxAvgBitrateClamp248k_Cmp+0x6)",
+    "RecreateEncoder_BitrateCalcLow_Channels_Mov248k": "derived(ApplySettings_BitrateCalcLow_Channels_Mov248k+0x4EE6)",
+    "RecreateEncoder_BitrateCalcMid_Channels_Mov248k": "derived(RecreateEncoder_BitrateCalcLow_Channels_Mov248k+0x1D)",
+    "RecreateEncoder_BitrateCalcHigh_Channels_Mov248k": "derived(RecreateEncoder_BitrateCalcLow_Channels_Mov248k+0x32)",
+    "SetBitrateClamp_Max248k_Cmp": "derived(RecreateEncoder_BitrateCalcHigh_Channels_Mov248k+0xD8)",
+    "SetBitrateClamp_Max248k_Mov": "derived(SetBitrateClamp_Max248k_Cmp+0x6)",
+    "GetMultipliedBitrate_Entry_IdentityRet": "extended(getmult-entry-exact)",
+    "dc_reject_Callback_InjectShellcode": "derived(hp_cutoff_Callback_InjectShellcode+0x1E0)",
+    "SelectSampleRate_Cmov48k_Nop3": "heuristic(cmp ...,2 + cmov @file:0x3155D3 [HEURISTIC USED])",
+    "NetEqDelayManager_MsPerLoss_Imm0": "extended(neteq-movabs)",
+    "PacerBlockAudio_Flag_XorFalse": "extended(pacer-blockaudio)",
+    "SetAutomaticGainControlConfig_Entry_Ret": "extended(discord-api+pe-export)",
+    "SetAutomaticGainControl_Entry_Ret": "extended(discord-api+pe-export)",
+    "SetNoiseSuppression_Entry_Ret": "extended(discord-api+pe-export)",
+    "SetEchoCancellation_Entry_Ret": "extended(discord-api+pe-export)",
+    "SetEchoCancellationPreEcho_Entry_Ret": "extended(discord-api+pe-export)",
+    "EnableBuiltInAEC_Entry_Ret": "extended(discord-api+pe-export)",
+    "SetNoiseCancellation_Entry_Ret": "extended(discord-api+pe-export)",
+    "SetNoiseCancellationDuringProcessing_Entry_Ret": "extended(discord-api+pe-export)",
+    "SetBitrate_Imm64_Imm248k": "extended(setbitrate-near-apply)",
+    "SetTargetBitrate_Mulss_Nop6": "derived(SetBitrate_Imm64_Imm248k+0x40)",
+    "SetTargetBitrate_ClampMax248k_Cmp": "extended(clamp-window)",
+    "SetTargetBitrate_ClampMax248k_Mov": "extended(clamp-window)",
+    "EncoderOpusImpl_RelayClamp248k_Cmp": "extended(clamp-window)",
+    "EncoderOpusImpl_RelayClamp248k_Mov": "extended(clamp-window)"
+  },
+  "total_found": 39,
+  "total_expected": 40,
+  "linux_only_offset_names": [
+    "OpusEncoderConfig_SetMultiChannelStereo"
+  ],
+  "discord_app_version": "unspecified",
+  "discord_app_version_source": "none",
+  "pe_timestamp": 1782147176,
+  "pe_build_time": "2026-06-22T16:52:56+00:00",
+  "image_base": "0x180000000",
+  "patches": [
+    {
+      "name": "ApplySettings_BitrateCalcHigh_Channels_Mov248k",
+      "file_offset": 5856600,
+      "file_offset_hex": "0x595d58",
+      "expected_original": null,
+      "length": 6
+    },
+    {
+      "name": "ApplySettings_BitrateCalcLow_Channels_Mov248k",
+      "file_offset": 5856550,
+      "file_offset_hex": "0x595d26",
+      "expected_original": null,
+      "length": 6
+    },
+    {
+      "name": "ApplySettings_BitrateCalcMid_Channels_Mov248k",
+      "file_offset": 5856579,
+      "file_offset_hex": "0x595d43",
+      "expected_original": null,
+      "length": 6
+    },
+    {
+      "name": "ApplySettings_MaxAvgBitrateClamp248k_Cmp",
+      "file_offset": 5856816,
+      "file_offset_hex": "0x595e30",
+      "expected_original": "81FB",
+      "length": 2
+    },
+    {
+      "name": "ApplySettings_MaxAvgBitrateClamp248k_Mov",
+      "file_offset": 5856822,
+      "file_offset_hex": "0x595e36",
+      "expected_original": "B8",
+      "length": 1
+    },
+    {
+      "name": "AudioEncoderMultiChannelOpusConfig_Ctor_Bitrate_Imm248k",
+      "file_offset": 4081303,
+      "file_offset_hex": "0x3e4697",
+      "expected_original": "007D0000",
+      "length": 4
+    },
+    {
+      "name": "AudioEncoderOpusConfig_Ctor_Application_ImmAudio",
+      "file_offset": 4083097,
+      "file_offset_hex": "0x3e4d99",
+      "expected_original": "01",
+      "length": 1
+    },
+    {
+      "name": "CapturedAudioProcessor_MonoDownmix_NopJmp",
+      "file_offset": 938342,
+      "file_offset_hex": "0xe5166",
+      "expected_original": "84C0",
+      "length": 2
+    },
+    {
+      "name": "ChannelDownmix_Entry_Ret",
+      "file_offset": 9575120,
+      "file_offset_hex": "0x921ad0",
+      "expected_original": "41",
+      "length": 1
+    },
+    {
+      "name": "CodecMismatchThrow_Entry_Ret",
+      "file_offset": 3133232,
+      "file_offset_hex": "0x2fcf30",
+      "expected_original": "41",
+      "length": 1
+    },
+    {
+      "name": "CommitAudioCodec_ChannelCount_Imm02",
+      "file_offset": 5855483,
+      "file_offset_hex": "0x5958fb",
+      "expected_original": "01",
+      "length": 1
+    },
+    {
+      "name": "CreateAudioFrame_ChannelAssign_Mov",
+      "file_offset": 1275297,
+      "file_offset_hex": "0x1375a1",
+      "expected_original": null,
+      "length": 4
+    },
+    {
+      "name": "EnableBuiltInAEC_Entry_Ret",
+      "file_offset": 599344,
+      "file_offset_hex": "0x92530",
+      "expected_original": null,
+      "length": 0
+    },
+    {
+      "name": "EncoderOpusImpl_RelayClamp248k_Cmp",
+      "file_offset": 5865148,
+      "file_offset_hex": "0x597ebc",
+      "expected_original": "3D",
+      "length": 1
+    },
+    {
+      "name": "EncoderOpusImpl_RelayClamp248k_Mov",
+      "file_offset": 5865153,
+      "file_offset_hex": "0x597ec1",
+      "expected_original": "BF",
+      "length": 1
+    },
+    {
+      "name": "GetMultipliedBitrate_Entry_IdentityRet",
+      "file_offset": 5867200,
+      "file_offset_hex": "0x5986c0",
+      "expected_original": "89C8",
+      "length": 2
+    },
+    {
+      "name": "GetMultipliedBitrate_Mulss_Nop7",
+      "file_offset": 5867261,
+      "file_offset_hex": "0x5986fd",
+      "expected_original": "F3410F594488EC",
+      "length": 7
+    },
+    {
+      "name": "NetEqDelayManager_MsPerLoss_Imm0",
+      "file_offset": 11462109,
+      "file_offset_hex": "0xaee5dd",
+      "expected_original": "48B814000000C8000000",
+      "length": 10
+    },
+    {
+      "name": "PacerBlockAudio_Flag_XorFalse",
+      "file_offset": 7561354,
+      "file_offset_hex": "0x73608a",
+      "expected_original": "0F94C3",
+      "length": 3
+    },
+    {
+      "name": "RecreateEncoder_BitrateCalcHigh_Channels_Mov248k",
+      "file_offset": 5876798,
+      "file_offset_hex": "0x59ac3e",
+      "expected_original": null,
+      "length": 6
+    },
+    {
+      "name": "RecreateEncoder_BitrateCalcLow_Channels_Mov248k",
+      "file_offset": 5876748,
+      "file_offset_hex": "0x59ac0c",
+      "expected_original": null,
+      "length": 6
+    },
+    {
+      "name": "RecreateEncoder_BitrateCalcMid_Channels_Mov248k",
+      "file_offset": 5876777,
+      "file_offset_hex": "0x59ac29",
+      "expected_original": null,
+      "length": 6
+    },
+    {
+      "name": "SelectSampleRate_Cmov48k_Nop3",
+      "file_offset": 3233248,
+      "file_offset_hex": "0x3155e0",
+      "expected_original": "0F42C1",
+      "length": 3
+    },
+    {
+      "name": "SetAutomaticGainControlConfig_Entry_Ret",
+      "file_offset": 603248,
+      "file_offset_hex": "0x93470",
+      "expected_original": null,
+      "length": 0
+    },
+    {
+      "name": "SetAutomaticGainControl_Entry_Ret",
+      "file_offset": 604176,
+      "file_offset_hex": "0x93810",
+      "expected_original": null,
+      "length": 0
+    },
+    {
+      "name": "SetBitrateClamp_Max248k_Cmp",
+      "file_offset": 5877014,
+      "file_offset_hex": "0x59ad16",
+      "expected_original": "81FB",
+      "length": 2
+    },
+    {
+      "name": "SetBitrateClamp_Max248k_Mov",
+      "file_offset": 5877020,
+      "file_offset_hex": "0x59ad1c",
+      "expected_original": "B8",
+      "length": 1
+    },
+    {
+      "name": "SetBitrate_Imm64_Imm248k",
+      "file_offset": 5864321,
+      "file_offset_hex": "0x597b81",
+      "expected_original": null,
+      "length": 5
+    },
+    {
+      "name": "SetEchoCancellationPreEcho_Entry_Ret",
+      "file_offset": 600880,
+      "file_offset_hex": "0x92b30",
+      "expected_original": null,
+      "length": 0
+    },
+    {
+      "name": "SetEchoCancellation_Entry_Ret",
+      "file_offset": 600112,
+      "file_offset_hex": "0x92830",
+      "expected_original": null,
+      "length": 0
+    },
+    {
+      "name": "SetNoiseCancellationDuringProcessing_Entry_Ret",
+      "file_offset": 607936,
+      "file_offset_hex": "0x946c0",
+      "expected_original": null,
+      "length": 0
+    },
+    {
+      "name": "SetNoiseCancellation_Entry_Ret",
+      "file_offset": 604976,
+      "file_offset_hex": "0x93b30",
+      "expected_original": null,
+      "length": 0
+    },
+    {
+      "name": "SetNoiseSuppression_Entry_Ret",
+      "file_offset": 602464,
+      "file_offset_hex": "0x93160",
+      "expected_original": null,
+      "length": 0
+    },
+    {
+      "name": "SetTargetBitrate_ClampMax248k_Cmp",
+      "file_offset": 5864261,
+      "file_offset_hex": "0x597b45",
+      "expected_original": "81FA",
+      "length": 2
+    },
+    {
+      "name": "SetTargetBitrate_ClampMax248k_Mov",
+      "file_offset": 5864267,
+      "file_offset_hex": "0x597b4b",
+      "expected_original": "BA",
+      "length": 1
+    },
+    {
+      "name": "SetTargetBitrate_Mulss_Nop6",
+      "file_offset": 5864385,
+      "file_offset_hex": "0x597bc1",
+      "expected_original": "F30F594481EC",
+      "length": 6
+    },
+    {
+      "name": "WebRtcSplHighPass_Dispatch_MovRet",
+      "file_offset": 5905264,
+      "file_offset_hex": "0x5a1b70",
+      "expected_original": null,
+      "length": 11
+    },
+    {
+      "name": "dc_reject_Callback_InjectShellcode",
+      "file_offset": 9591104,
+      "file_offset_hex": "0x925940",
+      "expected_original": null,
+      "length": 438
+    },
+    {
+      "name": "hp_cutoff_Callback_InjectShellcode",
+      "file_offset": 9590624,
+      "file_offset_hex": "0x925760",
+      "expected_original": null,
+      "length": 256
+    }
+  ]
+}
