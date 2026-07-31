@@ -231,19 +231,19 @@ function EquicordSettings() {
 
             {
                 key: "useQuickCss",
-                title: t("CSS"),
+                title: t("Enable Custom CSS"),
                 restartRequired: true,
                 warning: { enabled: false },
             },
             !IS_WEB && {
                 key: "enableReactDevtools",
-                title: t("Tools"),
+                title: t("Enable React Developer Tools"),
                 restartRequired: true,
                 warning: { enabled: false },
             },
             (!IS_WEB && !IS_DISCORD_DESKTOP || !IS_WINDOWS) && {
                 key: "mainWindowFrameless",
-                title: t("Main Window Frame"),
+                title: t("Disable the Main Window Frame"),
                 restartRequired: true,
                 warning: { enabled: false },
             },
@@ -251,13 +251,13 @@ function EquicordSettings() {
             (!IS_DISCORD_DESKTOP || !IS_WINDOWS
                 ? {
                     key: "frameless",
-                    title: t("All Window Frames"),
+                    title: t("Disable All Window Frames"),
                     restartRequired: true,
                     warning: { enabled: false },
                 }
                 : {
                     key: "winNativeTitleBar",
-                    title: t("Title bar"),
+                    title: t("Use Windows native title bar"),
                     restartRequired: true,
                     warning: { enabled: false },
                 }
@@ -265,7 +265,7 @@ function EquicordSettings() {
 
             !IS_WEB && {
                 key: "transparent",
-                title: t("Transparency"),
+                title: t("Enable Window Transparency"),
                 restartRequired: true,
                 warning: {
                     enabled: false,
@@ -276,26 +276,26 @@ function EquicordSettings() {
             },
             IS_DISCORD_DESKTOP && {
                 key: "disableMinSize",
-                title: t("Size"),
+                title: t("Disable Minimum Window Size"),
                 restartRequired: true,
                 warning: { enabled: false },
             },
             !IS_WEB &&
             IS_WINDOWS && {
                 key: "winCtrlQ",
-                title: t("Ctrl+Q Close Discord"),
+                title: t("Register Ctrl+Q as shortcut to close Discord"),
                 restartRequired: true,
                 warning: { enabled: false },
             },
             !IS_WEB && {
                 key: "streamProof",
-                title: t("Stream"),
+                title: t("Enable Stream Proof"),
                 restartRequired: false,
                 warning: { enabled: false },
             },
             !IS_WEB && {
                 key: "disableAutoUpdate",
-                title: t("Updates"),
+                title: t("Disable Auto Update"),
                 restartRequired: false,
                 warning: { enabled: false },
             },
@@ -434,10 +434,10 @@ function EquicordSettings() {
 
                 <Flex gap="16px">
                     <Button onClick={openNotificationSettingsModal}>
-                        {t("Setting")}
+                        {t("Settings")}
                     </Button>
                     <Button variant="secondary" onClick={openNotificationLogModal}>
-                        {t("Log")}
+                        {t("Logs")}
                     </Button>
                 </Flex>
 
