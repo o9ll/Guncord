@@ -24,4 +24,3 @@ setTimeout(() => {
                 }
             })();
         }, 30000); // FIX: initial delay 10s → 30s to let UI stabilize on startup
-

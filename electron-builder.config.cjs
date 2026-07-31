@@ -141,7 +141,7 @@ require(path.join(__dirname, "dist", "desktop", "patcher.js"));
         cpSync(guncordPreload, join(outDist, "preload.js"));
     }
 
-    // FFmpeg et YT-DLP (cherche dans le dossier local ou PATH)
+    // FFmpeg and YT-DLP (look in local folder or PATH)
     const binDir = join(__dirname, "static", "bin");
     for (const bin of ["ffmpeg.exe", "yt-dlp.exe"]) {
         const localBin = join(binDir, bin);
@@ -165,7 +165,7 @@ require(path.join(__dirname, "dist", "desktop", "patcher.js"));
     const iconSrc = join(__dirname, "assets", "guncord.ico");
     if (existsSync(iconSrc)) {
         cpSync(iconSrc, join(outDir, "app.ico"));
-        // Rcedit pour le branding
+        // Rcedit for branding
         try {
             const rcedit = join(__dirname, "node_modules", ".bin", "rcedit.cmd");
             if (existsSync(rcedit)) {

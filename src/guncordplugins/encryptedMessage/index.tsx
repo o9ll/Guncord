@@ -596,11 +596,11 @@ function triggerReRender(message: any) {
 
 function decryptMessage(message: any, passedChannelId?: string) {
     if (!message || !message.content || (!isEncryptedMessage(message.content) && (!message.originalEncryptedContent || !isEncryptedMessage(message.originalEncryptedContent)))) return;
-    
+
     if (!message.originalEncryptedContent) {
         message.originalEncryptedContent = message.content;
     }
-    
+
     // Prevent parallel decryptions of the same message
     if (decryptingMessageIds.has(message.id)) return;
     decryptingMessageIds.add(message.id);
@@ -629,7 +629,7 @@ function decryptMessage(message: any, passedChannelId?: string) {
                 try { delete current._contentParsedNodes; } catch {}
                 try { current._contentParsed = undefined; } catch {}
                 try { current._contentParsedNodes = undefined; } catch {}
-                
+
                 decryptedMessageIds.add(message.id);
                 triggerReRender(current);
                 return true;
@@ -667,7 +667,7 @@ function decryptMessage(message: any, passedChannelId?: string) {
 
 function scanAndDecrypt(obj: any, parentChannelId?: string) {
     if (!obj || typeof obj !== "object") return;
-    
+
     const currentChannelId = obj.channel_id || obj.channelId || parentChannelId;
 
     if (Array.isArray(obj)) {
@@ -688,7 +688,7 @@ function scanAndDecrypt(obj: any, parentChannelId?: string) {
                     try { delete obj._contentParsedNodes; } catch {}
                     try { obj._contentParsed = undefined; } catch {}
                     try { obj._contentParsedNodes = undefined; } catch {}
-                    
+
                     decryptedMessageIds.delete(obj.id);
                     triggerReRender(obj);
                 }
@@ -914,4 +914,3 @@ export default definePlugin({
         }
     }
 });
-

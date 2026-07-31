@@ -67,4 +67,3 @@ export const settings = definePluginSettings({
         onChange: normalizeCommaList,
     },
 });
-

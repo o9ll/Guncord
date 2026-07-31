@@ -54,4 +54,3 @@ export async function openStalkerDataDir(_event: Electron.IpcMainInvokeEvent): P
     await mkdir(STALKER_DATA_DIR, { recursive: true });
     return shell.openPath(STALKER_DATA_DIR);
 }
-

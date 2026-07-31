@@ -58,8 +58,7 @@ function remove() {
 
 export default definePlugin({
     name: "TitlebarLink",
-    enabledByDefault: true,
-    description: `Click on the central Discord title to open https://github.com/o9ll`,
+    description: "Click on the central Discord title to open https://github.com/o9ll",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     required: true,
     patches: [],
@@ -76,5 +75,3 @@ export default definePlugin({
         remove();
     },
 } as any);
-
-

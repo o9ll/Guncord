@@ -421,4 +421,3 @@ export default definePlugin({
         restoreWebRtc();
     },
 });
-

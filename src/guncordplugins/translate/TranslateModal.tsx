@@ -102,4 +102,3 @@ export function TranslateModal({ rootProps }: { rootProps: ModalProps; }) {
         </ModalRoot>
     );
 }
-

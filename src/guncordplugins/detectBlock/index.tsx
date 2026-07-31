@@ -330,4 +330,3 @@ export default definePlugin({
         return <DetectBlockBadge user={message?.author} isMessage />;
     }
 });
-

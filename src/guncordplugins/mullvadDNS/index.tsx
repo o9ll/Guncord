@@ -413,7 +413,7 @@ export default definePlugin({
             window.fetch = async (inp, init) => {
                 try {
                     const urlStr = inp instanceof Request ? inp.url : String(inp);
-                    
+
                     let hasTracked = false;
                     for (const d of setTargetDom) {
                         if (urlStr.includes(d)) {

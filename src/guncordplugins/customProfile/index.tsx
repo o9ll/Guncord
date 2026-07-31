@@ -3224,4 +3224,3 @@ export default definePlugin({
         return <Button onClick={() => openModal(props => <CustomProfileModal rootProps={props} />)}>{t("Open Custom Profile")}</Button>;
     },
 });
-

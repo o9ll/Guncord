@@ -106,7 +106,7 @@ export function QxChatButton() {
                 </div>
                 <Tooltip text={<strong>QxChat</strong>} position="right" hideOnClick={false}>
                     {(tooltipProps: any) => (
-                        <div 
+                        <div
                             {...tooltipProps}
                             onClick={handlePress}
                             onMouseDown={stopPropagation}
@@ -133,13 +133,13 @@ export function QxChatButton() {
             </div>
 
             {ReactDOM.createPortal(
-                <div style={{ 
-                    position: "fixed", 
-                    top: 0, 
-                    left: 72, 
-                    bottom: 0, 
-                    right: 0, 
-                    zIndex: 999, 
+                <div style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 72,
+                    bottom: 0,
+                    right: 0,
+                    zIndex: 999,
                     backgroundColor: "var(--background-primary)",
                     display: isOpen ? "flex" : "none",
                     flexDirection: "column"
@@ -230,15 +230,15 @@ export function QxChatButton() {
                             </button>
                         </div>
                     </div>
-                    <iframe 
+                    <iframe
                         ref={(el: any) => {
                             if (el) {
                                 el.setAttribute("allow", "camera *; microphone *; display-capture *; fullscreen *; clipboard-read *; clipboard-write *; autoplay *");
                                 el.setAttribute("allowfullscreen", "true");
                             }
                         }}
-                        src="https://qxch.at/app/" 
-                        style={{ width: "100%", height: "100%", border: "none", display: "block", flex: 1 }} 
+                        src="https://qxch.at/app/"
+                        style={{ width: "100%", height: "100%", border: "none", display: "block", flex: 1 }}
                     />
                 </div>,
                 document.body

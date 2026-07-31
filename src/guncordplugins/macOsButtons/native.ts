@@ -29,4 +29,3 @@ export function maximizeWindow(event: any) {
 export function isMaximized(event: any): boolean {
     return getWin(event)?.isMaximized() ?? false;
 }
-

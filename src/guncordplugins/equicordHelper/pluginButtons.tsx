@@ -70,4 +70,3 @@ export const PluginButtons = ErrorBoundary.wrap(function PluginCards({ message }
         </div>
     );
 }, { noop: true });
-

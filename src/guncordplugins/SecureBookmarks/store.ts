@@ -347,4 +347,3 @@ export async function prepareBookmarks(): Promise<void> {
         await encryptPlainRecords(store, settings.plain.password);
     }
 }
-

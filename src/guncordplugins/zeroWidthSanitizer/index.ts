@@ -112,4 +112,3 @@ export default definePlugin({
         log("Plugin stopped");
     }
 });
-

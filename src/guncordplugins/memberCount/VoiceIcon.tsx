@@ -12,4 +12,3 @@ export function VoiceIcon({ className }: { className?: string; }) {
         </svg>
     );
 }
-

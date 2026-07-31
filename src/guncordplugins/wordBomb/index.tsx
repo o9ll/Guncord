@@ -43,4 +43,3 @@ export default definePlugin({
         if (container) toggleWordBombOverlay();
     }
 });
-

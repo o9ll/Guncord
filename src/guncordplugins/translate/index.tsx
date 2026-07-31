@@ -90,7 +90,6 @@ function translateChannelMessages(channelId: string) {
     }
 }
 
-
 async function autoTranslateMessage(message: any) {
     if (!settings.store.autoTranslateReceived) return;
     if (!message?.content?.trim()) return;
@@ -139,7 +138,6 @@ async function autoTranslateMessage(message: any) {
     }
 }
 
-
 // Flux subscriber for incoming messages only
 function onMessageCreate(event: any) {
     if (!settings.store.autoTranslateReceived) return;
@@ -162,7 +160,6 @@ function onLoadMessagesSuccess(event: any) {
         translateChannelMessages(channelId);
     }
 }
-
 
 export default definePlugin({
     name: "Translate",
@@ -274,4 +271,3 @@ export default definePlugin({
         message.content = trans.text;
     }
 });
-

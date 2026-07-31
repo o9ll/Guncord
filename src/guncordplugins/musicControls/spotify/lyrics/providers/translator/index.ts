@@ -87,4 +87,3 @@ export const lyricsAlternativeFetchers = {
     [Provider.Translated]: translateLyrics,
     [Provider.Romanized]: romanizeLyrics
 };
-

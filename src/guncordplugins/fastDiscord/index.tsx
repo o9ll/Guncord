@@ -521,4 +521,3 @@ export default definePlugin({
         log.info("FastDiscord disabled: everything restored to normal.");
     }
 });
-

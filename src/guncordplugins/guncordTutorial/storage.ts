@@ -32,4 +32,3 @@ export function markTutorialSeen() {
 export function resetTutorialSeen() {
     void DataStore.del(TUTORIAL_SEEN_KEY);
 }
-

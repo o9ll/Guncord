@@ -39,4 +39,3 @@ export function upsertKamidereRuntimeTask(task: Omit<KamidereRuntimeTask, "updat
 export function removeKamidereRuntimeTask(taskId: string) {
     taskMap.delete(taskId);
 }
-

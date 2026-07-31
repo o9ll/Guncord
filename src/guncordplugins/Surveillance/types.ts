@@ -85,4 +85,3 @@ export interface VoiceState {
 }
 
 export type VoiceStateFlag = "deaf" | "mute" | "selfDeaf" | "selfMute" | "selfStream" | "selfVideo" | "suppress";
-

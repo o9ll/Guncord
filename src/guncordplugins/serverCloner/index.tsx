@@ -670,4 +670,3 @@ export default definePlugin({
         removeContextMenuPatch("guild-context", patchGuildContext);
     }
 });
-

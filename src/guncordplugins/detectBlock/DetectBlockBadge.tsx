@@ -95,4 +95,3 @@ export function DetectBlockBadge({ user, isMemberList, isMessage, isProfile }: D
         </Tooltip>
     );
 }
-

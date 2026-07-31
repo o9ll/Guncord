@@ -349,4 +349,3 @@ export default definePlugin({
         RelationshipStore.emitChange();
     }
 });
-

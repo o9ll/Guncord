@@ -283,7 +283,7 @@ export async function encodeGIF(source: File | Blob, onProgress?: (pct: number) 
     video.src = url;
     video.muted = true;
     video.crossOrigin = "anonymous";
-    
+
     await new Promise((resolve, reject) => {
         video.onloadeddata = resolve;
         video.onerror = reject;
@@ -297,27 +297,27 @@ export async function encodeGIF(source: File | Blob, onProgress?: (pct: number) 
 
     const canvas = new OffscreenCanvas(w, h);
     const ctx = canvas.getContext("2d") as OffscreenCanvasRenderingContext2D;
-    
+
     const frames: { palette: Color[], indices: Uint8Array, delayMs: number }[] = [];
     const rawDuration = isFinite(video.duration) && video.duration > 0 ? video.duration : MAX_DURATION;
     const duration = Math.min(rawDuration, MAX_DURATION);
     const delayMs = 1000 / FPS;
-    
+
     for (let t = 0; t < duration; t += 1 / FPS) {
         const seekPromise = new Promise(resolve => { video.onseeked = resolve; });
         video.currentTime = t;
         await seekPromise;
-        
+
         ctx.drawImage(video, 0, 0, w, h);
         const { data } = ctx.getImageData(0, 0, w, h);
         const { palette, indices } = quantize(data, w * h);
         frames.push({ palette, indices, delayMs });
-        
+
         onProgress?.(t / duration);
     }
-    
+
     URL.revokeObjectURL(url);
     onProgress?.(1);
-    
+
     return buildGIF(w, h, frames);
 }

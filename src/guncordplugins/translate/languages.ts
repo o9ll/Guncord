@@ -318,4 +318,3 @@ export function deeplLanguageToGoogleLanguage(language: string) {
             return language;
     }
 }
-

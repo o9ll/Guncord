@@ -104,4 +104,3 @@ function getStatus(currentTab: LogTabs) {
             return DBMessageStatus.GHOST_PINGED;
     }
 }
-

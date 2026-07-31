@@ -82,7 +82,7 @@ function handleOtherPluginToggle(e: any) {
 function BrowserButtonWrapper() {
     const [, forceUpdate] = React.useState({});
     updateButtonState = () => forceUpdate({});
-    
+
     return <BrowserButton />;
 }
 
@@ -119,4 +119,3 @@ export default definePlugin({
         Native.teardown().catch(() => {});
     }
 });
-

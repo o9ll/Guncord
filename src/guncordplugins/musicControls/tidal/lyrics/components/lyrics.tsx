@@ -88,4 +88,3 @@ export function TidalLyrics({ scroll = true }: { scroll?: boolean; } = {}) {
 
     return <LyricsDisplay scroll={scroll} />;
 }
-

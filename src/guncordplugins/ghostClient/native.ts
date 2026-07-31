@@ -397,4 +397,3 @@ app.on("before-quit", () => {
         serverProc = null;
     }
 });
-

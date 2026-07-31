@@ -44,11 +44,11 @@ const SQRT2 = Math.sqrt(2);
 
 // ─── Module-level state ───────────────────────────────────────────────────────
 
-export const positions = new Map<string, Map<string, Position>>();   // channelId → userId → pos
-export const activeChannels = new Set<string>();                      // channelIds with spatial on
-export const manualModeChannels = new Set<string>();                  // channelIds in manual positioning mode
-const storedStreams = new Map<string, StreamData>();                  // userId → StreamData
-const audioChains = new Map<string, AudioChain>();                   // userId → chain
+export const positions = new Map<string, Map<string, Position>>();
+export const activeChannels = new Set<string>();
+export const manualModeChannels = new Set<string>();
+const storedStreams = new Map<string, StreamData>();
+const audioChains = new Map<string, AudioChain>();
 
 let positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -69,8 +69,8 @@ function makeStore() {
     };
 }
 
-export const SpatialActiveStore = makeStore();   // emits when activeChannels changes
-export const SpatialPositionStore = makeStore(); // emits when positions changes
+export const SpatialActiveStore = makeStore();
+export const SpatialPositionStore = makeStore();
 
 // ─── DataStore ────────────────────────────────────────────────────────────────
 
@@ -298,4 +298,3 @@ export function teardownAudio() {
     SpatialActiveStore.emit();
     SpatialPositionStore.emit();
 }
-

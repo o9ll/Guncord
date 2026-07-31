@@ -294,4 +294,3 @@ export function closeTutorial() {
     closeModal(activeModalKey);
     activeModalKey = undefined;
 }
-

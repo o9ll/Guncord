@@ -1,8 +1,8 @@
 # ==============================================================================
-#  Guncord — Désinstalleur utilisateur (PowerShell)
-#  Supprime l'injection Guncord de Discord
+#  Guncord — User uninstaller (PowerShell)
+#  Removes the Guncord injection from Discord
 #
-#  Usage : Clic droit → "Exécuter avec PowerShell"
+#  Usage: Right-click → "Run with PowerShell"
 # ==============================================================================
 
 $ErrorActionPreference = "Stop"
@@ -15,13 +15,13 @@ $EquilotlExe   = Join-Path $InstallerDir "EquilotlCli.exe"
 Clear-Host
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "  ║      GUNCORD — Désinstalleur           ║" -ForegroundColor Cyan
+Write-Host "  ║      GUNCORD — Uninstaller             ║" -ForegroundColor Cyan
 Write-Host "  ╚══════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
 if (-not (Test-Path $EquilotlExe)) {
-    Write-Host "  [INFO] EquilotlCli.exe introuvable." -ForegroundColor Yellow
-    Write-Host "         Téléchargement de l'outil de désinstallation..." -ForegroundColor Yellow
+    Write-Host "  [INFO] EquilotlCli.exe not found." -ForegroundColor Yellow
+    Write-Host "         Downloading the uninstall tool..." -ForegroundColor Yellow
     Write-Host ""
     New-Item -ItemType Directory -Force -Path $InstallerDir | Out-Null
     $EquilotlUrl = "https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli.exe"
@@ -30,8 +30,8 @@ if (-not (Test-Path $EquilotlExe)) {
         -OutFile $EquilotlExe -UseBasicParsing
 }
 
-Write-Host "  Lancement du désinstalleur graphique..." -ForegroundColor Yellow
-Write-Host "  Une fenêtre va s'ouvrir pour choisir votre Discord cible." -ForegroundColor Yellow
+Write-Host "  Launching the graphical uninstaller..." -ForegroundColor Yellow
+Write-Host "  A window will open to choose your target Discord." -ForegroundColor Yellow
 Write-Host ""
 
 $env:EQUICORD_USER_DATA_DIR = $InstallDir
@@ -41,16 +41,16 @@ $env:EQUICORD_DEV_INSTALL   = "1"
 try {
     & $EquilotlExe "--uninstall"
 } catch {
-    Write-Host "  [ERREUR] La désinstallation a échoué : $_" -ForegroundColor Red
-    Write-Host "  Appuyez sur une touche pour quitter..."
+    Write-Host "  [ERROR] Uninstall failed: $_" -ForegroundColor Red
+    Write-Host "  Press any key to exit..."
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     exit 1
 }
 
 Write-Host ""
 Write-Host "  ┌──────────────────────────────────────────────────────┐" -ForegroundColor Green
-Write-Host "  │  Guncord désinstallé avec succès !                 │" -ForegroundColor Green
-Write-Host "  │  Redémarrez Discord pour appliquer les changements.  │" -ForegroundColor Green
+Write-Host "  │  Guncord uninstalled successfully!                 │" -ForegroundColor Green
+Write-Host "  │  Restart Discord to apply the changes.               │" -ForegroundColor Green
 Write-Host "  └──────────────────────────────────────────────────────┘" -ForegroundColor Green
 Write-Host ""
 Start-Sleep -Seconds 3

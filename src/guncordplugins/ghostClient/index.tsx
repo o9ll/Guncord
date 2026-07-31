@@ -788,4 +788,3 @@ export default definePlugin({
 
     stop() { ghostDeactivateAll(); stopFollowing(); },
 });
-

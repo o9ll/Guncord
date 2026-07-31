@@ -625,4 +625,3 @@ export async function executeMutualScan(
         };
     }
 }
-

@@ -111,4 +111,3 @@ export interface MutualScannerExecutionResult {
     matches: MutualScannerMatch[];
     error?: string;
 }
-

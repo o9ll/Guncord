@@ -113,4 +113,3 @@ async function downloadAttachmentWeb(attachemnt: LoggedAttachment, attempts = 0)
 
     return path;
 }
-

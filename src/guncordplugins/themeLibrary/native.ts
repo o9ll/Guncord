@@ -25,4 +25,3 @@ export async function downloadTheme(_: IpcMainInvokeEvent, dir: PathLike, theme:
     const content = await download.text();
     writeFileSync(path, content);
 }
-

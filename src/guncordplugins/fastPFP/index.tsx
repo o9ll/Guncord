@@ -9,7 +9,7 @@ const uploadImageToProfile = async (url: string, type: "avatar" | "banner") => {
     try {
         const response = await fetch(url);
         const blob = await response.blob();
-        
+
         // Convert Blob to Base64
         const reader = new FileReader();
         reader.readAsDataURL(blob);

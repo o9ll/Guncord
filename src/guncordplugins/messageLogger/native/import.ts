@@ -52,4 +52,3 @@ export async function closeNativeLogImport(_event: IpcMainInvokeEvent, fileId: s
         activeFiles.delete(fileId);
     }
 }
-

@@ -464,4 +464,3 @@ export default definePlugin({
         MessageStore.getMessage = this.oldGetMessage;
     }
 });
-

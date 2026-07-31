@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─── Guncord Installer — Build ─────────────────────────────────────────────
-# Equivalent bash de build-installer.ps1 (converti depuis build-installer.bat)
+# bash equivalent of build-installer.ps1 (converted from build-installer.bat)
 
 set -euo pipefail
 
@@ -12,59 +12,59 @@ echo "  Guncord Installer - Build"
 echo " ================================"
 echo ""
 
-# ── Vérifie que node est disponible ──────────────────────────────────────────
+# ── Check that node is available ──────────────────────────────────────────
 if ! command -v node &>/dev/null; then
-    echo " [ERREUR] Node.js introuvable. Installez Node.js depuis https://nodejs.org"
+    echo " [ERROR] Node.js not found. Install Node.js from https://nodejs.org"
     exit 1
 fi
 
-# ── Crée le dossier de sortie si besoin ──────────────────────────────────────
+# ── Create the output folder if needed ──────────────────────────────────────
 mkdir -p "release/installer"
 
-# ── Entre dans le dossier installer ──────────────────────────────────────
+# ── Enter the installer folder ──────────────────────────────────────
 cd installer
 
-# ── 1. Installe les dépendances si node_modules absent ───────────────────────
+# ── 1. Install dependencies if node_modules is missing ───────────────────────
 if [[ ! -d "node_modules" ]]; then
-    echo " [1/3] Installation des dependances npm..."
+    echo " [1/3] Installing npm dependencies..."
     if ! npm install --legacy-peer-deps; then
-        echo " [ERREUR] npm install a echoue."
+        echo " [ERROR] npm install failed."
         cd ..
         exit 1
     fi
-    echo " [1/3] Dependances installees."
+    echo " [1/3] Dependencies installed."
 else
-    echo " [1/3] Dependances deja presentes, on passe."
+    echo " [1/3] Dependencies already present, skipping."
 fi
 
-# ── 2. Compile avec electron-webpack ─────────────────────────────────────────
+# ── 2. Compile with electron-webpack ─────────────────────────────────────────
 echo ""
-echo " [2/3] Compilation webpack (electron-webpack)..."
+echo " [2/3] Compiling webpack (electron-webpack)..."
 
 if ! npm run compile; then
-    echo " [ERREUR] Compilation webpack echouee."
+    echo " [ERROR] Webpack compilation failed."
     cd ..
     exit 1
 fi
 
-echo " [2/3] Compilation webpack reussie."
+echo " [2/3] Webpack compilation succeeded."
 
 # ── 3. Packaging electron-builder ────────────────────────────────────────────
 echo ""
 echo " [3/3] Packaging electron-builder..."
 
 if ! npx electron-builder --win -p never; then
-    echo " [ERREUR] electron-builder a echoue."
+    echo " [ERROR] electron-builder failed."
     cd ..
     exit 1
 fi
 
 cd ..
 
-# ── Vérification ─────────────────────────────────────────────────────────────
+# ── Verify ─────────────────────────────────────────────────────────────
 if [[ ! -f "release/installer/Guncord-Installer.exe" ]]; then
     echo ""
-    echo " [ERREUR] Guncord-Installer.exe introuvable apres build."
+    echo " [ERROR] Guncord-Installer.exe not found after build."
     exit 1
 fi
 
@@ -72,6 +72,6 @@ SIZE=$(stat -c%s "release/installer/Guncord-Installer.exe" 2>/dev/null \
     || stat -f%z "release/installer/Guncord-Installer.exe")
 
 echo ""
-echo " [OK] Build reussi !"
-echo " Fichier : release/installer/Guncord-Installer.exe  ($SIZE octets)"
+echo " [OK] Build succeeded!"
+echo " File : release/installer/Guncord-Installer.exe  ($SIZE bytes)"
 echo ""

@@ -15,4 +15,3 @@ const brandIconSvg = [
 ].join("");
 
 export const BRAND_ICON_DATA_URL = `data:image/svg+xml;utf8,${encodeURIComponent(brandIconSvg)}`;
-

@@ -68,4 +68,3 @@ export function LyricsModal({ rootProps }: { rootProps: RenderModalProps; }) {
         </Modal>
     );
 }
-

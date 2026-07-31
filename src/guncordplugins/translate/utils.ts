@@ -153,4 +153,3 @@ async function deeplTranslate(text: string, sourceLang: string, targetLang: stri
         text: translations[0].text
     };
 }
-

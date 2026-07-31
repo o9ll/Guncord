@@ -227,4 +227,3 @@ export function useMutualScannerData(userId: string | null) {
 export function getMutualScannerCurrentUserId() {
     return UserStore.getCurrentUser()?.id ?? null;
 }
-

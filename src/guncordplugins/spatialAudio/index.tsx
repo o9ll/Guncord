@@ -114,4 +114,3 @@ export default definePlugin({
         "Open Spatial Audio": openSpatialAudio
     },
 });
-

@@ -249,7 +249,7 @@ function VoiceMessageModal({ modalProps }: { modalProps: any; }) {
                     downloadBlob();
                 }
             } catch (err) {
-                
+
             }
         };
 
@@ -273,7 +273,7 @@ function VoiceMessageModal({ modalProps }: { modalProps: any; }) {
                 disabled: !blob
             }]}
         >
-            <div className={cl("figma-ui")}> 
+            <div className={cl("figma-ui")}>
                 <div className={cl("figma-ui-content")}>
                     <div className={cl("buttons")}>
                         <VoiceRecorder
@@ -302,7 +302,7 @@ function VoiceMessageModal({ modalProps }: { modalProps: any; }) {
                 ? <Paragraph className={cl("error")}>Failed to parse selected audio file: {metaError.message}</Paragraph>
                 : (
                     <>
-                        <div className={cl("preview-container")}> 
+                        <div className={cl("preview-container")}>
                                     <VoicePreview
                                         src={blobUrl}
                                         waveform={meta.waveform}
@@ -311,7 +311,7 @@ function VoiceMessageModal({ modalProps }: { modalProps: any; }) {
                                     />
                                 </div>
                         {blob && (
-                            <div className={cl("send-row")}> 
+                            <div className={cl("send-row")}>
                                 <Button
                                     onClick={() => {
                                         try {
@@ -345,4 +345,3 @@ function VoiceMessageModal({ modalProps }: { modalProps: any; }) {
         </Modal>
     );
 }
-

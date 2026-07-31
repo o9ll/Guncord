@@ -2221,4 +2221,3 @@ export default definePlugin({
         activeProfileId = DEFAULT_PROFILE_ID;
     }
 });
-

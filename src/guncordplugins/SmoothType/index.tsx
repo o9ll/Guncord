@@ -5,7 +5,6 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
-import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Forms } from "@webpack/common";
 
@@ -219,9 +218,8 @@ function removeCSS() {
 
 export default definePlugin({
     name: "SmoothType",
-    enabledByDefault: false,
     description: "The plugin allows you to fully customize the cursor caret's visual settings, including adjustable transition delays and custom CSS animation effects.",
-    authors: [Devs.coll,Devs.viciouscal],
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
     settings,
 
     start() {
@@ -243,4 +241,3 @@ export default definePlugin({
         document.getElementById("vc-smoothtype-caret")?.remove();
     },
 });
-

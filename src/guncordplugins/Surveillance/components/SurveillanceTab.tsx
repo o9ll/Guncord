@@ -313,7 +313,6 @@ function VoiceParticipantsPanel({ participants, targetUserId }: { participants?:
     );
 }
 
-
 const EventDetailsModal = ErrorBoundary.wrap(function EventDetailsModal({ event, modalProps }: { event: SurveillanceEvent; modalProps: RenderModalProps; }) {
     const channel = event.channelId ? ChannelStore.getChannel(event.channelId) : undefined;
     const guild = event.guildId ? GuildStore.getGuild(event.guildId) : undefined;
@@ -412,7 +411,6 @@ const EventDetailsModal = ErrorBoundary.wrap(function EventDetailsModal({ event,
                         </div>
                     </div>
                 ) : null}
-
 
                 <VoiceParticipantsPanel participants={event.voiceParticipants} targetUserId={event.scope === "person" ? event.userId : undefined} />
 
@@ -712,7 +710,6 @@ function SurveillanceTab() {
 
     const searchPlaceholder = page === "server" ? t("Search servers by name or ID...") : t("Search cached users by name or ID...");
 
-
     const shownTargets = targets.slice(0, TARGET_LIST_LIMIT);
 
     const shownServerTargets = serverTargets.slice(0, TARGET_LIST_LIMIT);
@@ -811,7 +808,6 @@ function SurveillanceTab() {
                         </div>
                     </div>
 
-
                     {targetPanelCollapsed ? (
                         <div className={cl("collapsed-summary")}>
                             {targetCount} {t("targets selected")}
@@ -905,6 +901,4 @@ function SurveillanceTab() {
     );
 }
 
-
 export default wrapTab(SurveillanceTab, "Surveillance");
-

@@ -298,4 +298,3 @@ export async function clearMessagesIDB(showToast = true) {
         id: Toasts.genId()
     });
 }
-

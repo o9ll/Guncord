@@ -274,7 +274,6 @@ function SaveProfileSettings({ closePluginSettings }: { closePluginSettings: () 
         }
     };
 
-
     // Delete saved configuration
     const handleDeleteProfile = (id: string) => {
         Alerts.show({
@@ -448,4 +447,3 @@ export default definePlugin({
     tags: ["Appearance", "Customisation", "Utility"],
     settings
 });
-

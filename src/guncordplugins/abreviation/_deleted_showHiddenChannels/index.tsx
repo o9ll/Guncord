@@ -7,4 +7,3 @@
 // Plugin disabled — intentionally removed
 // Do not restore: causes invisible channels by interfering with VIEW_CHANNEL
 export default null;
-

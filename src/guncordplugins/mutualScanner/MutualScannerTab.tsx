@@ -1480,4 +1480,3 @@ function MutualScannerTab() {
 }
 
 export default wrapTab(MutualScannerTab, "Mutual Scanner");
-

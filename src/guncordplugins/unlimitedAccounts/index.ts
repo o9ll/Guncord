@@ -65,4 +65,3 @@ export default definePlugin({
     ],
     getMaxAccounts() { return settings.store.maxAccounts === 0 ? Infinity : settings.store.maxAccounts; },
 });
-

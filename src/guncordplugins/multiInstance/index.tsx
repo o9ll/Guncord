@@ -656,4 +656,3 @@ export default definePlugin({
         if (root) root.remove();
     },
 });
-

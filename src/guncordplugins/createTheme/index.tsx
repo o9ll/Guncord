@@ -12,4 +12,3 @@ export default definePlugin({
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     required: false,
 });
-

@@ -1747,4 +1747,3 @@ export default definePlugin({
         }
     }
 });
-

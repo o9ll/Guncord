@@ -33,4 +33,3 @@ export function LyricsContextMenu() {
         </Menu.Menu>
     );
 }
-

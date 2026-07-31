@@ -215,4 +215,3 @@ export default definePlugin({
         autoMutedUsers.clear();
     }
 });
-

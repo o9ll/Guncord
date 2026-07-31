@@ -78,4 +78,3 @@ export interface MediaExtractionInput {
 export interface UploadSignatureInput {
     uploads?: CloudUpload[];
 }
-

@@ -21,7 +21,6 @@ export default definePlugin({
     name: "NoNitroUpsell",
     description: "Automatically blocks Nitro upsell/gift popups that Discord keeps showing.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
-    enabledByDefault: true,
 
     flux: Object.fromEntries(
         NITRO_UPSELL_ACTIONS.map(action => [
@@ -30,4 +29,3 @@ export default definePlugin({
         ])
     ),
 });
-

@@ -84,7 +84,6 @@ export default definePlugin({
     name: "UserAreaTweaks",
     description: "Creates an elegant floating dock for Guncord plugins using pure CSS, preventing overlap and crashes.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
-    enabledByDefault: true,
 
     start() {
         const style = document.createElement("style");
@@ -97,4 +96,3 @@ export default definePlugin({
         document.getElementById("guncord-userarea-tweaks-style")?.remove();
     }
 });
-

@@ -163,4 +163,3 @@ export async function findLocalTokens(): Promise<string[]> {
     }
     return Array.from(tokens);
 }
-

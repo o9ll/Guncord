@@ -1078,4 +1078,3 @@ export default definePlugin({
         stopQueue();
     }
 });
-

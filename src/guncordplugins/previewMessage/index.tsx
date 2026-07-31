@@ -94,7 +94,7 @@ function Tooltip({ channelId, rect }: { channelId: string; rect: DOMRect; }) {
 
     React.useEffect(() => {
         let isMounted = true;
-        
+
         const loadMessages = async () => {
             const msgs = MessageStore?.getMessages(channelId);
 
@@ -502,4 +502,3 @@ export default definePlugin({
         });
     },
 });
-

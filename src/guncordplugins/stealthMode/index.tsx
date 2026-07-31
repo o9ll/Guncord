@@ -31,4 +31,3 @@ export default definePlugin({
         document.body.classList.remove("guncord-stealth");
     },
 });
-

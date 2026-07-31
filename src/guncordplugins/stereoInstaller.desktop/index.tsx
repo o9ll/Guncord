@@ -533,4 +533,3 @@ export default definePlugin({
         removeFromArray(SettingsPlugin.customEntries, entry => entry.key === SETTINGS_ENTRY_KEY);
     }
 });
-

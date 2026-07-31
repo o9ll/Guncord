@@ -117,4 +117,3 @@ export default definePlugin({
         toggleHoverControls(settings.store.hoverControls);
     },
 });
-

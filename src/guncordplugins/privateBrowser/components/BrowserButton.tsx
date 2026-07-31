@@ -963,4 +963,3 @@ function getOrCreateBrowserContainer(): HTMLDivElement {
     }
     return el;
 }
-

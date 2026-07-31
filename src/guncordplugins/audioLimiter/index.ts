@@ -164,4 +164,3 @@ export default definePlugin({
         disableAll();
     },
 });
-

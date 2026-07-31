@@ -20,4 +20,3 @@ export function waitFor(condition: () => boolean, cb: () => void) {
     if (condition()) cb();
     else requestAnimationFrame(() => waitFor(condition, cb));
 }
-

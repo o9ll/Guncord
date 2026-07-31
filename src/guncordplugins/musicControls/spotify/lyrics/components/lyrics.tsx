@@ -89,4 +89,3 @@ export function SpotifyLyrics({ scroll = true }: { scroll?: boolean; } = {}) {
 
     return <LyricsDisplay scroll={scroll} />;
 }
-

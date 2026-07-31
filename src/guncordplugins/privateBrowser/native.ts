@@ -86,8 +86,6 @@ export function teardown() {
     }
 }
 
-
-
 /**
  * Execute navigation actions (back, forward, reload) on the active browser iframe subframe.
  * Uses Electron's WebFrameMain API to bypass cross-origin CORS locks.
@@ -117,7 +115,6 @@ export async function navigateFrame(action: "back" | "forward" | "reload"): Prom
         return false;
     }
 }
-
 
 // ─── Extension Management ────────────────────────────────────────────────────
 

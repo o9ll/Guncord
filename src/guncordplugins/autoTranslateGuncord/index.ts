@@ -4200,4 +4200,3 @@ export function useTranslation() {
         lang,
     };
 }
-

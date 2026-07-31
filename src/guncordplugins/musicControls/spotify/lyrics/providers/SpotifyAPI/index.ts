@@ -57,4 +57,3 @@ export async function getLyricsSpotify(trackId: string, customBaseUrl?: string):
         }
     };
 }
-

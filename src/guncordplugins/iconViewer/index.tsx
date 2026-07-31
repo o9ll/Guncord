@@ -26,4 +26,3 @@ export default definePlugin({
     },
     settingsAboutComponent: SettingsAbout,
 });
-

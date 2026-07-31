@@ -128,8 +128,6 @@ export function FloodModal({ channel, rootProps, onRunningChange }: Props) {
         if (runningRef.current) scheduleNext();
     }
 
-
-
     return (
         <ModalRoot {...rootProps}>
             <ModalHeader className="vc-flood-modal-header">
@@ -228,4 +226,3 @@ export function FloodModal({ channel, rootProps, onRunningChange }: Props) {
         </ModalRoot>
     );
 }
-

@@ -48,4 +48,3 @@ export async function getLyrics(track: Track | null, retries = 3): Promise<Enhan
         return null;
     }
 }
-

@@ -449,4 +449,3 @@ export function renderSecureBookmarksToolboxMenu() {
         </Menu.MenuItem>
     );
 }
-

@@ -143,4 +143,3 @@ export type GitError = {
 };
 
 export type GitResult = GitValue | GitError;
-

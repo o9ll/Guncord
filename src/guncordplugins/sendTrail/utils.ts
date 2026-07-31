@@ -318,4 +318,3 @@ export function buildSearchIndex(record: SentTrailRecord) {
         .join(" ")
         .toLowerCase();
 }
-

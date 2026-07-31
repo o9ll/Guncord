@@ -32,4 +32,3 @@ export default definePlugin({
         document.body.classList.remove("guncord-compact");
     },
 });
-

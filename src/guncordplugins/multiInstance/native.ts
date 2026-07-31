@@ -602,4 +602,3 @@ export async function closeInstance(_: any, userId: string): Promise<void> {
     const win = openWindows.get(userId);
     if (win && !win.isDestroyed()) win.close();
 }
-

@@ -224,4 +224,3 @@ export function useSentTrailRecords(userId: string | null) {
 
     return [records, pending] as const;
 }
-

@@ -382,4 +382,3 @@ export function WordBombOverlay() {
         </div>
     );
 }
-

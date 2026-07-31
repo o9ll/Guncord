@@ -322,4 +322,3 @@ function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
 }
 
 export default ErrorBoundary.wrap(HiddenChannelLockScreen);
-

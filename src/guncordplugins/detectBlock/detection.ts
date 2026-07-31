@@ -214,4 +214,3 @@ export function clearDetectionState() {
     requestVersions.clear();
     queue.length = 0;
 }
-

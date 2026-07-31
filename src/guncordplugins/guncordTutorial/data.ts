@@ -452,4 +452,3 @@ export const RECOMMENDED_PLUGIN_COPY: Record<RecommendedPluginName, LocalizedTex
         it: "Controlli microfono extra dal pannello voce."
     }
 };
-

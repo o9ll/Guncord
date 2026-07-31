@@ -81,13 +81,13 @@ function clearFakes(channelId: string): number {
     const ids = fakeIds.get(channelId) || new Set<string>();
     const fakes = loadPersisted().filter(f => f.channelId === channelId);
     let n = 0;
-    
+
     // Dispatch delete for all fakes of this channel to clear from store immediately
     for (const f of fakes) {
         FluxDispatcher.dispatch({ type: "MESSAGE_DELETE", channelId, id: f.snowflakeId, mlDeleted: true });
         n++;
     }
-    
+
     // Also dispatch delete for any session-only fakes that might not be in persisted storage
     for (const id of ids) {
         if (!fakes.some(f => f.snowflakeId === id)) {
@@ -99,7 +99,7 @@ function clearFakes(channelId: string): number {
     // Remove from persisted storage
     const remaining = loadPersisted().filter(f => f.channelId !== channelId);
     savePersisted(remaining);
-    
+
     ids.clear();
     return n;
 }
@@ -695,4 +695,3 @@ export default definePlugin({
         _idCounter = 0;
     },
 });
-

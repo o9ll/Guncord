@@ -7,4 +7,3 @@
 export async function installWatchingTogetherIntercept(isDark: boolean = true) {
     // Moved to src/main/csp/index.ts to avoid overwriting global CSP
 }
-

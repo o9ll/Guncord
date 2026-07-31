@@ -98,5 +98,3 @@ export default definePlugin({
         removeHeaderBarButton("secure-bookmarks-btn");
     }
 });
-
-

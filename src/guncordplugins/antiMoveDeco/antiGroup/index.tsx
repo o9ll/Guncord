@@ -154,4 +154,3 @@ export default definePlugin({
         log("[AntiGroup] Plugin stopped");
     }
 });
-

@@ -1017,7 +1017,6 @@ export default definePlugin({
         );
     },
 
-
     start() {
         updateTargets(settings.store.targets);
         updateServerTargets(settings.store.serverTargets);
@@ -1174,4 +1173,3 @@ export default definePlugin({
         },
     },
 });
-

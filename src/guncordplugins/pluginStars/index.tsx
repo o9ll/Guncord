@@ -49,4 +49,3 @@ export default definePlugin({
         FluxDispatcher.dispatch({ type: STAR_UPDATED_EVENT });
     }
 });
-

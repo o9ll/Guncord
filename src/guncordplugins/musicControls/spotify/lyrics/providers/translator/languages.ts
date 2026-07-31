@@ -544,4 +544,3 @@ export default [
         label: "Zulu"
     }
 ];
-

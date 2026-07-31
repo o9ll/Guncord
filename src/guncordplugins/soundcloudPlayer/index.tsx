@@ -8,7 +8,6 @@ import "./styles.css";
 
 import { HeaderBarButton } from "@api/HeaderBar";
 import { DataStore } from "@api/index";
-import { EquicordDevs } from "@utils/constants";
 import { ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { IconComponent, OptionType, PluginNative } from "@utils/types";
@@ -256,7 +255,7 @@ async function playTrackById(trackId: string, startParam?: string) {
         if (!json) throw new Error("Track not found");
         const tracks = parseTracks({ collection: [JSON.parse(json)] });
         if (tracks.length === 0) throw new Error("Invalid track data");
-        
+
         let seekPos = 0;
         if (startParam) {
             const startTime = Number(startParam);
@@ -309,8 +308,8 @@ export const playerState = {
     audio: null as HTMLAudioElement | null,
     listeners: new Set<PlayerListener>(),
 
-    notify() { 
-        this.listeners.forEach(l => l()); 
+    notify() {
+        this.listeners.forEach(l => l());
         try {
             FluxDispatcher.dispatch({
                 type: "SOUNDCORD_STATE_UPDATE",
@@ -867,7 +866,6 @@ function SCHeaderBarButton() {
     );
 }
 
-
 const UserStore = findStoreLazy("UserStore");
 
 let lastSyncTime = 0;
@@ -895,7 +893,7 @@ async function syncPlayerStateToCloud() {
         const elapsed = Math.floor(p.position * 1000);
         const start = now - elapsed;
 
-        const shouldSync = 
+        const shouldSync =
             p.playing.id !== lastSyncTrackId ||
             p.isPlaying !== lastSyncIsPlaying ||
             Math.abs(now - lastSyncTime) > 10000;
@@ -1133,13 +1131,12 @@ export const settings = definePluginSettings({
 });
 
 export default definePlugin({
-
     name: "SoundCordPlayer",
     enabledByDefault: true,
     description: "Integrated SoundCord player. Client ID is automatically fetched via native Electron process — no account required.",
-    authors: [EquicordDevs.nobody],
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
     settings,
-    
+
     toolboxActions: {
         "Open SoundCord"() {
             openModal(props => (
@@ -1244,4 +1241,3 @@ export default definePlugin({
         playerInited = false;
     },
 });
-

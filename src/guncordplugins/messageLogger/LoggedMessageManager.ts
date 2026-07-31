@@ -59,4 +59,3 @@ export const addMessage = async (message: LoggedMessage | LoggedMessageJSON, sta
         }
     }
 };
-

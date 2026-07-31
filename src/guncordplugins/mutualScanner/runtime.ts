@@ -603,4 +603,3 @@ export function startMutualScannerWarmup(
 
     return true;
 }
-

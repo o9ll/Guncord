@@ -24,4 +24,3 @@ export function TimerIcon({ height = 16, width = 16, className }: Readonly<{
         </svg>
     );
 }
-

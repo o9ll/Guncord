@@ -1,14 +1,14 @@
 # ==============================================================================
-#  Guncord — Installeur utilisateur (PowerShell autonome)
+#  Guncord — User installer (standalone PowerShell)
 #  
-#  Ce script fait TOUT automatiquement :
-#  1. Télécharge EquilotlCli.exe (outil d'injection graphique)
-#  2. Télécharge les fichiers Guncord compilés depuis GitHub
-#  3. Lance l'interface graphique pour choisir votre Discord cible
-#  4. Injecte Guncord dans Discord
+#  This script does EVERYTHING automatically:
+#  1. Downloads EquilotlCli.exe (graphical injection tool)
+#  2. Downloads the compiled Guncord files from GitHub
+#  3. Opens the GUI to pick your target Discord
+#  4. Injects Guncord into Discord
 #
-#  Aucun Node.js, aucun pnpm, aucun code source requis.
-#  Usage : Clic droit → "Exécuter avec PowerShell"
+#  No Node.js, no pnpm, no source code required.
+#  Usage: Right-click → "Run with PowerShell"
 # ==============================================================================
 
 $ErrorActionPreference = "Stop"
@@ -27,7 +27,7 @@ function Write-Banner {
     Write-Host ""
     Write-Host "  ╔══════════════════════════════════════════╗" -ForegroundColor Cyan
     Write-Host "  ║          GUNCORD  INSTALLER            ║" -ForegroundColor Cyan
-    Write-Host "  ║  Injection rapide dans Discord Desktop   ║" -ForegroundColor DarkCyan
+    Write-Host "  ║  Fast injection into Discord Desktop     ║" -ForegroundColor DarkCyan
     Write-Host "  ╚══════════════════════════════════════════╝" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -44,27 +44,27 @@ function Write-OK($msg) {
 
 function Write-Fail($msg) {
     Write-Host ""
-    Write-Host "  [ERREUR] $msg" -ForegroundColor Red
+    Write-Host "  [ERROR] $msg" -ForegroundColor Red
     Write-Host ""
-    Write-Host "  Appuyez sur une touche pour quitter..."
+    Write-Host "  Press any key to exit..."
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     exit 1
 }
 
-# ── Démarrage ─────────────────────────────────────────────────────────────────
+# ── Start ─────────────────────────────────────────────────────────────────────
 Write-Banner
 
-# Créer les dossiers
+# Create the folders
 New-Item -ItemType Directory -Force -Path $InstallDir  | Out-Null
 New-Item -ItemType Directory -Force -Path $InstallerDir | Out-Null
 New-Item -ItemType Directory -Force -Path $DistDir      | Out-Null
 
-# ── [1/3] Télécharger / Mettre à jour EquilotlCli.exe ────────────────────────
-Write-Step 1 3 "Vérification de l'outil d'installation..."
+# ── [1/3] Download / update EquilotlCli.exe ──────────────────────────────────
+Write-Step 1 3 "Checking the installer tool..."
 
 $needDownload = $true
 if (Test-Path $EquilotlExe) {
-    # Vérifier si une mise à jour est disponible via HEAD
+    # Check if an update is available via HEAD
     try {
         $head = Invoke-WebRequest -Uri $EquilotlUrl -Method Head -UseBasicParsing `
             -Headers @{ "User-Agent" = "Guncord-Installer/2.0" }
@@ -72,24 +72,24 @@ if (Test-Path $EquilotlExe) {
         $localSize  = (Get-Item $EquilotlExe).Length
         if ($remoteSize -gt 0 -and $remoteSize -eq $localSize) {
             $needDownload = $false
-            Write-OK "EquilotlCli.exe déjà à jour."
+            Write-OK "EquilotlCli.exe already up to date."
         }
     } catch { }
 }
 
 if ($needDownload) {
-    Write-Host "          Téléchargement de EquilotlCli.exe..." -ForegroundColor DarkGray
+    Write-Host "          Downloading EquilotlCli.exe..." -ForegroundColor DarkGray
     try {
         Invoke-WebRequest -Uri $EquilotlUrl -OutFile $EquilotlExe -UseBasicParsing `
             -Headers @{ "User-Agent" = "Guncord-Installer/2.0" }
-        Write-OK "EquilotlCli.exe téléchargé !"
+        Write-OK "EquilotlCli.exe downloaded!"
     } catch {
-        Write-Fail "Impossible de télécharger EquilotlCli.exe.`n           Vérifiez votre connexion internet.`n           Détail : $_"
+        Write-Fail "Could not download EquilotlCli.exe.`n           Check your internet connection.`n           Detail: $_"
     }
 }
 
-# ── [2/3] Télécharger les fichiers Guncord ──────────────────────────────────
-Write-Step 2 3 "Téléchargement des fichiers Guncord depuis GitHub..."
+# ── [2/3] Download the Guncord files ────────────────────────────────────────
+Write-Step 2 3 "Downloading the Guncord files from GitHub..."
 
 try {
     $apiUrl   = "https://api.github.com/repos/$GuncordRepo/releases/latest"
@@ -100,40 +100,40 @@ try {
     $distAsset = $release.assets | Where-Object { $_.name -eq "guncord-dist.zip" } | Select-Object -First 1
 
     if (-not $distAsset) {
-        Write-Fail "Fichier 'guncord-dist.zip' introuvable dans la release $version.`n           Contactez le support Guncord."
+        Write-Fail "File 'guncord-dist.zip' not found in release $version.`n           Contact Guncord support."
     }
 
-    Write-Host "          Version : $version" -ForegroundColor DarkGray
-    Write-Host "          Téléchargement en cours..." -ForegroundColor DarkGray
+    Write-Host "          Version: $version" -ForegroundColor DarkGray
+    Write-Host "          Downloading..." -ForegroundColor DarkGray
 
     $zipPath = Join-Path $InstallDir "guncord-dist.zip"
     Invoke-WebRequest -Uri $distAsset.browser_download_url -OutFile $zipPath -UseBasicParsing `
         -Headers @{ "User-Agent" = "Guncord-Installer/2.0" }
 
-    # Extraire proprement (supprimer l'ancien dist d'abord)
+    # Extract cleanly (remove the old dist first)
     if (Test-Path $DistDir) { Remove-Item $DistDir -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
     Expand-Archive -Path $zipPath -DestinationPath $DistDir -Force
     Remove-Item $zipPath -Force
 
-    # Sauvegarder la version installée
+    # Save the installed version
     Set-Content -Path (Join-Path $InstallDir "version.txt") -Value $version
 
-    Write-OK "Guncord $version prêt à être injecté !"
+    Write-OK "Guncord $version ready to inject!"
 } catch {
-    Write-Fail "Échec du téléchargement Guncord.`n           Détail : $_"
+    Write-Fail "Guncord download failed.`n           Detail: $_"
 }
 
-# ── [3/3] Injection via EquilotlCli ───────────────────────────────────────────
-Write-Step 3 3 "Lancement de l'interface d'injection..."
+# ── [3/3] Inject via EquilotlCli ──────────────────────────────────────────────
+Write-Step 3 3 "Launching the injection UI..."
 Write-Host ""
 Write-Host "          ┌─────────────────────────────────────────────────┐" -ForegroundColor DarkCyan
-Write-Host "          │  Une fenêtre va s'ouvrir.                       │" -ForegroundColor DarkCyan
-Write-Host "          │  Sélectionnez le Discord où injecter Guncord. │" -ForegroundColor DarkCyan
+Write-Host "          │  A window will open.                            │" -ForegroundColor DarkCyan
+Write-Host "          │  Pick the Discord to inject Guncord into.     │" -ForegroundColor DarkCyan
 Write-Host "          └─────────────────────────────────────────────────┘" -ForegroundColor DarkCyan
 Write-Host ""
 
-# Ces variables d'environnement indiquent à EquilotlCli où trouver les fichiers
+# These env vars tell EquilotlCli where to find the files
 $env:EQUICORD_USER_DATA_DIR = $InstallDir
 $env:EQUICORD_DIRECTORY     = $DistDir
 $env:EQUICORD_DEV_INSTALL   = "1"
@@ -141,21 +141,21 @@ $env:EQUICORD_DEV_INSTALL   = "1"
 try {
     & $EquilotlExe "--install"
     if ($LASTEXITCODE -ne 0) {
-        Write-Fail "EquilotlCli a retourné une erreur (code $LASTEXITCODE)."
+        Write-Fail "EquilotlCli returned an error (code $LASTEXITCODE)."
     }
 } catch {
-    Write-Fail "Impossible de lancer l'installeur.`n           Détail : $_"
+    Write-Fail "Could not launch the installer.`n           Detail: $_"
 }
 
-# ── Succès ────────────────────────────────────────────────────────────────────
+# ── Success ───────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "  ║  Guncord installé avec succès !                    ║" -ForegroundColor Green
+Write-Host "  ║  Guncord installed successfully!                   ║" -ForegroundColor Green
 Write-Host "  ║                                                      ║" -ForegroundColor Green
-Write-Host "  ║  → Redémarrez Discord pour appliquer Guncord.      ║" -ForegroundColor Green
+Write-Host "  ║  → Restart Discord to apply Guncord.               ║" -ForegroundColor Green
 Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Pour désinstaller : exécutez guncord-uninstall.bat" -ForegroundColor DarkGray
+Write-Host "  To uninstall: run guncord-uninstall.bat" -ForegroundColor DarkGray
 Write-Host ""
 Start-Sleep -Seconds 4
 

@@ -221,4 +221,3 @@ function GuncordModal({ modalProps }: { modalProps: ModalProps; }) {
 export function openGuncordModal() {
     openModal(modalProps => <GuncordModal modalProps={modalProps} />);
 }
-

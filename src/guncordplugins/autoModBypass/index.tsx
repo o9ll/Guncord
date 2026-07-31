@@ -144,7 +144,6 @@ export default definePlugin({
     description: "Transforms your messages into various text styles (Fraktur, Zalgo, Squared, etc.) for automod bypass & Fun",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     tags: ["Chat", "Fun", "Utility"],
-    enabledByDefault: false,
     settings,
 
     onBeforeMessageSend(_channelId, messageObj) {
@@ -153,4 +152,3 @@ export default definePlugin({
         messageObj.content = transformMessage(messageObj.content, settings.store.textStyle as TextStyle);
     },
 });
-

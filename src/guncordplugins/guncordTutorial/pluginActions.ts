@@ -107,4 +107,3 @@ export function enableSelectedRecommendations(selected: RecommendationState, lan
 
     showToast(copy.enabled(enabled), Toasts.Type.SUCCESS);
 }
-

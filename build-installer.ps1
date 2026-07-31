@@ -10,10 +10,10 @@ $OutExe = Join-Path $OutDir "Guncord-Installer.exe"
 Write-Host ""
 Write-Host "  [Guncord] Building Electron installer..." -ForegroundColor Cyan
 
-# ── Fermeture des processus verrouilles ─────────────────────────────────────────
+# ── Kill locked processes ─────────────────────────────────────────
 try { Stop-Process -Name "Guncord", "Guncord-Installer" -Force -ErrorAction SilentlyContinue } catch {}
 
-# ── Dossier de sortie ────────────────────────────────────────────────────────
+# ── Output folder ────────────────────────────────────────────────────────
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
 Set-Location $InstallerSrc
@@ -25,7 +25,7 @@ if (-not (Test-Path "node_modules")) {
     if ($LASTEXITCODE -ne 0) { exit 1 }
 }
 
-# ── Compilation webpack ──────────────────────────────────────────────────────
+# ── Webpack compilation ──────────────────────────────────────────────────────
 Write-Host "  [2/3] npm run compile (electron-webpack)..." -ForegroundColor DarkGray
 & npm run compile
 if ($LASTEXITCODE -ne 0) { exit 1 }
@@ -41,7 +41,7 @@ if ($LASTEXITCODE -ne 0) { exit 1 }
 
 Set-Location $Root
 
-# ── Verification ─────────────────────────────────────────────────────────────
+# ── Verify ─────────────────────────────────────────────────────────────
 if (Test-Path $OutExe) {
     $size = [math]::Round((Get-Item $OutExe).Length / 1MB, 2)
     Write-Host ""
@@ -49,6 +49,6 @@ if (Test-Path $OutExe) {
     Write-Host "    -> $OutExe" -ForegroundColor DarkGray
     Write-Host ""
 } else {
-    Write-Host "  [ERREUR] Guncord-Installer.exe introuvable apres compilation." -ForegroundColor Red
+    Write-Host "  [ERROR] Guncord-Installer.exe not found after compilation." -ForegroundColor Red
     exit 1
 }

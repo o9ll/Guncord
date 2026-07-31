@@ -691,4 +691,3 @@ export default definePlugin({
         notifyBadgeChange();
     },
 });
-

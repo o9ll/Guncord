@@ -160,4 +160,3 @@ export function dispose() {
     sounds.splice(0).forEach(sound => URL.revokeObjectURL(sound.url));
     listeners.clear();
 }
-

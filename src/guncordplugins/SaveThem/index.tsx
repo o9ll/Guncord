@@ -86,7 +86,7 @@ async function handleSaveUser(user: User) {
 
             try {
                 const stored: any = await DataStore.get("SaveThem_users") ?? [];
-                
+
                 // PFP base64 encoding to keep it persistent offline
                 const avatarUrl = IconUtils.getUserAvatarURL(user, true, 128) || IconUtils.getDefaultAvatarURL(user.id);
                 const avatarDataUrl = await imageUrlToBase64(avatarUrl);
@@ -254,11 +254,11 @@ function SaveThemSettings({ closePluginSettings }: { closePluginSettings: () => 
             ) : (
                 <div className="vc-savethem-grid">
                     {users.map(u => (
-                        <SaveThemCard 
-                            key={u.id} 
-                            u={u} 
-                            closePluginSettings={closePluginSettings} 
-                            handleRemoveUser={handleRemoveUser} 
+                        <SaveThemCard
+                            key={u.id}
+                            u={u}
+                            closePluginSettings={closePluginSettings}
+                            handleRemoveUser={handleRemoveUser}
                             handleCopyId={handleCopyId}
                         />
                     ))}
@@ -307,4 +307,3 @@ export default definePlugin({
     },
     settings
 });
-

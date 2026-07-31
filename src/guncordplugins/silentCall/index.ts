@@ -155,4 +155,3 @@ export default definePlugin({
         logger.info("unpatched ring()");
     },
 });
-

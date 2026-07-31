@@ -38,4 +38,3 @@ export class LimitedMap<K, V> {
         this.map.clear();
     }
 }
-

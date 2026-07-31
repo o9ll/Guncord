@@ -95,4 +95,3 @@ export function SelectFolderInput({ settingsKey, successMessage }: Props) {
     );
 
 }
-

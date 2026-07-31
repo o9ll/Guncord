@@ -100,4 +100,3 @@ export const TranslateChatBarIcon: ChatBarButtonFactory = ({ isMainChat }) => {
 
     return button;
 };
-

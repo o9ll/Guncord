@@ -192,4 +192,3 @@ export function SpatialModal({ channelId, onClose }: Props) {
         </div>
     );
 }
-

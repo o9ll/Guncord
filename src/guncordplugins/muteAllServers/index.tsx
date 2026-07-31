@@ -152,4 +152,3 @@ export default definePlugin({
         removeContextMenuPatch("guild-header-popout", guildContextPatch);
     },
 });
-

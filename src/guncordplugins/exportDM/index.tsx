@@ -581,4 +581,3 @@ export default definePlugin({
     start() { addHeaderBarButton("guncord-export-dm", () => <ExportButton />, 4); },
     stop() { removeHeaderBarButton("guncord-export-dm"); },
 });
-

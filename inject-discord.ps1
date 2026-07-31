@@ -1,6 +1,6 @@
 # ==============================================================================
-#  Guncord — Script d'injection Post-Installation
-#  Utilisé par l'installateur Inno Setup pour injecter Guncord dans Discord.
+#  Guncord — Post-Installation injection script
+#  Used by the Inno Setup installer to inject Guncord into Discord.
 # ==============================================================================
 
 param(
@@ -9,13 +9,13 @@ param(
 
 $ErrorActionPreference = "Continue"
 
-# 1. Localiser Discord Stable
+# 1. Locate Discord Stable
 $DiscordPath = Join-Path $env:LOCALAPPDATA "Discord"
 if (-not (Test-Path $DiscordPath)) {
     exit 0
 }
 
-# Trouver la version la plus récente (app-*)
+# Find the latest version (app-*)
 $LatestApp = Get-ChildItem $DiscordPath -Filter "app-*" | Sort-Object Name -Descending | Select-Object -First 1
 if (-not $LatestApp) {
     exit 0
@@ -24,12 +24,12 @@ if (-not $LatestApp) {
 $CoreDir = Join-Path $LatestApp.FullName "resources"
 $InjectDir = Join-Path $CoreDir "app"
 
-# 2. Créer l'injection
+# 2. Create the injection
 if (-not (Test-Path $InjectDir)) {
     New-Item -ItemType Directory -Path $InjectDir -Force | Out-Null
 }
 
-# Générer le package.json d'injection
+# Generate the injection package.json
 $PackageJson = @{
     name = "discord"
     main = "index.js"
@@ -37,8 +37,8 @@ $PackageJson = @{
 
 Set-Content -Path (Join-Path $InjectDir "package.json") -Value $PackageJson
 
-# Générer le index.js d'injection
-# On pointe vers le patcher.js dans le dossier d'installation de Guncord
+# Generate the injection index.js
+# Point to patcher.js in the Guncord install folder
 $GuncordPatcher = Join-Path $AppDir "dist\desktop\patcher.js"
 $GuncordPatcher = $GuncordPatcher.Replace("\", "\\")
 
@@ -47,12 +47,12 @@ $IndexJs = @"
 const path = require(\"path\");
 const fs = require(\"fs\");
 
-// Injection Guncord
+// Guncord injection
 try {
     require(\"$GuncordPatcher\");
 } catch (e) {
     console.error(\"Guncord injection failed:\", e);
-    // Fallback sur Discord original si possible
+    // Fallback to original Discord if possible
     const originalAsar = path.join(__dirname, \"..\", \"_app.asar\");
     if (fs.existsSync(originalAsar)) {
         require(originalAsar);

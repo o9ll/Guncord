@@ -291,4 +291,3 @@ export default definePlugin({
         this.element?.remove();
     }
 });
-

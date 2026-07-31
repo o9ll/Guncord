@@ -92,4 +92,3 @@ export default definePlugin({
         FluxDispatcher.unsubscribe("BROWSER_TOGGLE", handleOtherPluginToggle);
     }
 });
-

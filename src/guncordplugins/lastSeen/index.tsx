@@ -55,7 +55,7 @@ function formatDate(ts: number): string {
     const date = new Date(ts);
     const lang = settings.store.language;
     const locale = lang === "fr" ? "fr-FR" : "en-US";
-    
+
     // Include seconds
     const timeStr = date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
@@ -66,7 +66,7 @@ function formatDate(ts: number): string {
 
     if (isToday) return t("Today at {time}").replace("{time}", timeStr);
     if (isYesterday) return t("Yesterday at {time}").replace("{time}", timeStr);
-    
+
     const dateStr = date.toLocaleDateString(locale, { day: "numeric", month: "short" });
     return t("{date} at {time}").replace("{date}", dateStr).replace("{time}", timeStr);
 }
@@ -242,4 +242,3 @@ export default definePlugin({
         );
     },
 });
-

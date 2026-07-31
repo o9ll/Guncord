@@ -74,7 +74,7 @@ app.once("ready", () => {
                 const openUrl = details && details.url;
                 if (openUrl && openUrl !== "about:blank" && !openUrl.startsWith("devtools://") && !isDiscordUrl(openUrl)) {
                     shell.openExternal(openUrl).catch(() => {});
-                    console.log("[Guncord][NEW-WIN-DETAIL] Redirection externe:", openUrl);
+                    console.log("[Guncord][NEW-WIN-DETAIL] External redirect:", openUrl);
                     try { childWin.destroy(); } catch (_) {}
                     return;
                 }
@@ -91,7 +91,7 @@ app.once("ready", () => {
                 childWc.on("did-navigate", (_event, url) => {
                     if (!isDiscordUrl(url)) {
                         shell.openExternal(url).catch(() => {});
-                        console.log("[Guncord][CHILD-DID-NAV] Redirection externe:", url);
+                        console.log("[Guncord][CHILD-DID-NAV] External redirect:", url);
                         try { childWin.destroy(); } catch (_) {}
                     }
                 });

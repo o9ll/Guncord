@@ -145,4 +145,3 @@ export default definePlugin({
         // Plugin stopped
     }
 });
-

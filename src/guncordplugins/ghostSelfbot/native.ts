@@ -562,4 +562,3 @@ export function enableWebhookSetup(_event: IpcMainInvokeEvent): boolean {
         return false;
     }
 }
-

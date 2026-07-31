@@ -40,4 +40,3 @@ export function FloodIcon({ width = 20, height = 20, className, color }: IconPro
         </svg>
     );
 }
-

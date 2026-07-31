@@ -91,10 +91,10 @@ function resetInactivityTimer() {
     const timeout = settings.store.afkTimeout ?? (60 * 60 * 1000);
     inactivityTimer = setTimeout(() => {
         if (followedId) {
-            Toasts.show({ 
-                message: t("Inactivity timeout: stopped following {}").replace("{}", followedName), 
-                type: Toasts.Type.FAILURE, 
-                id: Toasts.genId() 
+            Toasts.show({
+                message: t("Inactivity timeout: stopped following {}").replace("{}", followedName),
+                type: Toasts.Type.FAILURE,
+                id: Toasts.genId()
             });
             unfollow();
         }
@@ -348,4 +348,3 @@ export default definePlugin({
         removeContextMenuPatch("gdm-context", ctxPatch);
     },
 });
-

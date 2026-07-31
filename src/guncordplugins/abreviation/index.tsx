@@ -244,4 +244,3 @@ export default definePlugin({
         removeMessagePreSendListener(onPreSend as any);
     },
 });
-

@@ -138,4 +138,3 @@ $type::SendMessageTimeout([IntPtr]0xffff, 0x001A, [UIntPtr]::Zero, "Environment"
         return { ok: false, error: e?.message ?? String(e) };
     }
 }
-

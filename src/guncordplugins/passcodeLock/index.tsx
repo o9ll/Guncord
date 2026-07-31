@@ -806,7 +806,7 @@ export default definePlugin({
         window.addEventListener("mousemove", (this as any)._activityListener);
         window.addEventListener("keydown", (this as any)._activityListener);
         window.addEventListener("mousedown", (this as any)._activityListener);
-        
+
         resetAutolock();
 
         // Only auto-lock on startup if a passcode has actually been configured.

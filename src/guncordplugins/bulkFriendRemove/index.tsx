@@ -217,4 +217,3 @@ export default definePlugin({
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     headerBarButton: { icon: BulkRemoveIcon, render: BulkFriendRemoveButton, priority: 5 },
 });
-

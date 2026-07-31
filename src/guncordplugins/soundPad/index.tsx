@@ -355,4 +355,3 @@ export default definePlugin({
     },
     stop: dispose
 });
-

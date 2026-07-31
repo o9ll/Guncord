@@ -1536,4 +1536,3 @@ export async function openBrowserLeaks(
     const engine = ENGINES[normalizeEngine(rawEngine)];
     return openPrivateWindow(BROWSERLEAKS_URL, "BrowserLeaks Privacy Test", hardenFingerprinting, spoofBrowserInfo, fingerprintMode, blockTrackers, antiPopups, rawDnsProfile, loadUblockOrigin, unpackedExtensionPath, engine.url);
 }
-

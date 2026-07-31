@@ -76,4 +76,3 @@ export interface Contributor {
     id: User["id"];
     avatar: string;
 }
-

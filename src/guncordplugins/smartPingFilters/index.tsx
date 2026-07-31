@@ -44,8 +44,8 @@ export default definePlugin({
             if (!myId) return;
 
             // Verify if the current user is mentioned
-            const isMentioned = message.mentions?.some((m: any) => m.id === myId) || 
-                                message.mention_everyone || 
+            const isMentioned = message.mentions?.some((m: any) => m.id === myId) ||
+                                message.mention_everyone ||
                                 (message.mention_roles && message.mention_roles.length > 0);
 
             if (!isMentioned) return;

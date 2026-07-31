@@ -1595,4 +1595,3 @@ function SendTrailTab() {
 }
 
 export default wrapTab(SendTrailTab, "Send Trail");
-

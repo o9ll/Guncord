@@ -87,4 +87,3 @@ export function useLyrics({ scroll = true }: { scroll?: boolean; } = {}) {
 
     return { track, lyrics, lyricRefs, currLrcIndex, nextLyric };
 }
-

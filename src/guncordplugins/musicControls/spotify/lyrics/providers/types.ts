@@ -21,4 +21,3 @@ export interface LyricsData {
     lyricsVersions: Partial<Record<Provider, SyncedLyric[] | null>>;
     useLyric: Provider;
 }
-

@@ -307,4 +307,3 @@ export default definePlugin({
         logger.log("Ghost Selfbot plugin stopped.");
     }
 });
-

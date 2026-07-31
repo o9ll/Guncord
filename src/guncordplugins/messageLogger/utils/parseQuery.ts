@@ -129,4 +129,3 @@ export const doesMatch = (type: typeof validIdSearchTypes[number], value: string
             return false;
     }
 };
-

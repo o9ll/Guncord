@@ -166,4 +166,3 @@ export default definePlugin({
         logger.info("Deactivated");
     }
 });
-

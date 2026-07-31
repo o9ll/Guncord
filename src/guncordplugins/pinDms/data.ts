@@ -143,4 +143,3 @@ export function moveChannel(channelId: string, direction: -1 | 1) {
 
     swapElementsInArray(category.channels, a, b);
 }
-

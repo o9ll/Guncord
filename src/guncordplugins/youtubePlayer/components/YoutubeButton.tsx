@@ -9,14 +9,14 @@ import { youtubeBase64 } from "./icon";
 export function YoutubeButton() {
     const [hovered, setHovered] = React.useState(false);
     const [isOpen, setIsOpen] = React.useState(false);
-    
+
     const [hasBeenOpened, setHasBeenOpened] = React.useState(false);
-    
+
     React.useEffect(() => {
         const handleToggle = (e: any) => {
             setIsOpen(e.isOpen);
             if (e.isOpen) setHasBeenOpened(true);
-            
+
             // Toggle vanilla iframe using opacity+visibility instead of display:block/none.
             // display:none would suspend the iframe process in Electron on hide.
             // Keeping the container painted (but invisible) prevents both the
@@ -109,7 +109,7 @@ export function YoutubeButton() {
                 </div>
                 <Tooltip text={<strong>YouTube</strong>} position="right" hideOnClick={false}>
                     {(tooltipProps: any) => (
-                        <div 
+                        <div
                             {...tooltipProps}
                             onClick={handlePress}
                             onMouseDown={stopPropagation}
@@ -237,7 +237,7 @@ function getOrCreateVanillaIframe(): HTMLDivElement {
         el.appendChild(topBar);
         el.appendChild(iframe);
         document.body.appendChild(el);
-        
+
         // Hide profile panels globally when this is visible
         const style = document.createElement("style");
         style.id = "ytd-global-style";

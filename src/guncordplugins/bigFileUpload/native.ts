@@ -85,4 +85,3 @@ export async function uploadFileCustomNative(_, url: string, fileBuffer: ArrayBu
         throw error;
     }
 }
-
