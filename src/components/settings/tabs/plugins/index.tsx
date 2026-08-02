@@ -438,15 +438,6 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                 }
             }
         }
-        // Always sort by number of likes in descending order, but force AutoCall Recorder to be first
-        const byLikes = (a: typeof sortedPlugins[number], b: typeof sortedPlugins[number]) => {
-            if (a.name === "AutoCallRecorder") return -1;
-            if (b.name === "AutoCallRecorder") return 1;
-            return (ratings[b.name]?.likes ?? 0) - (ratings[a.name]?.likes ?? 0);
-        };
-        guncordData.sort(byLikes);
-        othersData.sort(byLikes);
-
         return { guncordData, othersData, requiredData };
     }, [sortedPlugins, searchValue, newPluginsSet, depMap, pluginFilter]);
 
