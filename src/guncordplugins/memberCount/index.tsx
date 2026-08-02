@@ -45,8 +45,8 @@ export const settings = definePluginSettings({
     memberList: {
         type: OptionType.BOOLEAN,
         description: "Show member count in the member list",
-        default: true,
-        restartNeeded: false
+        default: false,
+        restartNeeded: true
     },
     voiceActivity: {
         type: OptionType.BOOLEAN,
@@ -63,8 +63,8 @@ export default definePlugin({
     name: "MemberCount",
     enabledByDefault: true,
     description: "Shows the number of online members, total members, and users in voice channels on the server — in the member list and tooltip.",
-    tags: ["Servers", "Utility"],
     authors: [Devs.Ven, Devs.Commandtechno, Devs.Apexo],
+    tags: ["Servers", "Utility"],
     settings,
 
     patches: [

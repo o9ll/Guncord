@@ -106,6 +106,11 @@ async function captureAndMergeSharedSettings(sourceEvent: any): Promise<Record<s
 // and take priority over global ipcMain handlers for this sender.
 // ─────────────────────────────────────────────────────────────────────────────
 
+let isAppQuitting = false;
+app.on("before-quit", () => {
+    isAppQuitting = true;
+});
+
 function registerWindowControlIpc(win: BrowserWindow): () => void {
     const wc = win.webContents as any; // webContents.ipc exists since Electron 20
 
@@ -116,8 +121,13 @@ function registerWindowControlIpc(win: BrowserWindow): () => void {
     const RESTORE = "DISCORD_WINDOW_RESTORE";
     const FULLSCREEN = "DISCORD_WINDOW_TOGGLE_FULLSCREEN";
 
-    // webContents.ipc.handle takes priority over ipcMain.handle for this sender
-    const handleClose = () => { if (!win.isDestroyed()) win.close(); };
+    // webContents.ipc.handle est prioritaire sur ipcMain.handle pour ce sender
+    const handleClose = () => {
+        if (!win.isDestroyed()) {
+            (win as any)._userRequestedClose = true;
+            win.close();
+        }
+    };
     const handleMinimize = () => { if (!win.isDestroyed()) win.minimize(); };
     const handleMaximize = () => {
         if (win.isDestroyed()) return;
@@ -224,6 +234,39 @@ function createTokenPreload(token: string, sharedSettings: Record<string, string
         // Pre-fill as well
         try { localStorage.setItem("token", JSON.stringify(TOKEN)); } catch(_) {}
 
+        // Intercepte DiscordNative.window.close pour empêcher la fermeture automatique
+        // en arrière-plan lorsque l'on quitte un jeu (RunningGameStore / OverlayStore)
+        // tout en laissant l'utilisateur fermer via le bouton X de la barre de titre.
+        (function() {
+            let lastUserInteraction = 0;
+            window.addEventListener("pointerdown", function(e) {
+                if (e.isTrusted) lastUserInteraction = Date.now();
+            }, true);
+            window.addEventListener("keydown", function(e) {
+                if (e.isTrusted) lastUserInteraction = Date.now();
+            }, true);
+
+            function patchNativeClose() {
+                const dn = (window as any).DiscordNative;
+                if (dn && dn.window && dn.window.close && !dn.window._miPatched) {
+                    const origClose = dn.window.close;
+                    dn.window.close = function() {
+                        const isUserAction = (Date.now() - lastUserInteraction) < 2000;
+                        if (isUserAction) {
+                            return origClose.apply(this, arguments);
+                        } else {
+                            console.log("[GuncordMI] Ignored automatic background close (game exit).");
+                        }
+                    };
+                    dn.window._miPatched = true;
+                }
+            }
+
+            patchNativeClose();
+            document.addEventListener("DOMContentLoaded", patchNativeClose);
+            setInterval(patchNativeClose, 1000);
+        })();
+
         console.log("[GuncordMI] Token preload active ✓");
     } catch(e) {
         console.warn("[GuncordMI] Preload error:", e);
@@ -261,7 +304,10 @@ export async function openInstanceWindow(
     token: string,
     userId: string,
     detached = false,
-    username = ""
+    username = "",
+    domain = "discord.com",
+    blockExternalTokenAccess = false,
+    performanceMode = false
 ): Promise<{ ok: boolean; error?: string; }> {
     try {
         // Fenetre deja ouverte -> focus
@@ -284,8 +330,19 @@ export async function openInstanceWindow(
         iconCounter = iconCounter >= 5 ? 1 : iconCounter + 1;
 
         // Session Electron isolee par userId
-        const partition = `persist:guncord-mi-${userId}`;
-        const ses = session.fromPartition(partition, { cache: true });
+        const savedPartition = `persist:guncord-mi-${userId}`;
+        if (blockExternalTokenAccess) {
+            try {
+                const savedSes = session.fromPartition(savedPartition, { cache: true });
+                await savedSes.clearStorageData();
+                await savedSes.clearCache();
+            } catch {}
+        }
+
+        const partition = blockExternalTokenAccess
+            ? `guncord-mi-${userId}-${Date.now()}`
+            : savedPartition;
+        const ses = session.fromPartition(partition, { cache: !blockExternalTokenAccess });
 
         ses.webRequest.onHeadersReceived((details, callback) => {
             const headers = { ...details.responseHeaders };
@@ -326,6 +383,7 @@ export async function openInstanceWindow(
                 sandbox: false,
                 session: ses,
                 webSecurity: false,
+                backgroundThrottling: performanceMode,
             },
         });
 
@@ -416,7 +474,9 @@ export async function openInstanceWindow(
             return { action: "deny" };
         });
 
-        await win.loadURL("https://discord.com/channels/@me");
+        const validDomains = ["discord.com", "ptb.discord.com", "canary.discord.com"];
+        const targetDomain = validDomains.includes(domain) ? domain : "discord.com";
+        await win.loadURL(`https://${targetDomain}/channels/@me`);
         return { ok: true };
     } catch (e: any) {
         return { ok: false, error: e?.message ?? String(e) };
@@ -435,7 +495,10 @@ export async function openInstanceWindowGrouped(
     _: any,
     token: string,
     userId: string,
-    username = ""
+    username = "",
+    domain = "discord.com",
+    blockExternalTokenAccess = false,
+    performanceMode = false
 ): Promise<{ ok: boolean; error?: string; }> {
     try {
         // Focus si deja ouverte
@@ -447,8 +510,19 @@ export async function openInstanceWindowGrouped(
         }
 
         // Session isolee par userId
-        const partition = `persist:guncord-mi-${userId}`;
-        const ses = session.fromPartition(partition, { cache: true });
+        const savedPartition = `persist:guncord-mi-${userId}`;
+        if (blockExternalTokenAccess) {
+            try {
+                const savedSes = session.fromPartition(savedPartition, { cache: true });
+                await savedSes.clearStorageData();
+                await savedSes.clearCache();
+            } catch {}
+        }
+
+        const partition = blockExternalTokenAccess
+            ? `guncord-mi-${userId}-${Date.now()}`
+            : savedPartition;
+        const ses = session.fromPartition(partition, { cache: !blockExternalTokenAccess });
 
         ses.webRequest.onHeadersReceived((details, callback) => {
             const headers = { ...details.responseHeaders };
@@ -488,6 +562,7 @@ export async function openInstanceWindowGrouped(
                 sandbox: false,
                 session: ses,
                 webSecurity: false,
+                backgroundThrottling: performanceMode,
             },
         });
 
@@ -555,7 +630,9 @@ export async function openInstanceWindowGrouped(
             return { action: "deny" };
         });
 
-        await win.loadURL("https://discord.com/channels/@me");
+        const validDomains = ["discord.com", "ptb.discord.com", "canary.discord.com"];
+        const targetDomain = validDomains.includes(domain) ? domain : "discord.com";
+        await win.loadURL(`https://${targetDomain}/channels/@me`);
         return { ok: true };
     } catch (e: any) {
         return { ok: false, error: e?.message ?? String(e) };
@@ -593,12 +670,15 @@ export async function arrangeSplit(_: any, userId: string): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getOpenInstances(_: any): Promise<string[]> {
-    return [...openWindows.entries()]
+    return [...openWindows.entries(), ...openGroupedWindows.entries()]
         .filter(([, w]) => !w.isDestroyed())
         .map(([id]) => id);
 }
 
 export async function closeInstance(_: any, userId: string): Promise<void> {
-    const win = openWindows.get(userId);
-    if (win && !win.isDestroyed()) win.close();
+    const win = openWindows.get(userId) || openGroupedWindows.get(userId);
+    if (win && !win.isDestroyed()) {
+        (win as any)._userRequestedClose = true;
+        win.close();
+    }
 }

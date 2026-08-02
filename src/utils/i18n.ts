@@ -35,10 +35,7 @@ export function detectLocale(): Locale {
         if (typeof navigator !== "undefined" && navigator.language)
             return normalizeLocale(navigator.language);
     } catch {}
-    try {
-        const { app } = require("electron") as typeof import("electron");
-        if (app?.getLocale) return normalizeLocale(app.getLocale());
-    } catch {}
+
     return "en";
 }
 

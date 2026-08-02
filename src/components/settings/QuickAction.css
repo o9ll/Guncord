@@ -44,3 +44,7 @@
     height: 24px;
     flex-shrink: 0;
 }
+
+.vc-settings-quickActions-pill .vc-owner-crown-icon {
+    color: inherit;
+}

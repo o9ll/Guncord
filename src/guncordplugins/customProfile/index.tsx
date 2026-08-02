@@ -2277,23 +2277,6 @@ export default definePlugin({
                         icon: nitroHash,
                         description: formatNitroBadgeDesc(since)
                     });
-
-                    const bm = data.boostMonths ?? -1;
-                    if (bm >= 0) {
-                        const BOOST_M = [1, 2, 3, 6, 9, 12, 15, 18, 24];
-                        const boostHash = BOOST_ICONS[bm]?.split("/").pop()?.replace(".png", "") || "51040c70d4f20a921ad6674ff86fc95c";
-                        const bMonths = BOOST_M[bm] ?? 1;
-                        const boostSince = getFakeBoostDate(bm, seedBase);
-                        merged.premiumGuildSince = boostSince;
-
-                        badgesArr.push({
-                            id: `guild_booster_${bMonths}_month`,
-                            icon: boostHash,
-                            description: formatBoostBadgeDesc(boostSince)
-                        });
-                    } else {
-                        merged.premiumGuildSince = null;
-                    }
                 } else {
                     merged.premiumSince = null;
                     merged.premiumGuildSince = null;
@@ -2334,8 +2317,8 @@ export default definePlugin({
                 }
             }
 
-            if (customIds.includes("quest") && !hasBadge("quest")) badgesArr.push({ id: "quest", icon: "7d9ae358c8c5e118768335dbe68b4fb8", description: getLocalizedBadgeLabel("Completed a quest") });
-            if (customIds.includes("orbs") && !hasBadge("orbs")) badgesArr.push({ id: "orbs", icon: "83d8a1eb09a8d64e59233eec5d4d5c2d", description: getLocalizedBadgeLabel("Orbs — Apprentice") });
+            if (customIds.includes("quest") && !hasBadge("quest_completed")) badgesArr.push({ id: "quest_completed", icon: "7d9ae358c8c5e118768335dbe68b4fb8", description: getLocalizedBadgeLabel("Completed a quest"), link: "https://discord.com/discovery/quests" });
+            if (customIds.includes("orbs") && !hasBadge("orb_profile_badge")) badgesArr.push({ id: "orb_profile_badge", icon: "83d8a1eb09a8d64e59233eec5d4d5c2d", description: getLocalizedBadgeLabel("Orbs — Apprentice") });
             if (customIds.includes("oldname") && !hasBadge("legacy_username")) {
                 const dText = data.oldName ? (isFr ? "Connu à l'origine sous le nom de " + data.oldName : "Originally known as " + data.oldName) : (isFr ? "Connu à l'origine sous le nom de ..." : "Originally known as ...");
                 badgesArr.push({ id: "legacy_username", icon: "6de6d34650760ba5551a79732e98ed60", description: dText });
@@ -2483,16 +2466,17 @@ export default definePlugin({
 
                     const bm = storedData.boostMonths ?? -1;
                     if (bm >= 0) {
-                        const BOOST_M = [1, 2, 3, 6, 9, 12, 15, 18, 24];
+                        const BOOST_LVLS = ["lvl1", "lvl2", "lvl3", "lvl4", "lvl5", "lvl6", "lvl7", "lvl8", "lvl9"];
                         const boostHash = BOOST_ICONS[bm]?.split("/").pop()?.replace(".png", "") || "51040c70d4f20a921ad6674ff86fc95c";
-                        const bMonths = BOOST_M[bm] ?? 1;
+                        const boostLvl = BOOST_LVLS[bm] || "lvl1";
                         const boostSince = getFakeBoostDate(bm, seedBase);
                         merged.premiumGuildSince = boostSince;
 
                         badgesArr.push({
-                            id: `guild_booster_${bMonths}_month`,
+                            id: `guild_booster_${boostLvl}`,
                             icon: boostHash,
-                            description: formatBoostBadgeDesc(boostSince)
+                            description: formatBoostBadgeDesc(boostSince),
+                            link: "https://discord.com/settings/guild-boosting"
                         });
                     } else {
                         merged.premiumGuildSince = null;
@@ -2536,8 +2520,8 @@ export default definePlugin({
                 }
             }
 
-            if (customIds.includes("quest") && !hasBadge("quest")) badgesArr.push({ id: "quest", icon: "7d9ae358c8c5e118768335dbe68b4fb8", description: getLocalizedBadgeLabel("Completed a quest") });
-            if (customIds.includes("orbs") && !hasBadge("orbs")) badgesArr.push({ id: "orbs", icon: "83d8a1eb09a8d64e59233eec5d4d5c2d", description: getLocalizedBadgeLabel("Orbes — Apprentice") });
+            if (customIds.includes("quest") && !hasBadge("quest_completed")) badgesArr.push({ id: "quest_completed", icon: "7d9ae358c8c5e118768335dbe68b4fb8", description: getLocalizedBadgeLabel("Completed a quest"), link: "https://discord.com/discovery/quests" });
+            if (customIds.includes("orbs") && !hasBadge("orb_profile_badge")) badgesArr.push({ id: "orb_profile_badge", icon: "83d8a1eb09a8d64e59233eec5d4d5c2d", description: getLocalizedBadgeLabel("Orbes — Apprentice") });
             if (customIds.includes("oldname") && !hasBadge("legacy_username")) {
                 const dText = storedData.oldName ? (isFr ? "Connu à l'origine sous le nom de " + storedData.oldName : "Originally known as " + storedData.oldName) : (isFr ? "Connu à l'origine sous le nom de ..." : "Originally known as ...");
                 badgesArr.push({ id: "legacy_username", icon: "6de6d34650760ba5551a79732e98ed60", description: dText });

@@ -1,84 +1,75 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { app } from "electron";
-import { existsSync, mkdirSync, readdirSync, renameSync, statSync, writeFileSync } from "original-fs";
-import { basename, dirname, join } from "path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "original-fs";
+import { dirname, join } from "path";
 
-function isNewer($new: string, old: string) {
-    const newParts = $new.slice(4).split(".").map(Number);
-    const oldParts = old.slice(4).split(".").map(Number);
-
-    for (let i = 0; i < oldParts.length; i++) {
-        if (newParts[i] > oldParts[i]) return true;
-        if (newParts[i] < oldParts[i]) return false;
-    }
-    return false;
-}
-
-// The absolute path to OUR OWN bundle (this very file, once compiled to
-// dist/desktop/patcher.js). This is exactly what the injector's index.js
-// require()'d to get us running in the first place, regardless of how
-// Guncord was installed (dev-inject asar, the PS1/Inno installer, or
-// Equilotl) — so it's the only value that's guaranteed to be correct.
 declare const __filename: string;
 const OUR_PATCHER_PATH = __filename;
 
-function patchLatest() {
+function patchResourcesDir(resourcesDir: string) {
     try {
-        const currentAppPath = dirname(process.execPath);
-        const currentVersion = basename(currentAppPath);
-        const discordPath = join(currentAppPath, "..");
+        const appDir = join(resourcesDir, "app");
+        const appAsar = join(resourcesDir, "app.asar");
+        const _appAsar = join(resourcesDir, "_app.asar");
 
-        const latestVersion = readdirSync(discordPath)
-            .filter(name => name.startsWith("app-") && statSync(join(discordPath, name)).isDirectory())
-            .reduce((prev, curr) => isNewer(curr, prev) ? curr : prev, currentVersion as string);
+        // Check if already patched cleanly with app/index.js pointing to Guncord
+        const loaderIndex = join(appDir, "index.js");
+        if (existsSync(loaderIndex)) {
+            try {
+                const content = readFileSync(loaderIndex, "utf-8");
+                if (content.includes("Guncord")) return; // Already patched
+            } catch {}
+        }
 
-        if (latestVersion === currentVersion) return;
+        // If app.asar is a directory (from old buggy patcher), clean it up
+        if (existsSync(appAsar)) {
+            try {
+                if (statSync(appAsar).isDirectory()) {
+                    rmSync(appAsar, { recursive: true, force: true });
+                }
+            } catch {}
+        }
 
-        const resources = join(discordPath, latestVersion, "resources");
-        const appAsar = join(resources, "app.asar");
-        const _appAsar = join(resources, "_app.asar");
+        // Backup original app.asar -> _app.asar if _app.asar doesn't exist yet
+        if (existsSync(appAsar) && !existsSync(_appAsar)) {
+            try {
+                if (!statSync(appAsar).isDirectory()) {
+                    renameSync(appAsar, _appAsar);
+                }
+            } catch {}
+        }
 
-        if (!existsSync(appAsar) || statSync(appAsar).isDirectory()) return;
+        if (!existsSync(_appAsar) && !existsSync(appAsar)) {
+            // Incomplete Discord update download
+            return;
+        }
 
-        console.info("[Guncord] Detected Host Update. Repatching...");
+        console.info(`[Guncord] Auto-injecting into ${resourcesDir}...`);
 
-        renameSync(appAsar, _appAsar);
-        mkdirSync(appAsar);
-        writeFileSync(join(appAsar, "package.json"), JSON.stringify({
+        if (existsSync(appDir)) {
+            try { rmSync(appDir, { recursive: true, force: true }); } catch {}
+        }
+        mkdirSync(appDir, { recursive: true });
+
+        writeFileSync(join(appDir, "package.json"), JSON.stringify({
             name: "discord",
             main: "index.js"
-        }));
+        }, null, 2));
 
-        // Absolute path to our real patcher bundle (see OUR_PATCHER_PATH above),
-        // with a try/catch fallback to vanilla Discord if anything goes wrong —
-        // so a failed repatch can never crash the new Discord version or leave
-        // it stuck relaunching into a broken/duplicate state.
         const indexJs = [
-            "// Guncord repatch",
+            "// Guncord Injector — auto-generated",
             "\"use strict\";",
             "const path = require(\"path\");",
             "const fs = require(\"fs\");",
             "try {",
             `    require(${JSON.stringify(OUR_PATCHER_PATH)});`,
             "} catch (e) {",
-            "    console.error(\"[Guncord] Repatch injection failed, falling back to vanilla Discord:\", e);",
+            "    console.error(\"[Guncord] Injection failed, falling back to original _app.asar:\", e);",
             "    const originalAsar = path.join(__dirname, \"..\", \"_app.asar\");",
             "    if (fs.existsSync(originalAsar)) {",
             "        require(originalAsar);",
@@ -87,13 +78,44 @@ function patchLatest() {
             ""
         ].join("\n");
 
-        writeFileSync(join(appAsar, "index.js"), indexJs);
+        writeFileSync(join(appDir, "index.js"), indexJs);
+        console.info(`[Guncord] Successfully injected into ${resourcesDir}`);
     } catch (err) {
-        console.error("[Guncord] Failed to repatch latest host update", err);
+        console.error(`[Guncord] Failed to auto-inject into ${resourcesDir}:`, err);
     }
 }
 
-// Try to patch latest on before-quit
-// Discord's Win32 updater will call app.quit() on restart and open new version on will-quit
-app.on("before-quit", patchLatest);
+function patchAllDiscordInstallations() {
+    if (process.platform !== "win32") return;
+    try {
+        const localAppData = process.env.LOCALAPPDATA || "";
+        for (const channel of ["Discord", "DiscordPTB", "DiscordCanary", "DiscordDevelopment"]) {
+            const base = join(localAppData, channel);
+            if (!existsSync(base)) continue;
+
+            let versions: string[] = [];
+            try {
+                versions = readdirSync(base).filter(d => /^app-\d+\.\d+\.\d+$/.test(d));
+            } catch { continue; }
+
+            for (const ver of versions) {
+                const resourcesDir = join(base, ver, "resources");
+                if (existsSync(resourcesDir)) {
+                    patchResourcesDir(resourcesDir);
+                }
+            }
+        }
+    } catch (err) {
+        console.error("[Guncord] Error in patchAllDiscordInstallations:", err);
+    }
+}
+
+// Run immediately at startup so any new Discord version downloaded before restart is patched right away
+patchAllDiscordInstallations();
+
+// Periodically check every 5 minutes in case Discord auto-updates in background
+setInterval(patchAllDiscordInstallations, 5 * 60 * 1000);
+
+// Run before quit as final safety net
+app.on("before-quit", patchAllDiscordInstallations);
 

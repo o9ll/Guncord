@@ -100,12 +100,12 @@ function inject(resourcesDir) {
         let isDir = false;
         try { isDir = statSync(appAsarPath).isDirectory(); } catch { }
         if (isDir) {
-            console.warn("\x1b[33m[Guncord] app.asar is a folder — another mod may be installed.\x1b[0m");
-            console.warn("\x1b[33m            Aborting. Use 'pnpm uninject' to clean up first.\x1b[0m");
-            return false;
+            console.warn("\x1b[33m[Guncord] Cleaning up the old app.asar...\x1b[0m");
+            try { rmSync(appAsarPath, { recursive: true, force: true }); } catch { }
+        } else {
+            console.log("[Guncord] Backup app.asar → _app.asar...");
+            renameSync(appAsarPath, backupPath);
         }
-        console.log("[Guncord] Backing up app.asar → _app.asar...");
-        renameSync(appAsarPath, backupPath);
     } else if (!existsSync(backupPath)) {
         console.error("\x1b[31m[Guncord] No app.asar or _app.asar found in resources!\x1b[0m");
         return false;

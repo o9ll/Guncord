@@ -26,7 +26,7 @@ const DISCORD_AUDIO_COLLECTIVE_SOURCE_URL = "https://github.com/ProdHallow/Disco
 const VOICE_PLAYGROUND_SOURCE_URL = "https://codeberg.org/UnpackedX/Discord-Experimental-Subsystem";
 const VOICE_PLAYGROUND_TUTORIAL_URL = "https://www.youtube.com/watch?v=zSIIganbZxg";
 
-type InstallerMethod = "method1" | "method2";
+type InstallerMethod = "method1" | "method2" | "custom";
 type LogLevel = "error" | "info" | "success" | "warning";
 
 interface LogEntry {
@@ -36,17 +36,20 @@ interface LogEntry {
 
 const METHOD_LABELS = {
     method1: "Discord Audio Collective Method",
-    method2: "Voice Playground Method"
+    method2: "Voice Playground Method",
+    custom: "Custom Module Folder"
 } satisfies Record<InstallerMethod, string>;
 
 const METHOD_LAST_PATCH_KEYS = {
     method1: "discordAudioCollective",
-    method2: "voicePlayground"
+    method2: "voicePlayground",
+    custom: "customModule"
 } satisfies Record<InstallerMethod, keyof InstallInfo["lastPatchLabels"]>;
 
 const METHOD_OPTIONS = [
     { label: METHOD_LABELS.method1, value: "method1" },
-    { label: METHOD_LABELS.method2, value: "method2" }
+    { label: METHOD_LABELS.method2, value: "method2" },
+    { label: METHOD_LABELS.custom, value: "custom" }
 ] satisfies Array<{ label: string; value: InstallerMethod; }>;
 
 const METHOD_2_QUALITY_OPTIONS = [
@@ -101,7 +104,14 @@ function InfoLine({ label, value }: { label: string; value: string; }) {
 }
 
 function InstallationStatus({ info }: { info: InstallInfo | ActionInfo; }) {
-    const method = info.installedMethod ? METHOD_LABELS[info.installedMethod === "discordAudioCollective" ? "method1" : "method2"] : "StereoInstaller";
+    const methodKey = info.installedMethod === "discordAudioCollective"
+        ? "method1"
+        : info.installedMethod === "voicePlayground"
+            ? "method2"
+            : info.installedMethod === "customModule"
+                ? "custom"
+                : null;
+    const method = methodKey ? METHOD_LABELS[methodKey] : "StereoInstaller";
 
     if (info.installStatus === "installed") {
         return (
@@ -162,6 +172,7 @@ function LogLine({ entry }: { entry: LogEntry; }) {
 
 function StereoInstallerPanel() {
     const [root, setRoot] = React.useState("");
+    const [customFolder, setCustomFolder] = React.useState("");
     const [info, setInfo] = React.useState<InstallInfo | ActionInfo | null>(null);
     const [status, setStatus] = React.useState("Ready.");
     const [logs, setLogs] = React.useState<LogEntry[]>([]);
@@ -224,6 +235,14 @@ function StereoInstallerPanel() {
         notifyRepatchIfNeeded(selected);
     }
 
+    async function browseCustomFolder(): Promise<void> {
+        const selected = await runNative(() => Native.chooseCustomModuleFolder());
+        if (!selected) return;
+
+        setCustomFolder(selected);
+        setStatus(t("Custom module folder selected."));
+    }
+
     async function runAction(kind: "patch" | "revert" | "method2Index"): Promise<void> {
         if (!root.trim()) {
             setStatus(t("Choose a Discord install folder first."));
@@ -231,10 +250,17 @@ function StereoInstallerPanel() {
             return;
         }
 
+        if (kind === "patch" && installerMethod === "custom" && !customFolder.trim()) {
+            setStatus(t("Choose a custom module folder first."));
+            showToast(t("Choose a custom module folder first."), Toasts.Type.FAILURE);
+            return;
+        }
+
         const result = await runNative<ActionInfo>(() => {
             if (kind === "revert") return Native.revert(root);
             if (kind === "method2Index") return Native.patchMethod2Index(root);
             if (installerMethod === "method2") return Native.patchMethod2(root, method2Quality);
+            if (installerMethod === "custom") return Native.patchCustomModule(root, customFolder);
 
             return Native.patch(root);
         });
@@ -247,12 +273,26 @@ function StereoInstallerPanel() {
 
     function confirmPatch(): void {
         const isMethod2 = installerMethod === "method2";
+        const isCustom = installerMethod === "custom";
 
         Alerts.show({
-            title: isMethod2 ? t("Use Voice Playground Method?") : t("Use Discord Audio Collective Method?"),
+            title: isCustom
+                ? t("Use Custom Module Folder?")
+                : isMethod2
+                    ? t("Use Voice Playground Method?")
+                    : t("Use Discord Audio Collective Method?"),
             body: (
                 <div>
-                    {isMethod2 ? (
+                    {isCustom ? (
+                        <>
+                            <Paragraph>
+                                {t("This will copy files from your custom module folder:")} <code>{customFolder}</code> {t("into your Discord voice module directory.")}
+                            </Paragraph>
+                            <Paragraph>
+                                {t("Make sure your custom folder contains a valid discord_voice.node or index.js.")}
+                            </Paragraph>
+                        </>
+                    ) : isMethod2 ? (
                         <>
                             <Paragraph>
                                 {t("This will use the local")} {method2Quality} {t("file from StereoMethods/Discord-Voice, rename it to discord_voice.node, and copy it into")} <code>{"modules\\discord_voice-1\\discord_voice"}</code>.
@@ -362,6 +402,31 @@ function StereoInstallerPanel() {
                                 isSelected={(value: StereoMethod2Quality) => value === method2Quality}
                                 serialize={(value: StereoMethod2Quality) => value}
                             />
+                        </div>
+                    )}
+
+                    {installerMethod === "custom" && (
+                        <div className="vc-stereo-installer-select-row">
+                            <div>
+                                <span>{t("Custom module folder")}</span>
+                                <Paragraph>{t("Select a folder (e.g. from Desktop) containing your discord_voice.node or index.js files.")}</Paragraph>
+                            </div>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                <TextInput
+                                    value={customFolder}
+                                    placeholder={t("Path to custom module folder (e.g. Desktop/my-modules)")}
+                                    onChange={(value: string) => setCustomFolder(value)}
+                                    disabled={busy}
+                                    style={{ flex: 1 }}
+                                />
+                                <Button
+                                    color={Button.Colors.PRIMARY}
+                                    size={Button.Sizes.SMALL}
+                                    disabled={busy}
+                                    onClick={() => void browseCustomFolder()}
+                                    style={{ flexShrink: 0 }}
+                                >{t("Browse folder")}</Button>
+                            </div>
                         </div>
                     )}
 

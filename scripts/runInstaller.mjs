@@ -187,12 +187,12 @@ function cleanOldGuncord(isUninstall) {
                 }
             }
 
-            if (!isUninstall && existsSync(backupPath)) {
+            if (isUninstall && existsSync(backupPath)) {
                 if (existsSync(appAsarPath)) {
                     rmSync(appAsarPath, { recursive: true, force: true });
                 }
                 renameSync(backupPath, appAsarPath);
-                console.log(`[Guncord] Restored _app.asar → app.asar in ${resourcesDir}`);
+                console.log(`[Guncord] Restored _app.asar -> app.asar in ${resourcesDir}`);
                 cleanedAny = true;
             }
 

@@ -204,7 +204,7 @@ function CompactChatPopout({ chatBarProps, closePopout }: any) {
         <div className="compact-popout-container">
             <div className="compact-popout-grid">
                 {Array.from(ChatBarButtonMap)
-                    .filter(([key]) => key !== "Backpack" && chatBarButtons[key]?.enabled !== false && !BackpackedButtons.has(key))
+                    .filter(([key]) => chatBarButtons[key]?.enabled !== false)
                     .sort(([a], [b]) => (a === "Backpack" ? -1 : b === "Backpack" ? 1 : 0))
                     .map(([key, { render: Button }]) => (
                         <div key={key} style={{ display: "contents" }} onClick={closePopout}>

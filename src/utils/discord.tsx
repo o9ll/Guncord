@@ -171,9 +171,12 @@ export function openImageModal(item: Except<MediaModalItem, "type">, mediaModalP
     return openMediaModal({
         items: [{
             type: "IMAGE",
+            src: item.url,
+            url: item.url,
             original: item.original ?? item.url,
             ...item,
         }],
+        shouldHideMediaOptions: false,
         ...mediaModalProps
     });
 }

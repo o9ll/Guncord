@@ -43,19 +43,21 @@ export interface ActionInfo extends InstallInfo {
 
 export type StereoMethod2Quality = "128" | "384" | "512";
 export type StereoInstallStatus = "installed" | "notInstalled" | "needsReinstall";
-export type PatchMethod = "discordAudioCollective" | "voicePlayground";
+export type PatchMethod = "discordAudioCollective" | "voicePlayground" | "customModule";
 type SingleFileName = "discord_voice.node" | "index.js";
 
 export interface LastPatchLabels {
     discordAudioCollective: string;
     voicePlayground: string;
+    customModule: string;
 }
 
 const PATCH_METHOD_LABELS: Record<PatchMethod, string> = {
     discordAudioCollective: "Discord Audio Collective Method",
-    voicePlayground: "Voice Playground Method"
+    voicePlayground: "Voice Playground Method",
+    customModule: "Custom Module Method"
 };
-const PATCH_METHODS: PatchMethod[] = ["discordAudioCollective", "voicePlayground"];
+const PATCH_METHODS: PatchMethod[] = ["discordAudioCollective", "voicePlayground", "customModule"];
 
 export type NativeResult<T> = {
     success: true;
@@ -194,6 +196,27 @@ export async function chooseDiscordRoot(_: IpcMainInvokeEvent): Promise<NativeRe
     }
 }
 
+export async function chooseCustomModuleFolder(_: IpcMainInvokeEvent): Promise<NativeResult<string | null>> {
+    const log = new ActionLog();
+
+    try {
+        const result = await dialog.showOpenDialog({
+            title: "Select your custom module folder",
+            properties: ["openDirectory"]
+        });
+
+        if (result.canceled || !result.filePaths[0]) return ok(null, log.lines);
+
+        const selectedFolder = normalizeInputPath(result.filePaths[0]);
+        log.info(`Selected custom module folder: ${selectedFolder}`);
+
+        return ok(selectedFolder, log.lines);
+    } catch (error) {
+        log.fail(errorMessage(error));
+        return fail(errorMessage(error), log.lines);
+    }
+}
+
 export async function readLogs(_: IpcMainInvokeEvent): Promise<NativeResult<string[]>> {
     for (const pathValue of logPaths()) {
         if (!await isFile(pathValue)) continue;
@@ -291,6 +314,46 @@ export async function patchMethod2Index(_: IpcMainInvokeEvent, rootPath: string)
         log.ok("Patch scheduled. Discord will close, install index.js, then reopen.");
 
         return ok({ ...await installInfoFromTarget(methodTarget), logPath: logPath() }, log.lines);
+    } catch (error) {
+        log.fail(errorMessage(error));
+        return fail(errorMessage(error), log.lines);
+    }
+}
+
+export async function patchCustomModule(_: IpcMainInvokeEvent, rootPath: string, customFolderPath: string): Promise<NativeResult<ActionInfo>> {
+    const log = new ActionLog();
+
+    try {
+        const target = await targetFromRendererRoot(rootPath);
+        const customDir = normalizeInputPath(customFolderPath);
+
+        log.info("=== Patch Custom Module Method ===");
+        log.info(`Discord root: ${target.discordRoot}`);
+        log.info(`Voice dir: ${target.voiceDir}`);
+        log.info(`Custom module folder: ${customDir}`);
+
+        if (!await pathExists(customDir)) {
+            throw new Error(`Custom module folder does not exist: ${customDir}`);
+        }
+
+        const hasNodeFile = await isFile(join(customDir, "discord_voice.node"));
+        const hasIndexFile = await isFile(join(customDir, "index.js"));
+
+        if (!hasNodeFile && !hasIndexFile) {
+            throw new Error(`No discord_voice.node or index.js found in custom folder: ${customDir}`);
+        }
+
+        await ensurePermanentUnpatchedBackup(target, log);
+
+        if (hasNodeFile && !hasIndexFile) {
+            await scheduleWorker("Patch", customDir, target, "customModule", log, "singleFile", "discord_voice.node");
+        } else {
+            await scheduleWorker("Patch", customDir, target, "customModule", log, "directory");
+        }
+
+        log.ok("Patch scheduled. Discord will close, install custom module, then reopen.");
+
+        return ok({ ...await installInfoFromTarget(target), logPath: logPath() }, log.lines);
     } catch (error) {
         log.fail(errorMessage(error));
         return fail(errorMessage(error), log.lines);
@@ -801,7 +864,8 @@ async function installInfoFromTarget(target: Target): Promise<InstallInfo> {
     const installation = await installationState(target, buildLabel);
     const lastPatchLabels: LastPatchLabels = {
         discordAudioCollective: await lastPatchCaption(target.discordRoot, "discordAudioCollective"),
-        voicePlayground: await lastPatchCaption(target.discordRoot, "voicePlayground")
+        voicePlayground: await lastPatchCaption(target.discordRoot, "voicePlayground"),
+        customModule: await lastPatchCaption(target.discordRoot, "customModule")
     };
 
     return {
@@ -832,7 +896,9 @@ function permanentBackupDir(target: Target): string {
 function metaPathForRoot(discordRoot: string, method: PatchMethod): string {
     const fileName = method === "discordAudioCollective"
         ? "quick_hub_meta_discord_audio_collective.json"
-        : "quick_hub_meta_voice_playground.json";
+        : method === "voicePlayground"
+            ? "quick_hub_meta_voice_playground.json"
+            : "quick_hub_meta_custom_module.json";
 
     return join(hubDataDir(), "backups", sanitizedRootKey(discordRoot), fileName);
 }
@@ -859,7 +925,7 @@ function metaString(meta: Record<string, unknown>, key: string): string {
 }
 
 function isPatchMethod(value: unknown): value is PatchMethod {
-    return value === "discordAudioCollective" || value === "voicePlayground";
+    return value === "discordAudioCollective" || value === "voicePlayground" || value === "customModule";
 }
 
 async function latestPatchMeta(discordRoot: string): Promise<PatchMeta | undefined> {
@@ -1051,12 +1117,7 @@ async function method2Target(target: Target): Promise<Target> {
     const appDir = target.appDir || await findDiscordAppDir(target.discordRoot);
     if (!appDir) throw new Error("Could not find the Discord app folder for Voice Playground Method.");
 
-    const modulesDir = join(appDir, "modules");
-    const voiceDir = isPathInside(modulesDir, target.voiceDir)
-        ? target.voiceDir
-        : await findVoiceDirFromAppDir(appDir);
-    if (!voiceDir) throw new Error("Could not find the active discord_voice module for Voice Playground Method.");
-    assertPathInside(modulesDir, voiceDir);
+    const voiceDir = join(appDir, "modules", "discord_voice-1", "discord_voice");
     assertPathInside(target.discordRoot, voiceDir);
 
     return {

@@ -94,10 +94,16 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (children, props) =
 };
 
 const imageContextMenuPatch: NavContextMenuPatchCallback = (children, props) => {
-    if (!props?.src) return;
+    const src = props?.src ?? props?.itemSrc ?? props?.url ?? props?.href ?? props?.target?.src;
+    if (!src) return;
 
-    const group = findGroupChildrenByChildId("copy-native-link", children) ?? children;
-    group.push(makeSearchItem(props.src));
+    const group = findGroupChildrenByChildId("copy-native-link", children)
+        ?? findGroupChildrenByChildId("copy-image", children)
+        ?? children;
+
+    if (!group.some(child => child?.key === "search-image")) {
+        group.push(makeSearchItem(src));
+    }
 };
 
 export default definePlugin({

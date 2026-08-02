@@ -665,14 +665,16 @@ function decryptMessage(message: any, passedChannelId?: string) {
     });
 }
 
-function scanAndDecrypt(obj: any, parentChannelId?: string) {
-    if (!obj || typeof obj !== "object") return;
+function scanAndDecrypt(obj: any, parentChannelId?: string, depth = 0, visited = new WeakSet()) {
+    if (!obj || typeof obj !== "object" || depth > 10) return;
+    if (visited.has(obj)) return;
+    visited.add(obj);
 
     const currentChannelId = obj.channel_id || obj.channelId || parentChannelId;
 
     if (Array.isArray(obj)) {
         for (const item of obj) {
-            scanAndDecrypt(item, currentChannelId);
+            scanAndDecrypt(item, currentChannelId, depth + 1, visited);
         }
         return;
     }
@@ -696,8 +698,8 @@ function scanAndDecrypt(obj: any, parentChannelId?: string) {
         }
     } else {
         for (const k in obj) {
-            if (Object.prototype.hasOwnProperty.call(obj, k)) {
-                scanAndDecrypt(obj[k], currentChannelId);
+            if (Object.prototype.hasOwnProperty.call(obj, k) && k !== "guild" && k !== "channel" && k !== "author" && k !== "_owner" && k !== "_store") {
+                scanAndDecrypt(obj[k], currentChannelId, depth + 1, visited);
             }
         }
     }

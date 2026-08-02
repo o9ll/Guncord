@@ -56,7 +56,7 @@ const VENCORD_EQUICORD_TAB_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
 const UserPlugins_TAB_ICON = "data:image/png;base64,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";
 
 function GuncordTabIcon() {
-    return <img src={GUNCORD_TAB_ICON} alt="Plugins" style={{ width: 18, height: 18, borderRadius: 4 }} />;
+    return <img src={GUNCORD_TAB_ICON} alt="Guncord" style={{ width: 18, height: 18, borderRadius: 4 }} />;
 }
 
 function VencordEquicordTabIcon() {
@@ -69,7 +69,7 @@ function UserPluginsTabIcon() {
 
 const makeCategoryOptions = (othersCount?: number) => [
     { label: "Vencord & Equicord", value: SearchStatus.OTHERS },
-    { label: "Plugins", value: SearchStatus.GUNCORD },
+    { label: "Guncord", value: SearchStatus.GUNCORD },
     { label: t("User Plugins"), value: SearchStatus.USER_PLUGINS },
     { label: t("Community Plugins"), value: "community", disabled: true }
 ];
@@ -143,7 +143,7 @@ export const ExcludedReasons: Record<"web" | "discordDesktop" | "vesktop" | "equ
     vesktop: "Vesktop/Equibop apps",
     equibop: "Vesktop/Equibop apps",
     web: "Vesktop/Equibop apps & Discord web",
-    dev: "Developer version"
+    dev: "Developer version of Guncord"
 };
 
 function ExcludedPluginsList({ search }: { search: string; }) {
@@ -438,6 +438,15 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                 }
             }
         }
+        // Always sort by number of likes in descending order, but force AutoCall Recorder to be first
+        const byLikes = (a: typeof sortedPlugins[number], b: typeof sortedPlugins[number]) => {
+            if (a.name === "AutoCallRecorder") return -1;
+            if (b.name === "AutoCallRecorder") return 1;
+            return (ratings[b.name]?.likes ?? 0) - (ratings[a.name]?.likes ?? 0);
+        };
+        guncordData.sort(byLikes);
+        othersData.sort(byLikes);
+
         return { guncordData, othersData, requiredData };
     }, [sortedPlugins, searchValue, newPluginsSet, depMap, pluginFilter]);
 
@@ -668,6 +677,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                     <div className={cl("ecosystem-banner")}>
                         <div className={cl("ecosystem-banner-text")}>
                             <HeadingTertiary>{t("Plugin Management")}</HeadingTertiary>
+                            <Paragraph>{t("Manage your Guncord and community plugins here. Enable, disable, and configure them to your liking.")}</Paragraph>
                         </div>
                         <div className={cl("ecosystem-banner-buttons")}>
                             <Button
@@ -691,11 +701,11 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                 {!premiumOnly && (
                     <div className={cl("stats-banner")}>
                         <div className={cl("stat-item")}>
-                            <div className={cl("stat-title")}>{t("TOTAL")}</div>
+                            <div className={cl("stat-title")}>{t("TOTAL PLUGINS")}</div>
                             <div className={cl("stat-value")}>{totalStockPlugins + totalUserPlugins}</div>
                         </div>
                         <div className={cl("stat-item")}>
-                            <div className={cl("stat-title")}>{t("ENABLED")}</div>
+                            <div className={cl("stat-title")}>{t("ENABLED PLUGINS")}</div>
                             <div className={cl("stat-value")}>
                                 {categoryStats.enabled} <span className={cl("stat-percent")}>({percent}%)</span>
                                 <div className={cl("stat-chart")}>
@@ -727,7 +737,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                             <div className={cl("stat-title")}>
                                 {searchValue.status === SearchStatus.USER_PLUGINS ? t("USER PLUGINS") :
                                  searchValue.status === SearchStatus.OTHERS ? t("VENCORD & EQUICORD PLUGINS") :
-                                 t("PLUGINS")}
+                                 t("GUNCORD PLUGINS")}
                             </div>
                             <div className={cl("stat-value")}>
                                 {searchValue.status === SearchStatus.USER_PLUGINS ? totalUserPlugins :

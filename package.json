@@ -1,7 +1,7 @@
 {
     "name": "guncord",
     "private": "true",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "Everything Discord doesn't build, we create",
     "main": "dist/js/main.js",
     "homepage": "https://github.com/o9ll/Guncord",
@@ -58,6 +58,7 @@
         "@vap/shiki": "0.10.5",
         "discord": "^0.8.2",
         "fflate": "^0.8.2",
+        "fix-webm-duration": "^1.0.6",
         "gifenc": "github:mattdesl/gifenc#64842fca317b112a8590f8fef2bf3825da8f6fe3",
         "idb": "8.0.3",
         "jsqr": "1.4.0",

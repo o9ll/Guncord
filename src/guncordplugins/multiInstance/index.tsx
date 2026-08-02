@@ -8,12 +8,35 @@ import "./styles.css";
 
 import { addHeaderBarButton, HeaderBarButton, removeHeaderBarButton } from "@api/HeaderBar";
 import { DataStore } from "@api/index";
+import { definePluginSettings } from "@api/Settings";
 import { ModalCloseButton, ModalContent, ModalHeader, ModalRoot, openModal } from "@utils/modal";
-import definePlugin, { PluginNative } from "@utils/types";
+import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { findByProps } from "@webpack";
-import { Forms, React, ReactDOM, UserStore, IconUtils, FluxDispatcher } from "@webpack/common";
+import { FluxDispatcher, Forms, IconUtils, React, ReactDOM, UserStore } from "@webpack/common";
 
 import { t } from "../autoTranslateGuncord";
+
+const settings = definePluginSettings({
+    domain: {
+        type: OptionType.SELECT,
+        description: "Discord release channel / domain to open for instances.",
+        options: [
+            { label: "Discord (Stable)", value: "discord.com", default: true },
+            { label: "Discord PTB", value: "ptb.discord.com" },
+            { label: "Discord Canary", value: "canary.discord.com" }
+        ]
+    },
+    blockExternalTokenAccess: {
+        type: OptionType.BOOLEAN,
+        description: "Token Protection: Use protected temporary sessions and clear saved login data before opening an instance.",
+        default: false
+    },
+    performanceMode: {
+        type: OptionType.BOOLEAN,
+        description: "Performance Mode: Throttle background instances to reduce CPU usage.",
+        default: false
+    }
+});
 
 const Native = VencordNative.pluginHelpers.MultiInstance as PluginNative<typeof import("./native")>;
 const STORE_KEY = "TokenImporter_accounts";
@@ -378,8 +401,9 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
         if (!acc.hasToken) return;
         setCtx(null);
         setStatus(t("Opening window…"));
-        // @ts-ignore - Passage du pseudo
-        const res = await Native.openInstanceWindow(acc.token, acc.id, false, acc.username).catch(() => ({ ok: false, error: "error" }));
+        const { domain, blockExternalTokenAccess, performanceMode } = settings.store;
+        // @ts-ignore - Passage du pseudo, domaine, token protection, perf mode
+        const res = await Native.openInstanceWindow(acc.token, acc.id, false, acc.username, domain, blockExternalTokenAccess, performanceMode).catch(() => ({ ok: false, error: "error" }));
         if ((res as any).ok) {
             setStatus(t("Window opened ✓"));
             await refreshInstances();
@@ -393,8 +417,9 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
         if (!acc.hasToken) return;
         setCtx(null);
         setStatus(t("Opening detached instance…"));
-        // @ts-ignore - 'detached' argument and pseudo added
-        const res = await Native.openInstanceWindow(acc.token, acc.id, true, acc.username).catch(() => ({ ok: false, error: "error" }));
+        const { domain, blockExternalTokenAccess, performanceMode } = settings.store;
+        // @ts-ignore - Argument 'detached', pseudo, domaine, token protection, perf mode
+        const res = await Native.openInstanceWindow(acc.token, acc.id, true, acc.username, domain, blockExternalTokenAccess, performanceMode).catch(() => ({ ok: false, error: "error" }));
         if ((res as any).ok) {
             setStatus(t("Instance opened ✓"));
             await refreshInstances();
@@ -408,8 +433,9 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
         if (!acc.hasToken) return;
         setCtx(null);
         setStatus(t("Opening grouped instance…"));
+        const { domain, blockExternalTokenAccess, performanceMode } = settings.store;
         // @ts-ignore
-        const res = await Native.openInstanceWindowGrouped(acc.token, acc.id, acc.username).catch(() => ({ ok: false, error: "error" }));
+        const res = await Native.openInstanceWindowGrouped(acc.token, acc.id, acc.username, domain, blockExternalTokenAccess, performanceMode).catch(() => ({ ok: false, error: "error" }));
         if ((res as any).ok) {
             setStatus(t("Instance opened ✓"));
             await refreshInstances();
@@ -634,6 +660,7 @@ export default definePlugin({
     description: "Opens a 2nd Discord (new window or split screen) with another account.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["HeaderBarAPI"],
+    settings,
 
     headerBarButton: {
         icon: MultiInstanceIcon,
