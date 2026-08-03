@@ -21,6 +21,7 @@ const CheckMarkIcon = () => {
 
 export default definePlugin({
     name: "CopyFileContents",
+    enabledByDefault: true,
     description: "Adds a button to text file attachments to copy their contents",
     tags: ["Utility"],
     authors: [Devs.Obsidian, Devs.Nuckyz],

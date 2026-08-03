@@ -32,12 +32,12 @@ export const settings = definePluginSettings({
         options: [
             {
                 label: "Username",
-                value: "username"
+                value: "username",
+                default: true
             },
             {
                 label: "Display Name",
-                value: "displayname",
-                default: true
+                value: "displayname"
             },
             {
                 label: "Dont Sort",
@@ -49,6 +49,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "ServerInfo",
+    enabledByDefault: true,
     description: "Allows you to view info about a server",
     tags: ["Servers", "Utility"],
     authors: [Devs.Ven, Devs.Nuckyz, EquicordDevs.Z1xus],

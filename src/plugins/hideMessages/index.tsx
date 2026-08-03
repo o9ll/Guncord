@@ -95,6 +95,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "HideMessages",
+    enabledByDefault: true,
     description: "Temporarily hide messages and DMs until you restart.",
     dependencies: ["MessagePopoverAPI"],
     tags: ["Chat", "Utility"],

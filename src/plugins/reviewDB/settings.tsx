@@ -37,12 +37,12 @@ export const settings = definePluginSettings({
     notifyReviews: {
         type: OptionType.BOOLEAN,
         description: "Notify about new reviews on startup",
-        default: true,
+        default: false,
     },
     showWarning: {
         type: OptionType.BOOLEAN,
         description: "Display warning to be respectful at the top of the reviews list",
-        default: true,
+        default: false,
     },
     hideTimestamps: {
         type: OptionType.BOOLEAN,
@@ -52,7 +52,7 @@ export const settings = definePluginSettings({
     hideBlockedUsers: {
         type: OptionType.BOOLEAN,
         description: "Hide reviews from blocked users",
-        default: true,
+        default: false,
     },
     buttons: {
         type: OptionType.COMPONENT,

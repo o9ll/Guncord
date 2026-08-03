@@ -146,7 +146,7 @@ const settings = definePluginSettings({
     hideButton: {
         description: "Hides the Dearrow button from YouTube embeds",
         type: OptionType.BOOLEAN,
-        default: false,
+        default: true,
         restartNeeded: true
     },
     replaceElements: {
@@ -169,6 +169,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "Dearrow",
+    enabledByDefault: true,
     description: "Makes YouTube embed titles and thumbnails less sensationalist, powered by Dearrow",
     tags: ["Media", "Utility"],
     authors: [Devs.Ven],

@@ -55,7 +55,7 @@ const settings = definePluginSettings({
     soundboardVolume: {
         type: OptionType.SLIDER,
         description: "Preview volume for soundboard sounds (0 to disable).",
-        default: 0.5,
+        default: 0,
         markers: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
     },
 });
