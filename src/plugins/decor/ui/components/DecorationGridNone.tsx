@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { BaseText } from "@components/BaseText";
 import { NoEntrySignIcon } from "@components/Icons";
 import { getIntlMessage } from "@utils/discord";
+import { Text } from "@webpack/common";
 import { HTMLProps } from "react";
 
 import { DecorationGridItem } from ".";
@@ -21,11 +21,11 @@ export default function DecorationGridNone(props: DecorationGridNoneProps) {
         {...props}
     >
         <NoEntrySignIcon />
-        <BaseText
-            size="xs"
+        <Text
+            variant="text-xs/normal"
             color="text-strong"
         >
             {getIntlMessage("NONE")}
-        </BaseText>
+        </Text>
     </DecorationGridItem >;
 }

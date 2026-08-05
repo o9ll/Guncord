@@ -243,12 +243,22 @@ async function processMessageFetch(response: FetchMessagesResponse) {
             for (let j = 0, len2 = message.mentions.length; j < len2; j++) {
                 const user = message.mentions[j];
                 const cachedUser = fetchUser((user as any).id || user);
-                if (cachedUser) (message.mentions[j] as any) = cleanupUserObject(cachedUser);
+                if (cachedUser) {
+                    (message.mentions[j] as any) = cleanupUserObject(cachedUser);
+                } else if (typeof user === "string") {
+                    (message.mentions[j] as any) = { id: user, username: "Unknown User", discriminator: "0000", avatar: null, bot: false, public_flags: 0 };
+                }
             }
 
-            const author = fetchUser(message.author.id);
-            if (!author) continue;
-            (message.author as any) = cleanupUserObject(author);
+            const authorId = typeof message.author === "string" ? message.author : message.author?.id;
+            const author = fetchUser(authorId);
+            if (author) {
+                (message.author as any) = cleanupUserObject(author);
+            } else if (authorId) {
+                (message.author as any) = { id: authorId, username: "Unknown User", discriminator: "0000", avatar: null, bot: false, public_flags: 0 };
+            } else {
+                continue;
+            }
         }
 
         response.body.extra = deletedMessages.map(m => m.message);

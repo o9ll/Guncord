@@ -7,7 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { OverridePremiumTypeStore } from "@webpack/common";
+import { UserStore } from "@webpack/common";
 
 export const settings = definePluginSettings({
     superReactByDefault: {
@@ -45,7 +45,7 @@ export default definePlugin({
             replacement: [
                 {
                     // if (inlinedCalculatePlayingCount(a,b) >= limit) return;
-                    match: /(BURST_REACTION_EFFECT_PLAY:\i=>{.+?if\()(\(\(\i,\i\)=>.+?\(\i,\i\))>=5+?(?=\))/,
+                    match: /(BURST_REACTION_EFFECT_PLAY:(?:\i=>|function\(\i\)){.+?if\()(\(?(?:function)?\(\i,\i\)(?:=>)?{.+?\(\i,\i\))>=5+?(?=\))/,
                     replace: (_, rest, playingCount) => `${rest}!$self.shouldPlayBurstReaction(${playingCount})`
                 }
             ]
@@ -67,6 +67,6 @@ export default definePlugin({
     },
 
     get shouldSuperReactByDefault() {
-        return settings.store.superReactByDefault && (OverridePremiumTypeStore.getState().premiumTypeActual != null);
+        return settings.store.superReactByDefault && UserStore.getCurrentUser().premiumType != null;
     }
 });

@@ -417,6 +417,8 @@ export function IDIcon(props: IconProps) {
     );
 }
 
+export const CopyIdIcon = IDIcon;
+
 export function FolderIcon(props: IconProps) {
     return (
         <Icon

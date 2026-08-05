@@ -16,7 +16,7 @@ const VoiceStateStore = findStoreLazy("VoiceStateStore");
 
 const DS_KEY = "followme-target-v1";
 
-// ── Etat global ──────────────────────────────────────────────────────────────
+// ── Global state ──────────────────────────────────────────────────────────────
 let targetId: string | null = null;
 let targetName: string = "";
 
@@ -91,7 +91,7 @@ function FollowMeIcon({ filled = false }: { filled?: boolean; }) {
     return (
         <svg width="20" height="20" viewBox="0 0 24 24">
             <path
-                fill={filled ? "#3ba55d" : "currentColor"}
+                fill={filled ? "#78c18c" : "currentColor"}
                 d="M15,10V5H13V10.5C13,10.78 13.22,11 13.5,11H18V9H15.5L18.41,6.09L17,4.68L14.09,7.59V5H12V11A1,1 0 0,0 13,12H19A1,1 0 0,0 20,11V5A1,1 0 0,0 19,4H13V2H19A3,3 0 0,1 22,5V11A3,3 0 0,1 19,14H13.81L14.41,15.79L12.5,16.41L11.5,13.5C11.31,12.92 10.77,12.5 10.16,12.5H6.5A1,1 0 0,0 5.5,13.5V20.5A1,1 0 0,0 6.5,21.5H9.5V23.5H6.5A3,3 0 0,1 3.5,20.5V13.5A3,3 0 0,1 6.5,10.5H9.5V7A3,3 0 0,1 12.5,4H13V2H12.5A5,5 0 0,0 7.5,7V10.5H6.5A5,5 0 0,0 1.5,15.5V20.5A5,5 0 0,0 6.5,25.5H9.5V23.5H6.5A3,3 0 0,1 3.5,20.5V15.5A3,3 0 0,1 6.5,12.5H7.5V15.5A1,1 0 0,0 8.5,16.5H11.5L12.5,19.41L14.41,17.5L12,15.09V13.41L15.09,16.5L17,14.59L13.91,11.5H15V10Z"
             />
         </svg>
@@ -106,7 +106,7 @@ function FollowMeHeaderButton() {
     return (
         <HeaderBarButton
             icon={() => (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#3ba55d">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#78c18c">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z" />
                 </svg>
             )}

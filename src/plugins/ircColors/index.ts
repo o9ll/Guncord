@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Vencord, a modification for Discord's desktop app
  * Copyright (c) 2023 Vendicated and contributors
  *
@@ -16,12 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { definePluginSettings, Settings } from "@api/Settings";
+import { definePluginSettings } from "@api/Settings";
 import { hash as h64 } from "@intrnl/xxhash64";
-import { getCustomColorString } from "@plugins/customUserColors";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { useMemo, UserStore } from "@webpack/common";
+import { useMemo } from "@webpack/common";
 
 // Calculate a CSS color string based on the user ID
 function calculateNameColorForUser(id?: string) {
@@ -50,6 +49,7 @@ const settings = definePluginSettings({
         default: false
     },
     applyColorOnlyInDms: {
+        displayName: "Apply Color Only In DMs",
         description: "Apply colors only in direct messages; do not apply colors in servers.",
         restartNeeded: false,
         type: OptionType.BOOLEAN,
@@ -110,11 +110,7 @@ export default definePlugin({
         const colorString = context?.author?.colorString;
         const color = calculateNameColorForUser(userId);
 
-        if (Settings.plugins.CustomUserColors.enabled) {
-            const customColor = getCustomColorString(userId, true);
-            if (customColor) return customColor;
-        }
-
+        // Color preview in role settings
         if (context?.message?.channel_id === "1337" && userId === "313337")
             return colorString;
 
@@ -122,25 +118,9 @@ export default definePlugin({
             return colorString;
         }
 
-        const dmColor = (!settings.store.applyColorOnlyToUsersWithoutColor || !colorString)
+        return (!settings.store.applyColorOnlyToUsersWithoutColor || !colorString)
             ? color
             : colorString;
-
-        // guarantee minimum difference in dms
-        if (context?.channel?.isPrivate?.() && dmColor && userId) {
-            const currentUserId = UserStore.getCurrentUser()?.id;
-            if (currentUserId && userId !== currentUserId) {
-                const currentUserColor = Number(h64(currentUserId) % 360n);
-                const otherUserColor = Number(h64(userId) % 360n);
-                const colorDiff = Math.min(Math.abs(currentUserColor - otherUserColor), 360 - Math.abs(currentUserColor - otherUserColor));
-                if (colorDiff < 45) {
-                    const newColor = (otherUserColor + 180) % 360;
-                    return `hsl(${newColor}, 100%, ${settings.store.lightness}%)`;
-                }
-            }
-        }
-
-        return dmColor;
     },
 
     calculateNameColorForListContext(context: any) {
@@ -148,11 +128,6 @@ export default definePlugin({
             const id = context?.user?.id;
             const colorString = context?.colorString;
             const color = calculateNameColorForUser(id);
-
-            if (Settings.plugins.CustomUserColors.enabled) {
-                const customColor = getCustomColorString(id, true);
-                if (customColor) return customColor;
-            }
 
             if (settings.store.applyColorOnlyInDms && context?.guildId !== undefined) {
                 return colorString;

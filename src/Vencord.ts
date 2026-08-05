@@ -92,6 +92,7 @@ export { PlainSettings, Settings };
 
 import { coreStyleRootNode, initStyles } from "@api/Styles";
 import { openSettingsTabModal, UpdaterTab } from "@components/settings";
+import { addHeaderBarButton, HeaderBarButton } from "@api/HeaderBar";
 import { debounce } from "@shared/debounce";
 import { IS_WINDOWS } from "@utils/constants";
 import { createAndAppendStyle } from "@utils/css";
@@ -185,163 +186,28 @@ async function syncSettings() {
     });
 }
 
-let notifiedForUpdatesThisSession = false;
+let stagedThisSession = false;
 
-function showGreenUpdateBanner() {
-    if (document.getElementById("guncord-core-updater-root")) return;
+/**
+ * Downloads and stages the update silently in the background.
+ * No banner, no user interaction needed.
+ * guncord-index.js will apply the staged files on the next restart.
+ */
+async function silentlyStageUpdate() {
+    if (stagedThisSession) return;
+    stagedThisSession = true;
 
-    const banner = document.createElement("div");
-    banner.id = "guncord-core-updater-root";
-    Object.assign(banner.style, {
-        position: "fixed",
-        top: "0", left: "0", right: "0",
-        zIndex: "999999",
-        background: "rgba(30, 31, 34, 0.95)",
-        backdropFilter: "blur(10px)",
-        borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
-        borderTop: "2px solid #5865F2",
-        color: "#dbdee1",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "8px 16px",
-        fontSize: "13px",
-        fontFamily: "var(--font-primary, 'gg sans', sans-serif)",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-        gap: "12px",
-    });
-
-    const leftContent = document.createElement("div");
-    Object.assign(leftContent.style, {
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        flex: "1",
-        minWidth: "0",
-    });
-
-    const titleSpan = document.createElement("span");
-    titleSpan.style.fontWeight = "600";
-    titleSpan.style.color = "#ffffff";
-    titleSpan.style.flexShrink = "0";
-    titleSpan.textContent = "Guncord Update Available";
-
-    const statusSpan = document.createElement("span");
-    statusSpan.style.opacity = "0.7";
-    statusSpan.style.fontSize = "12px";
-    statusSpan.style.overflow = "hidden";
-    statusSpan.style.textOverflow = "ellipsis";
-    statusSpan.style.whiteSpace = "nowrap";
-
-    let countdown = 10;
-    let installing = false;
-    let countdownTimer: ReturnType<typeof setInterval> | null = null;
-
-    function setStatus(text: string) { statusSpan.textContent = text; }
-    setStatus(`Auto-installing in ${countdown}s... (or click to install now)`);
-
-    async function doInstall() {
-        if (installing) return;
-        installing = true;
-        if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-        updateBtn.style.cursor = "not-allowed";
-        updateBtn.style.opacity = "0.7";
-        updateBtn.textContent = "Installing...";
-        setStatus("Downloading update...");
-
-        try {
-            const downloaded = await update();
-            if (!downloaded) throw new Error("Download failed");
-            setStatus("Downloaded! Extracting...");
-            await rebuild();
-            setStatus("Update successful! Restarting in 3s...");
-            setTimeout(() => relaunch(), 3_000);
-        } catch (e) {
-            UpdateLogger.error("Auto-install failed", e);
-            setStatus("Install failed. Check console. Update will apply on restart.");
-            installing = false;
-            updateBtn.style.cursor = "pointer";
-            updateBtn.style.opacity = "1";
-            updateBtn.textContent = "Retry";
-        }
+    try {
+        UpdateLogger.info("Silently staging update in background...");
+        // checkForUpdates() already set pendingDownloadUrl via IpcEvents.GET_UPDATES → getUpdates() → fetchUpdates()
+        // So we call rebuild() (= stageUpdate) directly — no redundant API call needed.
+        await rebuild(); // downloads zip to %temp%, extracts to staging dir, writes marker — no locked files touched
+        UpdateLogger.info("Update staged successfully. Will be applied on next Discord restart.");
+    } catch (e) {
+        UpdateLogger.error("Silent update staging failed", e);
+        stagedThisSession = false; // allow retry on next check interval
     }
-
-    // Auto-install after 10s
-    countdownTimer = setInterval(() => {
-        countdown--;
-        if (countdown <= 0) {
-            clearInterval(countdownTimer!);
-            countdownTimer = null;
-            doInstall();
-        } else {
-            setStatus(`Auto-installing in ${countdown}s... (or click to install now)`);
-        }
-    }, 1_000);
-
-    leftContent.appendChild(titleSpan);
-    leftContent.appendChild(statusSpan);
-
-    const rightContent = document.createElement("div");
-    Object.assign(rightContent.style, {
-        display: "flex",
-        gap: "12px",
-        flexShrink: "0",
-        alignItems: "center"
-    });
-
-    const updateBtn = document.createElement("button");
-    Object.assign(updateBtn.style, {
-        background: "#5865F2",
-        border: "none",
-        borderRadius: "4px",
-        color: "#ffffff",
-        padding: "4px 16px",
-        cursor: "pointer",
-        fontSize: "13px",
-        fontWeight: "500",
-        fontFamily: "inherit",
-        transition: "background 0.2s"
-    });
-    updateBtn.onmouseenter = () => { if (!installing) updateBtn.style.background = "#4752C4"; };
-    updateBtn.onmouseleave = () => { if (!installing) updateBtn.style.background = "#5865F2"; };
-    updateBtn.textContent = "Install Now";
-    updateBtn.addEventListener("click", doInstall);
-
-    const closeBtn = document.createElement("button");
-    Object.assign(closeBtn.style, {
-        background: "transparent",
-        border: "none",
-        color: "#b5bac1",
-        cursor: "pointer",
-        fontSize: "16px",
-        padding: "0 4px",
-        fontFamily: "inherit",
-        lineHeight: "1",
-        transition: "color 0.2s"
-    });
-    closeBtn.onmouseenter = () => closeBtn.style.color = "#dbdee1";
-    closeBtn.onmouseleave = () => closeBtn.style.color = "#b5bac1";
-    closeBtn.textContent = "✕";
-    closeBtn.title = "Dismiss (will auto-install when Discord closes)";
-    closeBtn.addEventListener("click", () => {
-        if (installing) return; // do not close if installing
-        if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-        banner.remove();
-        UpdateLogger.info("Update banner dismissed — will auto-apply on Discord quit.");
-    });
-
-    rightContent.appendChild(updateBtn);
-    rightContent.appendChild(closeBtn);
-
-    banner.appendChild(leftContent);
-    banner.appendChild(rightContent);
-
-    document.body.appendChild(banner);
 }
-
-// Allow triggering from console for testing
-// @ts-ignore
-window.showGuncordUpdateBanner = showGreenUpdateBanner;
 
 async function runUpdateCheck() {
     if (IS_UPDATER_DISABLED || Settings.disableAutoUpdate) return;
@@ -351,11 +217,8 @@ async function runUpdateCheck() {
         if (IS_DISCORD_DESKTOP) VencordNative.tray.setUpdateState(isOutdated);
         if (!isOutdated) return;
 
-        if (notifiedForUpdatesThisSession) return;
-        notifiedForUpdatesThisSession = true;
-
-        // Affiche la bannière verte avec auto-install (compte à rebours 10s)
-        setTimeout(() => showGreenUpdateBanner(), 8_000);
+        // Stage silently — no banner shown, update applies on next restart
+        silentlyStageUpdate();
     } catch (err) {
         UpdateLogger.error("Failed to check for updates", err);
     }
@@ -391,6 +254,8 @@ function initTrayIpc() {
 
     VencordNative.tray.setUpdateState(getIsOutdated);
 }
+
+import { ReactDOM } from "@webpack/common";
 
 async function init() {
     await onceReady;

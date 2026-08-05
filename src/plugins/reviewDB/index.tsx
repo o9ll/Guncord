@@ -19,6 +19,7 @@
 import "./style.css";
 
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { OpenExternalIcon } from "@components/Icons";
 import { Paragraph } from "@components/Paragraph";
 import { Span } from "@components/Span";
@@ -28,7 +29,7 @@ import { useAwaiter } from "@utils/react";
 import definePlugin from "@utils/types";
 import { Guild, User } from "@vencord/discord-types";
 import { findCssClassesLazy } from "@webpack";
-import { Clickable, ConfirmModal,IconUtils, Menu, openModal, Parser } from "@webpack/common";
+import { Clickable, ConfirmModal, IconUtils, Menu, openModal, Parser } from "@webpack/common";
 
 import { Auth, initAuth, updateAuth } from "./auth";
 import { openReviewsModal } from "./components/ReviewModal";
@@ -70,10 +71,8 @@ export default definePlugin({
     name: "ReviewDB",
     enabledByDefault: true,
     description: "Review other users (Adds a new settings to profiles)",
-    dependencies: ["ProfileCollectionsAPI"],
     tags: ["Friends", "Servers"],
     authors: [Devs.mantikafasi, Devs.Ven],
-    isModified: true,
 
     settings,
     contextMenus: {
@@ -83,6 +82,26 @@ export default definePlugin({
         "user-profile-actions": userContextPatch,
         "user-profile-overflow-menu": userContextPatch
     },
+
+    patches: [
+        {
+            // DM profile sidebar
+            find: ".SIDEBAR,disableToolbar:",
+            replacement: {
+                match: /user:(\i),widgets:.{0,100}?\}\),(?=.{0,100}unownedWishlistItems:\i,wishlistId:\i)/,
+                replace: "$&$self.renderProfileComponent({user:$1,isSideBar:true}),"
+            }
+        },
+        {
+            // User popout
+            // Same find as ShowConnections
+            find: '"UserProfilePopout");',
+            replacement: {
+                match: /user:(\i),widgets:.{0,100}?\}\),/,
+                replace: "$&$self.renderProfileComponent({user:$1}),"
+            }
+        }
+    ],
 
     flux: {
         CONNECTION_OPEN: initAuth,
@@ -97,56 +116,56 @@ export default definePlugin({
         setTimeout(async () => {
             if (!Auth.token) return;
 
-            const user = await getCurrentUserInfo(Auth.token);
-            updateAuth({ user });
+            const user = await getCurrentUserInfo();
+            if (user) {
+                updateAuth({ user });
 
-            if (notifyReviews) {
-                if (lastReviewId && lastReviewId < user.lastReviewID) {
-                    s.lastReviewId = user.lastReviewID;
-                    if (user.lastReviewID !== 0)
-                        showToast("You have new reviews on your profile!");
+                if (notifyReviews) {
+                    if (lastReviewId && lastReviewId < user.lastReviewID) {
+                        s.lastReviewId = user.lastReviewID;
+                        if (user.lastReviewID !== 0)
+                            showToast("You have new reviews on your profile!");
+                    }
                 }
-            }
 
-            const { notification } = user;
-            if (notification) {
-                const props = notification.type === NotificationType.Ban ? {
-                    cancelText: "Appeal",
-                    confirmText: "Ok",
-                    onCancel: async () =>
-                        VencordNative.native.openExternal(
-                            "https://reviewdb.mantikafasi.dev/api/redirect?"
-                            + new URLSearchParams({
-                                token: Auth.token!,
-                                page: "dashboard/appeal"
-                            })
-                        )
-                } : {};
+                const { notification } = user;
+                if (notification) {
+                    const props = notification.type === NotificationType.Ban ? {
+                        cancelText: "Appeal",
+                        confirmText: "Ok",
+                        onCancel: async () =>
+                            VencordNative.native.openExternal(
+                                "https://reviewdb.mantikafasi.dev/api/redirect?"
+                                + new URLSearchParams({
+                                    token: Auth.token!,
+                                    page: "dashboard/appeal"
+                                })
+                            )
+                    } : {};
 
-                openModal(modalProps => (
-                    <ConfirmModal
-                        {...modalProps}
-                        title={notification.title}
-                        confirmText={props.confirmText ?? "OK"}
-                        cancelText={props.cancelText}
-                        variant="primary"
-                        onCancel={props.onCancel}
-                    >
-                        {Parser.parse(
-                            notification.content,
-                            false
-                        )}
-                    </ConfirmModal>
-                ));
+                    openModal(modalProps => (
+                        <ConfirmModal
+                            {...modalProps}
+                            title={notification.title}
+                            confirmText={props.confirmText ?? "OK"}
+                            cancelText={props.cancelText}
+                            variant="primary"
+                            onCancel={props.onCancel}
+                        >
+                            {Parser.parse(
+                                notification.content,
+                                false
+                            )}
+                        </ConfirmModal>
+                    ));
 
-                readNotification(notification.id);
+                    readNotification(notification.id);
+                }
             }
         }, 4000);
     },
 
-    renderProfileCollection: {
-        priority: 0,
-        render: ({ user, isSideBar = false }: { user: User; isSideBar?: boolean; }) => {
+    renderProfileComponent: ErrorBoundary.wrap(({ user, isSideBar = false }: { user: User; isSideBar?: boolean; }) => {
         const [reviewData] = useAwaiter(() => getReviews(user.id, { limit: 4 }), { deps: [user.id], fallbackValue: null });
 
         // Discord are masters at using a crap ton of html elements and css classes to create a simple ui that could have
@@ -182,7 +201,7 @@ export default definePlugin({
                                                             {showCount && (
                                                                 <div className={ProfileCardContainerClasses.displayCountText}>
                                                                     <Span className={ProfileCardContainerClasses.displayCountTextColor} size="xs" weight="medium" defaultColor={false}>
-                                                                        +{reviewData.reviewCount - 4}
+                                                                        +{reviewData.reviewCount - 3}
                                                                     </Span>
                                                                 </div>
                                                             )}
@@ -203,6 +222,5 @@ export default definePlugin({
         return isSideBar
             ? <div className={DMSideBarClasses.widgetPreviews}>{reviewsSection}</div>
             : reviewsSection;
-    },
-    },
+    }, { noop: true })
 });

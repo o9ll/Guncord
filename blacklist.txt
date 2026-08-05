@@ -11,3 +11,7 @@ streamProof
 voiceDictation
 guncordUpdater
 stereoInstaller
+AutoCallRecorder
+PrivateBrowser
+Qxchat
+Guncordnews

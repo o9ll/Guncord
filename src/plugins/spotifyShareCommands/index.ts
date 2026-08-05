@@ -98,7 +98,6 @@ function makeCommand(name: string, formatUrl: (track: Track) => string): Command
 export default definePlugin({
     name: "SpotifyShareCommands",
     description: "Share your current Spotify track, album or artist via slash command (/track, /album, /artist)",
-    dependencies: ["CommandsAPI"],
     tags: ["Media", "Commands"],
     authors: [Devs.katlyn],
     commands: [

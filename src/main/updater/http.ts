@@ -8,16 +8,25 @@ import { fetchBuffer, fetchJson } from "@main/utils/http";
 import { IpcEvents } from "@shared/IpcEvents";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { exec } from "child_process";
-import { app,ipcMain } from "electron";
-import { rmSync,writeFileSync } from "original-fs";
+import { app, ipcMain } from "electron";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "original-fs";
 import { join } from "path";
 import { serializeErrors } from "./common";
 
-const API_BASE      = "https://api.github.com/repos/o9ll/Guncord";
-const REPO_URL      = "https://github.com/o9ll/Guncord";
+const RELEASES_REPO = "o9ll/Guncord";
+const API_BASE = `https://api.github.com/repos/${RELEASES_REPO}`;
+const REPO_URL = `https://github.com/${RELEASES_REPO}`;
 declare const VERSION: string;
 const CURRENT_VERSION = `v${VERSION}`;
 const ZIP_FILE = "guncord-dist.zip";
+
+/**
+ * Marker file written into __dirname when an update has been staged.
+ * guncord-index.js reads this on next startup (before any file is locked)
+ * and performs the actual file-swap then.
+ */
+export const PENDING_UPDATE_MARKER = join(__dirname, "guncord-pending-update.json");
+const STAGING_DIR = join(app.getPath("temp"), "guncord-pending-update");
 
 let pendingDownloadUrl: string | null = null;
 let pendingVersion: string | null = null;
@@ -62,13 +71,17 @@ async function getUpdates() {
     const outdated = await fetchUpdates();
     if (!outdated) return [];
     return [{
-        hash:    pendingVersion ?? "new",
-        author:  "Guncord",
+        hash: pendingVersion ?? "new",
+        author: "Guncord",
         message: `Nouvelle version disponible : ${pendingVersion}`
     }];
 }
 
-async function applyUpdates(): Promise<boolean> {
+/**
+ * Step 1 — download the zip and stage it to a temp folder.
+ * Does NOT touch any running files. Returns true when the zip is staged.
+ */
+async function stageUpdate(): Promise<boolean> {
     if (!pendingDownloadUrl) return false;
     if (isApplying) return false;
     isApplying = true;
@@ -80,39 +93,33 @@ async function applyUpdates(): Promise<boolean> {
         const zipPath = join(app.getPath("temp"), `guncord-update-${Date.now()}.zip`);
         writeFileSync(zipPath, data, { flush: true });
 
-        // The zip was created from dist/desktop/ with includeBaseDirectory=false,
-        // so its contents are exactly what belongs in dist/desktop/ = __dirname.
-        // Using __dirname directly avoids the off-by-one-level bug.
-        const destPath = __dirname;
+        // Clean any stale staging dir first
+        try { rmSync(STAGING_DIR, { recursive: true, force: true }); } catch { }
+        mkdirSync(STAGING_DIR, { recursive: true });
 
-        // Extract using PowerShell Expand-Archive (reliable ZIP support on all Windows 10/11)
-        // We extract to a temp folder first, then move files over to avoid half-extracted state
-        const tmpExtract = join(app.getPath("temp"), `guncord-extract-${Date.now()}`);
+        // Extract zip into STAGING_DIR (no running files touched)
+        const psExtract = `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${STAGING_DIR}' -Force`;
 
         return await new Promise<boolean>((resolve, reject) => {
-            // Step 1 — extract zip to temp folder
-            const psExtract = `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${tmpExtract}' -Force`;
             exec(`powershell -NoProfile -NonInteractive -Command "${psExtract}"`, err => {
+                // Cleanup zip regardless
+                try { rmSync(zipPath, { force: true }); } catch { }
+
                 if (err) {
-                    try { rmSync(zipPath, { force: true }); } catch {}
                     return reject(new Error("ZIP extraction failed: " + err.message));
                 }
 
-                // Step 2 — copy extracted files into dist/desktop/ (= __dirname), overwriting existing ones
-                const psMove = `Copy-Item -Path '${tmpExtract}\\*' -Destination '${destPath}' -Recurse -Force`;
-                exec(`powershell -NoProfile -NonInteractive -Command "${psMove}"`, err2 => {
-                    // Cleanup temp files regardless of outcome
-                    try { rmSync(zipPath, { force: true }); } catch {}
-                    try { rmSync(tmpExtract, { recursive: true, force: true }); } catch {}
+                // Write marker so guncord-index.js knows to apply on next boot
+                writeFileSync(PENDING_UPDATE_MARKER, JSON.stringify({
+                    version: pendingVersion,
+                    stagingDir: STAGING_DIR,
+                    destDir: __dirname,
+                    createdAt: Date.now()
+                }));
 
-                    if (err2) {
-                        return reject(new Error("File copy failed: " + err2.message));
-                    }
-
-                    pendingDownloadUrl = null;
-                    pendingVersion = null;
-                    resolve(true);
-                });
+                pendingDownloadUrl = null;
+                pendingVersion = null;
+                resolve(true);
             });
         });
     } finally {
@@ -123,5 +130,5 @@ async function applyUpdates(): Promise<boolean> {
 ipcMain.handle(IpcEvents.GET_REPO, serializeErrors(() => REPO_URL));
 ipcMain.handle(IpcEvents.GET_UPDATES, serializeErrors(getUpdates));
 ipcMain.handle(IpcEvents.UPDATE, serializeErrors(fetchUpdates));
-ipcMain.handle(IpcEvents.BUILD, serializeErrors(applyUpdates));
-
+// BUILD is now "stage update" — actual file swap happens on next startup via guncord-index.js
+ipcMain.handle(IpcEvents.BUILD, serializeErrors(stageUpdate));

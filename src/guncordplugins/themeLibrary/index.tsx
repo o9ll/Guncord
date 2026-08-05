@@ -27,6 +27,7 @@ export default definePlugin({
     },
 
     start() {
+        console.log("ThemeLibrary start, SettingsPlugin is:", SettingsPlugin, "Keys:", SettingsPlugin ? Object.keys(SettingsPlugin) : []);
         SettingsPlugin.customEntries.push({
             key: "equicord_theme_library",
             title: "Library",

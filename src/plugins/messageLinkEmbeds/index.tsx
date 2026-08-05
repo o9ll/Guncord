@@ -20,9 +20,7 @@ import { addMessageAccessory, removeMessageAccessory } from "@api/MessageAccesso
 import { updateMessage } from "@api/MessageUpdater";
 import { definePluginSettings } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
-import { BaseText } from "@components/BaseText";
 import { Devs } from "@utils/constants.js";
-import { classes } from "@utils/misc";
 import { Queue } from "@utils/Queue";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel, Message } from "@vencord/discord-types";
@@ -38,6 +36,7 @@ import {
     PermissionsBits,
     PermissionStore,
     RestAPI,
+    Text,
     UserStore
 } from "@webpack/common";
 import { ComponentType, JSX } from "react";
@@ -51,7 +50,6 @@ const Embed = findComponentLazy(m => m.prototype?.renderSuppressButton);
 const ChannelMessage = findComponentByCodeLazy("childrenExecutedCommand:", ".hideAccessories");
 let AutoModEmbed: ComponentType<any> = () => null;
 
-const SearchResultClasses = findCssClassesLazy("message", "searchResult");
 const EmbedClasses = findCssClassesLazy("embedAuthorIcon", "embedAuthor", "embedAuthor", "embedMargin");
 
 const MessageDisplayCompact = getUserSettingLazy("textAndImages", "messageDisplayCompact")!;
@@ -113,6 +111,7 @@ const settings = definePluginSettings({
         ]
     },
     idList: {
+        displayName: "ID List",
         description: "Guild/channel/user IDs to blacklist or whitelist (separate with comma)",
         type: OptionType.STRING,
         default: "",
@@ -294,15 +293,20 @@ function ChannelMessageEmbedAccessory({ message, channel }: MessageEmbedProps): 
                 rawDescription: "",
                 color: "var(--background-base-lower)",
                 author: {
-                    name: <BaseText size="xs" weight="medium" tag="span">
+                    name: <Text variant="text-xs/medium" tag="span">
                         <span>{channelLabel} - </span>
                         {Parser.parse(channel.isDM() ? `<@${dmReceiver.id}>` : `<#${channel.id}>`)}
-                    </BaseText>,
+                    </Text>,
                     iconProxyURL: iconUrl
                 }
             }}
             renderDescription={() => (
-                <div key={message.id} className={classes(SearchResultClasses.message, settings.store.messageBackgroundColor && SearchResultClasses.searchResult)}>
+                <div key={message.id} style={!settings.store.messageBackgroundColor ? undefined : {
+                    backgroundColor: "var(--background-base-lower)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "8px",
+                    paddingBottom: "8px",
+                }}>
                     <ChannelMessage
                         id={`message-link-embeds-${message.id}`}
                         message={message}
@@ -327,7 +331,7 @@ function AutomodEmbedAccessory(props: MessageEmbedProps): JSX.Element | null {
     return <AutoModEmbed
         channel={channel}
         childrenAccessories={
-            <BaseText size="xs" weight="medium" color="text-muted" tag="span" className={`${EmbedClasses.embedAuthor} ${EmbedClasses.embedMargin}`}>
+            <Text color="text-muted" variant="text-xs/medium" tag="span" className={`${EmbedClasses.embedAuthor} ${EmbedClasses.embedMargin}`}>
                 {iconUrl && <img src={iconUrl} className={EmbedClasses.embedAuthorIcon} alt="" />}
                 <span>
                     <span>{channelLabel} - </span>
@@ -336,7 +340,7 @@ function AutomodEmbedAccessory(props: MessageEmbedProps): JSX.Element | null {
                         : Parser.parse(`<#${channel.id}>`)
                     }
                 </span>
-            </BaseText>
+            </Text>
         }
         compact={compact}
         content={
@@ -399,6 +403,7 @@ export default definePlugin({
             );
         }, 4 /* just above rich embeds */);
     },
+
     stop() {
         removeMessageAccessory("MessageLinkEmbeds");
     }

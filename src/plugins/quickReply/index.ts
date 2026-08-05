@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Vencord, a modification for Discord's desktop app
  * Copyright (c) 2022 Vendicated and contributors
  *
@@ -18,6 +18,7 @@
 
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
+import NoBlockedMessagesPlugin from "@plugins/noBlockedMessages";
 import NoReplyMentionPlugin from "@plugins/noReplyMention";
 import { Devs, IS_MAC } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
@@ -135,14 +136,14 @@ function getNextMessage(isUp: boolean, isReply: boolean) {
     let messages: Message[] = MessageStore.getMessages(SelectedChannelStore.getChannelId())._array;
 
     const meId = UserStore.getCurrentUser().id;
-    const hasNoBlockedMessages = false;
+    const hasNoBlockedMessages = isPluginEnabled(NoBlockedMessagesPlugin.name);
 
     messages = messages.filter(m => {
         if (m.deleted) return false;
         if (!isReply && m.author.id !== meId) return false; // editing only own messages
         if (!MessageTypeSets.REPLYABLE.has(m.type) || m.hasFlag(MessageFlags.EPHEMERAL)) return false;
         if (settings.store.ignoreBlockedAndIgnored && RelationshipStore.isBlockedOrIgnored(m.author.id)) return false;
-        if (hasNoBlockedMessages) return false;
+        if (hasNoBlockedMessages && NoBlockedMessagesPlugin.shouldIgnoreMessage(m)) return false;
 
         return true;
     });

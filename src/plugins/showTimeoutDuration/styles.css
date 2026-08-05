@@ -1,8 +1,6 @@
 .vc-std-wrapper {
     display: flex;
     align-items: center;
-    width: max-content;
-    max-width: 100%;
 }
 
 .vc-std-wrapper [class*="communicationDisabled"] {

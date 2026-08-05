@@ -16,7 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { BaseText } from "@components/BaseText";
 import { Auth } from "@plugins/reviewDB/auth";
 import { ReviewType } from "@plugins/reviewDB/entities";
 import { REVIEWS_PER_PAGE, UserReviewsData } from "@plugins/reviewDB/reviewDbApi";
@@ -24,7 +23,7 @@ import { cl } from "@plugins/reviewDB/utils";
 import { useForceUpdater } from "@utils/react";
 import * as t from "@vencord/discord-types";
 import { DefaultExtractAndLoadChunksRegex, extractAndLoadChunksLazy, findComponentByCodeLazy } from "@webpack";
-import { Modal, openModalLazy, useRef, useState } from "@webpack/common";
+import { Modal,openModalLazy, Text, useRef, useState } from "@webpack/common";
 import { ComponentProps } from "react";
 
 import ReviewComponent from "./ReviewComponent";
@@ -49,10 +48,10 @@ function ReviewsModal({ modalProps, modalKey, discordId, name, type }: { modalPr
             {...modalProps}
             size="lg"
             title={
-                <BaseText size="lg" weight="semibold" className={cl("modal-header")}>
+                <Text variant="heading-lg/semibold" className={cl("modal-header")}>
                     {name}'s Reviews
                     {!!reviewCount && <span> ({reviewCount} Reviews)</span>}
-                </BaseText>
+                </Text>
             }
             preview={
                 <div className={cl("modal-footer")}>

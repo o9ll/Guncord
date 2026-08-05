@@ -5,20 +5,29 @@ import fixWebmDuration from "fix-webm-duration";
 export interface RecordingOptions {
     mode: "voice" | "video";
     videoQuality?: string;
+    videoFormat?: string;
+    audioFormat?: string;
     maxStorageGB: number;
     shadowplayMinutes: number;
     autoSave: boolean;
     savePath: string;
+    showSaveToast?: boolean;
 }
 
+let activeOpts: RecordingOptions | null = null;
+
 let isRecording = false;
+let isStopping = false;  // guard against concurrent stopRecording calls
 let mediaRecorder: MediaRecorder | null = null;
 let recordCtx: AudioContext | null = null;
 let recordDest: MediaStreamAudioDestinationNode | null = null;
 let micStream: MediaStream | null = null;
 let systemStream: MediaStream | null = null;
 
+let currentFilename: string = "";
+let isStreamMode = false;
 let recordedChunks: Blob[] = [];
+let pendingChunkPromises: Promise<any>[] = [];
 const CHUNK_TIME_MS = 5000;
 let startTimeMs = 0;
 let memoryCheckInterval: any;
@@ -34,11 +43,27 @@ export function isCurrentlyRecording(): boolean {
 
 export async function startRecording(opts: RecordingOptions): Promise<boolean> {
     if (isRecording) return false;
-    
+    activeOpts = opts;
+    isStopping = false;
+
     try {
         recordedChunks = [];
+        pendingChunkPromises = [];
         startTimeMs = Date.now();
-        
+
+        const ext = opts.mode === "video"
+            ? (opts.videoFormat === "mkv" ? "mkv" : "webm")
+            : (opts.audioFormat === "ogg" ? "ogg" : "webm");
+        const dateStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        currentFilename = `AutoCall_${dateStr}.${ext}`;
+
+        const native = (window as any).VencordNative?.pluginHelpers?.AutoCallRecorder;
+        if (native?.initStreamRecording && native?.appendRecordingChunk && native?.finalizeStreamRecording) {
+            isStreamMode = await native.initStreamRecording(currentFilename);
+        } else {
+            isStreamMode = false;
+        }
+
         const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
         recordCtx = new AudioCtxClass();
         recordDest = recordCtx.createMediaStreamDestination();
@@ -54,7 +79,7 @@ export async function startRecording(opts: RecordingOptions): Promise<boolean> {
                 capturedMic = true;
             }
         } catch (e) {
-            console.warn("[AutoCallRecorder] Impossible de capturer le micro local:", e);
+            console.warn("[AutoCallRecorder] Local mic capture failed:", e);
         }
 
         try {
@@ -80,7 +105,7 @@ export async function startRecording(opts: RecordingOptions): Promise<boolean> {
                     let minWidth = 1280;
                     let minHeight = 720;
                     let maxFrameRate = 30;
-                    
+
                     if (opts.videoQuality === "1080p60") {
                         minWidth = 1920;
                         minHeight = 1080;
@@ -117,14 +142,19 @@ export async function startRecording(opts: RecordingOptions): Promise<boolean> {
                     const systemSource = recordCtx.createMediaStreamSource(sysAudioStream);
                     systemSource.connect(recordDest);
                     capturedSystem = true;
+
+                    // Immediately stop video capture pipeline in voice-only mode to prevent GPU/CPU overhead
+                    if (opts.mode === "voice") {
+                        systemStream.getVideoTracks().forEach(t => t.stop());
+                    }
                 }
             }
         } catch (e) {
-            console.warn("[AutoCallRecorder] Échec du Desktop Loopback:", e);
+            console.warn("[AutoCallRecorder] Desktop loopback capture failed:", e);
         }
 
         if (!capturedMic && !capturedSystem) {
-            throw new Error("Aucune source audio capturée.");
+            throw new Error("No audio source captured.");
         }
 
         let finalStream = recordDest.stream;
@@ -135,24 +165,61 @@ export async function startRecording(opts: RecordingOptions): Promise<boolean> {
             ]);
         }
 
-        const mimeType = (opts.mode === "video") 
-            ? "video/webm;codecs=vp8,opus" 
-            : (MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm");
+        let videoBitsPerSecond: number | undefined;
+        let mimeType = "audio/webm";
 
-        mediaRecorder = new MediaRecorder(finalStream, { mimeType });
+        if (opts.mode === "video") {
+            if (opts.videoQuality === "1080p60") videoBitsPerSecond = 8000000;
+            else if (opts.videoQuality === "720p30") videoBitsPerSecond = 3000000;
+            else if (opts.videoQuality === "480p25") videoBitsPerSecond = 1500000;
 
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) {
+            if (opts.videoFormat === "mkv") {
+                mimeType = "video/x-matroska;codecs=avc1,opus";
+                if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "video/webm;codecs=vp8,opus";
+            } else {
+                mimeType = "video/webm;codecs=vp8,opus";
+            }
+        } else {
+            if (opts.audioFormat === "webm") {
+                mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+            } else {
+                if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) mimeType = "audio/ogg;codecs=opus";
+                else if (MediaRecorder.isTypeSupported("audio/ogg")) mimeType = "audio/ogg";
+                else mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+            }
+        }
+
+        const recorderOptions: any = { mimeType };
+        if (videoBitsPerSecond) {
+            recorderOptions.videoBitsPerSecond = videoBitsPerSecond;
+        }
+
+        mediaRecorder = new MediaRecorder(finalStream, recorderOptions);
+
+        mediaRecorder.ondataavailable = e => {
+            if (!e.data || e.data.size === 0) return;
+
+            if (isStreamMode && native?.appendRecordingChunk) {
+                const p = (async () => {
+                    try {
+                        const buf = await e.data.arrayBuffer();
+                        await native.appendRecordingChunk(new Uint8Array(buf));
+                    } catch (err) {
+                        console.error("[AutoCallRecorder] Stream chunk append failed:", err);
+                    }
+                })();
+                pendingChunkPromises.push(p);
+            } else {
                 recordedChunks.push(e.data);
             }
         };
 
         mediaRecorder.start(CHUNK_TIME_MS);
         isRecording = true;
-        
+
         memoryCheckInterval = setInterval(() => {
-            if (!isRecording) return;
-            
+            if (!isRecording || isStreamMode) return;
+
             if (opts.maxStorageGB > 0) {
                 const maxBytes = opts.maxStorageGB * 1024 * 1024 * 1024;
                 let currentBytes = recordedChunks.reduce((acc, chunk) => acc + chunk.size, 0);
@@ -172,33 +239,51 @@ export async function startRecording(opts: RecordingOptions): Promise<boolean> {
 
         return true;
     } catch (e) {
-        console.error(e);
+        console.error("[AutoCallRecorder] Failed to start recording:", e);
         cleanup();
         return false;
     }
 }
 
-export function stopRecording(opts: RecordingOptions): Promise<void> {
-    return new Promise((resolve) => {
-        if (!isRecording || !mediaRecorder) {
+export function stopRecording(): Promise<void> {
+    return new Promise(resolve => {
+        // Guard against concurrent calls (e.g. updateUI + VOICE_CHANNEL_SELECT firing simultaneously)
+        if (isStopping) { resolve(); return; }
+
+        const opts = activeOpts;
+        if (!isRecording || !mediaRecorder || !opts) {
             cleanup();
             resolve();
             return;
         }
 
+        isStopping = true;
         const durationSecs = (Date.now() - startTimeMs) / 1000;
-        const shouldSave = durationSecs >= 10; 
+        const shouldSave = durationSecs >= 2;
+        const mimeType = mediaRecorder.mimeType || "audio/webm";
 
         mediaRecorder.onstop = async () => {
-            if (shouldSave && recordedChunks.length > 0) {
-                const blob = new Blob(recordedChunks, { type: mediaRecorder?.mimeType || "audio/webm" });
-                try {
-                    const durationMs = Date.now() - startTimeMs;
-                    const fixedBlob = await fixWebmDuration(blob, durationMs);
-                    saveBlob(fixedBlob, opts);
-                } catch (e) {
-                    console.error("Failed to fix WebM duration:", e);
-                    saveBlob(blob, opts); // fallback to unfixed
+            // Wait for ALL pending stream-chunk writes to finish,
+            // including the final chunk triggered by requestData() just before stop().
+            if (pendingChunkPromises.length > 0) {
+                await Promise.allSettled(pendingChunkPromises);
+                pendingChunkPromises = [];
+            }
+
+            if (shouldSave) {
+                const native = (window as any).VencordNative?.pluginHelpers?.AutoCallRecorder;
+                if (isStreamMode && native?.finalizeStreamRecording) {
+                    try {
+                        const ok = await native.finalizeStreamRecording(opts.savePath, currentFilename);
+                        if (ok && opts.showSaveToast !== false) {
+                            Toasts.show(Toasts.create(t("Save record"), Toasts.Type.SUCCESS));
+                        }
+                    } catch (e) {
+                        console.error("[AutoCallRecorder] Finalize stream failed:", e);
+                    }
+                } else if (recordedChunks.length > 0) {
+                    const blob = new Blob(recordedChunks, { type: mimeType });
+                    saveBlobFallback(blob, opts, currentFilename);
                 }
             }
             cleanup();
@@ -207,13 +292,16 @@ export function stopRecording(opts: RecordingOptions): Promise<void> {
 
         try {
             if (mediaRecorder.state !== "inactive") {
+                // requestData() flushes the last partial chunk → triggers ondataavailable
+                // BEFORE onstop fires, so the chunk will be in pendingChunkPromises
+                // when Promise.allSettled runs inside onstop.
                 mediaRecorder.requestData();
                 mediaRecorder.stop();
             } else {
                 cleanup();
                 resolve();
             }
-        } catch(e) {
+        } catch (e) {
             cleanup();
             resolve();
         }
@@ -222,6 +310,8 @@ export function stopRecording(opts: RecordingOptions): Promise<void> {
 
 function cleanup() {
     isRecording = false;
+    isStopping = false;
+    isStreamMode = false;
     clearInterval(memoryCheckInterval);
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
     if (systemStream) { systemStream.getTracks().forEach(t => t.stop()); systemStream = null; }
@@ -229,51 +319,57 @@ function cleanup() {
     recordDest = null;
     mediaRecorder = null;
     recordedChunks = [];
+    pendingChunkPromises = [];
+    activeOpts = null;
 }
 
-async function saveBlob(blob: Blob, opts: RecordingOptions) {
-    const ext = blob.type.includes("video") ? "webm" : "ogg";
-    const dateStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const filename = `AutoCall_${dateStr}.${ext}`;
-    
-    const native = (window as any).VencordNative?.pluginHelpers?.AutoCallRecorder;
+async function saveBlobFallback(blob: Blob, opts: RecordingOptions, filename: string) {
+    const notifySuccess = () => {
+        if (opts.showSaveToast !== false) {
+            Toasts.show(Toasts.create(t("Save record"), Toasts.Type.SUCCESS));
+        }
+    };
 
-    if (native?.saveRecording && native?.promptSaveRecording) {
+    // Only apply fixWebmDuration on smaller blobs to avoid thread lockups/OOM
+    let finalBlob = blob;
+    if (blob.size < 30 * 1024 * 1024) {
         try {
-            const arrayBuffer = await blob.arrayBuffer();
+            const durationMs = Date.now() - startTimeMs;
+            finalBlob = await fixWebmDuration(blob, durationMs);
+        } catch { }
+    }
+
+    const native = (window as any).VencordNative?.pluginHelpers?.AutoCallRecorder;
+    if (native?.saveRecording) {
+        try {
+            const arrayBuffer = await finalBlob.arrayBuffer();
             const uint8Array = new Uint8Array(arrayBuffer);
-            
-            if (!opts.autoSave) {
+            if (!opts.autoSave && native?.promptSaveRecording) {
                 const success = await native.promptSaveRecording(uint8Array, filename);
-                if (success) {
-                    Toasts.show(Toasts.create(t("Save record"), Toasts.Type.SUCCESS));
-                }
+                if (success) notifySuccess();
                 return;
-            } else if (opts.savePath) {
+            } else {
                 const success = await native.saveRecording(uint8Array, opts.savePath, filename);
-                if (success) {
-                    Toasts.show(Toasts.create(t("Save record"), Toasts.Type.SUCCESS));
-                }
+                if (success) notifySuccess();
                 return;
             }
         } catch (e) {
-            console.error("Native save failed", e);
+            console.error("Native fallback save failed", e);
         }
     }
 
-    // Fallback standard
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(finalBlob);
     const a = document.createElement("a");
     a.style.display = "none";
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    
+
     setTimeout(() => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }, 1000);
 
-    Toasts.show(Toasts.create(t("Save record"), Toasts.Type.SUCCESS));
+    notifySuccess();
 }

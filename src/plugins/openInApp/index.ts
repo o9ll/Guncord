@@ -25,6 +25,7 @@ import type { MouseEvent } from "react";
 interface URLReplacementRule {
     match: RegExp;
     replace: (...matches: string[]) => string;
+    displayName?: string;
     description: string;
     shortlinkMatch?: RegExp;
     accountViewReplace?: (userId: string) => string;
@@ -59,19 +60,16 @@ const UrlReplacementRules: Record<string, URLReplacementRule> = {
     itunes: {
         match: /^https:\/\/(?:geo\.)?music\.apple\.com\/([a-z]{2}\/)?(album|artist|playlist|song|curator)\/([^/?#]+)\/?([^/?#]+)?(?:\?.*)?(?:#.*)?$/,
         replace: (_, lang, type, name, id) => id ? `itunes://music.apple.com/us/${type}/${name}/${id}` : `itunes://music.apple.com/us/${type}/${name}`,
+        displayName: "iTunes",
         description: "Open Apple Music links in the iTunes app"
     },
-    vrcx: {
-        match: /^https:\/\/vrchat.com\/home\/(user|avatar|world|group)\/(.+)$/,
-        replace: (_, type, id) => `vrcx://${type}/${id}`,
-        description: "Open VRChat links in the VRCX app"
-    }
 };
 
 const pluginSettings = definePluginSettings(
     Object.entries(UrlReplacementRules).reduce((acc, [key, rule]) => {
         acc[key] = {
             type: OptionType.BOOLEAN,
+            displayName: rule.displayName,
             description: rule.description,
             default: true,
         };

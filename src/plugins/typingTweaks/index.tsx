@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Vencord, a modification for Discord's desktop app
  * Copyright (c) 2023 Vendicated and contributors
  *
@@ -16,10 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { definePluginSettings, migratePluginToSettings, Settings } from "@api/Settings";
+import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { getCustomColorString } from "@plugins/customUserColors";
-import { Devs, EquicordDevs } from "@utils/constants";
+import { Devs } from "@utils/constants";
+import { classNameFactory } from "@utils/css";
 import { openUserProfile } from "@utils/discord";
 import { isNonNullish } from "@utils/guards";
 import { Logger } from "@utils/Logger";
@@ -30,6 +30,7 @@ import { PropsWithChildren } from "react";
 
 import managedStyle from "./style.css?managed";
 
+const cl = classNameFactory("vc-typing-tweaks-");
 const settings = definePluginSettings({
     showAvatars: {
         type: OptionType.BOOLEAN,
@@ -45,12 +46,6 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: true,
         description: "Show a more useful message when several users are typing"
-    },
-    amITyping: {
-        type: OptionType.BOOLEAN,
-        default: false,
-        restartNeeded: true,
-        description: "Shows you if other people can see you typing"
     }
 });
 
@@ -73,31 +68,21 @@ interface TypingUserProps {
     guildId: string;
 }
 
-function typingUserColor(guildId: string, userId: string): string | undefined {
-    if (!settings.store.showRoleColors) return;
-
-    if (Settings.plugins.CustomUserColors.enabled) {
-        const customColor = getCustomColorString(userId, true);
-        if (customColor) return customColor;
-    }
-
-    return GuildMemberStore.getMember(guildId, userId)?.colorString;
-}
-
 const TypingUser = ErrorBoundary.wrap(function TypingUser({ user, guildId }: TypingUserProps) {
     return (
         <strong
-            className="vc-typing-user"
+            className={cl("user")}
             role="button"
             onClick={() => {
                 openUserProfile(user.id);
             }}
             style={{
-                color: settings.store.showRoleColors ? typingUserColor(guildId, user.id) : undefined,
+                color: settings.store.showRoleColors ? GuildMemberStore.getMember(guildId, user.id)?.colorString : undefined,
             }}
         >
             {settings.store.showAvatars && (
                 <Avatar
+                    className={cl("avatar")}
                     size="SIZE_16"
                     src={user.getAvatarURL(guildId, 128)} />
             )}
@@ -110,14 +95,12 @@ const TypingUser = ErrorBoundary.wrap(function TypingUser({ user, guildId }: Typ
     );
 }, { noop: true });
 
-migratePluginToSettings(true, "TypingTweaks", "AmITyping", "amITyping");
 export default definePlugin({
     name: "TypingTweaks",
     description: "Show avatars and role colours in the typing indicator",
     tags: ["Appearance", "Customisation"],
-    authors: [Devs.zt, Devs.sadan, EquicordDevs.MrDiamond],
+    authors: [Devs.zt, Devs.sadan],
     settings,
-    isModified: true,
 
     managedStyle,
 
@@ -128,7 +111,7 @@ export default definePlugin({
             replacement: [
                 {
                     // Style the indicator and add function call to modify the children before rendering
-                    match: /(?<="aria-atomic":!0,children:)\i/,
+                    match: /(?<="aria-hidden":!0,children:)\i/,
                     replace: "$self.renderTypingUsers({ users: arguments[0]?.typingUserObjects, guildId: arguments[0]?.channel?.guild_id, children: $& })"
                 },
                 {
@@ -149,14 +132,6 @@ export default definePlugin({
                     predicate: () => settings.store.alternativeFormatting
                 }
             ]
-        },
-        {
-            find: "this.handleDismissInviteEducation",
-            predicate: () => settings.store.amITyping,
-            replacement: {
-                match: /\i\.default\.getCurrentUser\(\)/,
-                replace: "\"\""
-            }
         }
     ],
 
@@ -170,11 +145,7 @@ export default definePlugin({
             const myId = useStateFromStores([AuthenticationStore], () => AuthenticationStore.getId());
 
             return Object.keys(typingUsers)
-                .filter(id => {
-                    if (!id || RelationshipStore.isBlockedOrIgnored(id)) return false;
-                    if (id === myId) return settings.store.amITyping;
-                    return true;
-                })
+                .filter(id => id && id !== myId && !RelationshipStore.isBlockedOrIgnored(id))
                 .map(id => UserStore.getUser(id))
                 .filter(isNonNullish);
         } catch (e) {
@@ -194,8 +165,7 @@ export default definePlugin({
             let element = 0;
 
             return children.map(c => {
-                if (c.type !== "strong" && !(typeof c !== "string" && !React.isValidElement(c)))
-                    return c;
+                if (c.type !== "strong" && !(typeof c !== "string" && !React.isValidElement(c))) return c;
 
                 const user = users[element++];
                 return <TypingUser key={user.id} guildId={guildId} user={user} />;

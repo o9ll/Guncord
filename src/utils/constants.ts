@@ -16,6 +16,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+export const DEV_GITHUB = "https://github.com/Vendicated/Vencord";
+
+export const VENCORD_GUILD_ID = "1015060230222131221";
+export const REGULAR_ROLE_ID = "1026504932959977532";
+export const SUPPORT_CATEGORY_ID = "1108135649699180705";
+export const KNOWN_ISSUES_CHANNEL_ID = "1257025907625951423";
+
+// we love to hardcode urls
 export const REACT_GLOBAL = "Vencord.Webpack.Common.React";
 
 // Equicord

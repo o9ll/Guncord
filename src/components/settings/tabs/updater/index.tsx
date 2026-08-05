@@ -19,7 +19,7 @@ import { changes, checkForUpdates, rebuild, update, UpdateLogger } from "@utils/
 import { React, useState } from "@webpack/common";
 import { Toasts } from "@webpack/common";
 import { t } from "@api/i18n";
-// Version locale depuis package.json (injectée au build)
+// Local version from package.json (injected during build)
 declare const VERSION: string;
 
 function UpdaterTab() {
@@ -170,4 +170,3 @@ function UpdaterTab() {
 }
 
 export default wrapTab(UpdaterTab, "Updater");
-

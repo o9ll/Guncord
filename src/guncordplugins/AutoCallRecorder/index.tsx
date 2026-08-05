@@ -58,7 +58,7 @@ const SavePathSelector = (props: IPluginOptionComponentProps) => {
     return (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <div style={{ flex: 1 }}>
-                <TextInput 
+                <TextInput
                     value={settings.store.savePath || ""}
                     placeholder={t("Save directory path (Leave empty for default Downloads)")}
                     onChange={(v: string) => props.setValue(v)}
@@ -107,6 +107,22 @@ const settings = definePluginSettings({
             { label: "480p 25fps", value: "480p25" }
         ]
     },
+    videoFormat: {
+        type: OptionType.SELECT,
+        description: t("Video Format"),
+        options: [
+            { label: "WebM", value: "webm", default: true },
+            { label: "MKV", value: "mkv" }
+        ]
+    },
+    audioFormat: {
+        type: OptionType.SELECT,
+        description: t("Audio Format"),
+        options: [
+            { label: "OGG", value: "ogg", default: true },
+            { label: "WebM", value: "webm" }
+        ]
+    },
     blacklist: {
         type: OptionType.COMPONENT,
         component: BlacklistSelector,
@@ -136,6 +152,11 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: t("Show Times (Visual indicator)"),
         default: true
+    },
+    showSaveToast: {
+        type: OptionType.BOOLEAN,
+        description: t("Show Save Notification"),
+        default: true
     }
 });
 
@@ -150,21 +171,43 @@ function formatTime(ms: number) {
 }
 
 function updateUI() {
-    if (!settings.store.showTimes) return;
-
-    const titleH1 = document.querySelector('div[class*="titleWrapper_"] > h1') || document.querySelector('div[class*="children_"]');
-    if (!titleH1) return;
-
-    let indicator = document.getElementById("autocall-indicator");
-    
+    // Failsafe: if we are recording but have no active channel, stop immediately
     if (isCurrentlyRecording()) {
+        const activeChannelId = SelectedChannelStore?.getVoiceChannelId?.();
+        if (!activeChannelId) {
+            stopRecording();
+            lastChannelId = null;
+        }
+    }
+
+    if (!settings.store.showTimes) {
+        const indicator = document.getElementById("autocall-indicator");
+        if (indicator) indicator.remove();
+        return;
+    }
+
+    if (isCurrentlyRecording()) {
+        const titleH1 = document.querySelector('div[class*="titleWrapper_"] > h1') || document.querySelector('div[class*="children_"]');
+        if (!titleH1) return;
+
+        let indicator = document.getElementById("autocall-indicator");
         if (!indicator) {
             indicator = document.createElement("div");
             indicator.id = "autocall-indicator";
             titleH1.appendChild(indicator);
         }
-        indicator.innerHTML = `<div class="autocall-dot"></div> <span class="autocall-time">${formatTime(getRecordingDurationMs())}</span>`;
+
+        let timeSpan = indicator.querySelector('.autocall-time');
+        if (!timeSpan) {
+            indicator.innerHTML = `<span class="autocall-time"></span>`;
+            timeSpan = indicator.querySelector('.autocall-time');
+        }
+
+        if (timeSpan) {
+            timeSpan.textContent = formatTime(getRecordingDurationMs());
+        }
     } else {
+        const indicator = document.getElementById("autocall-indicator");
         if (indicator) {
             indicator.remove();
         }
@@ -180,20 +223,22 @@ function isBlacklistedUserInChannel(channelId: string): boolean {
 
 async function handleVoiceStateUpdates(e: any) {
     if (!isCurrentlyRecording() || !lastChannelId) return;
-    
+
     const updates = Array.isArray(e.voiceStates) ? e.voiceStates : (e.voiceState ? [e.voiceState] : []);
     for (const update of updates) {
+        // Detect if current user disconnects
+        if (update.userId === UserStore?.getCurrentUser?.()?.id) {
+            if (!update.channelId) {
+                await stopRecording();
+                lastChannelId = null;
+                return;
+            }
+        }
+
         if (update.channelId === lastChannelId) {
             if (isBlacklistedUserInChannel(lastChannelId)) {
                 Toasts.show(Toasts.create(t("Blacklisted user in channel."), Toasts.Type.WARNING));
-                await stopRecording({
-                    mode: settings.store.mode as any,
-                    videoQuality: settings.store.videoQuality as any,
-                    maxStorageGB: settings.store.maxStorage,
-                    shadowplayMinutes: settings.store.shadowplayMinutes,
-                    autoSave: settings.store.autoSave,
-                    savePath: settings.store.savePath
-                });
+                await stopRecording();
                 break;
             }
         }
@@ -204,14 +249,7 @@ async function handleVoiceChannelSelect(e: any) {
     const newChannelId = e.channelId;
 
     if (lastChannelId && lastChannelId !== newChannelId) {
-        await stopRecording({
-            mode: settings.store.mode as any,
-            videoQuality: settings.store.videoQuality as any,
-            maxStorageGB: settings.store.maxStorage,
-            shadowplayMinutes: settings.store.shadowplayMinutes,
-            autoSave: settings.store.autoSave,
-            savePath: settings.store.savePath
-        });
+        await stopRecording();
     }
 
     if (newChannelId && lastChannelId !== newChannelId) {
@@ -221,10 +259,13 @@ async function handleVoiceChannelSelect(e: any) {
             await startRecording({
                 mode: settings.store.mode as any,
                 videoQuality: settings.store.videoQuality as any,
+                videoFormat: settings.store.videoFormat as any,
+                audioFormat: settings.store.audioFormat as any,
                 maxStorageGB: settings.store.maxStorage,
                 shadowplayMinutes: settings.store.shadowplayMinutes,
                 autoSave: settings.store.autoSave,
-                savePath: settings.store.savePath
+                savePath: settings.store.savePath,
+                showSaveToast: settings.store.showSaveToast
             });
         }
     }
@@ -235,10 +276,10 @@ async function handleVoiceChannelSelect(e: any) {
 export default definePlugin({
     name: "AutoCallRecorder",
     description: "Automatically records your voice calls when you join them, with advanced limits and shadowplay buffering.",
-    authors: [{ name: "Guncord", id: 0n }],
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
     enabledByDefault: false,
     settings,
-    
+
     start() {
         lastChannelId = SelectedChannelStore?.getVoiceChannelId?.();
         if (lastChannelId) {
@@ -248,10 +289,13 @@ export default definePlugin({
                 startRecording({
                     mode: settings.store.mode as any,
                     videoQuality: settings.store.videoQuality as any,
+                    videoFormat: settings.store.videoFormat as any,
+                    audioFormat: settings.store.audioFormat as any,
                     maxStorageGB: settings.store.maxStorage,
                     shadowplayMinutes: settings.store.shadowplayMinutes,
                     autoSave: settings.store.autoSave,
-                    savePath: settings.store.savePath
+                    savePath: settings.store.savePath,
+                    showSaveToast: settings.store.showSaveToast
                 });
             }
         }
@@ -265,18 +309,11 @@ export default definePlugin({
         FluxDispatcher.unsubscribe("VOICE_CHANNEL_SELECT", handleVoiceChannelSelect);
         FluxDispatcher.unsubscribe("VOICE_STATE_UPDATES", handleVoiceStateUpdates);
         clearInterval(domUpdateInterval);
-        
+
         if (isCurrentlyRecording()) {
-            stopRecording({
-                mode: settings.store.mode as any,
-                videoQuality: settings.store.videoQuality as any,
-                maxStorageGB: settings.store.maxStorage,
-                shadowplayMinutes: settings.store.shadowplayMinutes,
-                autoSave: settings.store.autoSave,
-                savePath: settings.store.savePath
-            });
+            stopRecording();
         }
-        
+
         const indicator = document.getElementById("autocall-indicator");
         if (indicator) indicator.remove();
     }

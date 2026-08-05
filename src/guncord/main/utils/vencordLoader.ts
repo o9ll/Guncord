@@ -10,6 +10,7 @@ import { join } from "path";
 import { USER_AGENT } from "../constants";
 import { VENCORD_DIR } from "../vencordDir";
 import { downloadFile, fetchie } from "./http";
+
 const API_BASE = "https://api.github.com";
 
 export interface ReleaseData {
@@ -51,4 +52,3 @@ export async function ensureVencordFiles() {
         console.error("Bundled guncord.asar not found at", VENCORD_DIR);
     }
 }
-

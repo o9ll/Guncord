@@ -26,16 +26,15 @@ import { HeadingSecondary } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import { Span } from "@components/Span";
 import { TooltipContainer } from "@components/TooltipContainer";
-import { Devs, EquicordDevs } from "@utils/constants";
-import { classNameFactory } from "@utils/index";
+import { Devs } from "@utils/constants";
+import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { Message } from "@vencord/discord-types";
-import { React, Select, TextInput, UserStore, useState } from "@webpack/common";
+import { React, TextInput, useState } from "@webpack/common";
 
 const cl = classNameFactory("vc-textReplace-");
 
-type Rule = Record<"find" | "replace" | "onlyIfIncludes" | "scope" | "id", string>;
+type Rule = Record<"find" | "replace" | "onlyIfIncludes" | "id", string>;
 
 interface TextReplaceProps {
     title: string;
@@ -48,10 +47,8 @@ const makeEmptyRule: () => Rule = () => ({
     find: "",
     replace: "",
     onlyIfIncludes: "",
-    scope: "myMessages",
     id: crypto.randomUUID()
 });
-
 const makeEmptyRuleArray = () => [makeEmptyRule()];
 
 const settings = definePluginSettings({
@@ -81,12 +78,10 @@ const settings = definePluginSettings({
     stringRules: {
         type: OptionType.CUSTOM,
         default: makeEmptyRuleArray(),
-        description: "Rules for replacing text using string matching."
     },
     regexRules: {
         type: OptionType.CUSTOM,
         default: makeEmptyRuleArray(),
-        description: "Rules for replacing text using regular expressions."
     }
 });
 
@@ -165,19 +160,13 @@ function TextReplace({ title, description, rulesArray, isRegex = false }: TextRe
         }
     }
 
-    const scopeOptions = [
-        { label: "Apply to your messages (visible to everyone)", value: "myMessages" },
-        { label: "Apply to others' messages (only visible to you)", value: "othersMessages" },
-        { label: "Apply to all messages", value: "allMessages" }
-    ];
-
     return (
         <>
             <div>
                 <HeadingSecondary>{title}</HeadingSecondary>
                 <Paragraph>{description}</Paragraph>
             </div>
-            <Flex flexDirection="column" style={{ gap: "0.5em", paddingBottom: "1.25em" }}>
+            <Flex flexDirection="column" style={{ gap: "0.5em" }}>
                 {rulesArray.map((rule, index) =>
                     <ExpandableSection
                         key={rule.id}
@@ -201,14 +190,6 @@ function TextReplace({ title, description, rulesArray, isRegex = false }: TextRe
                                         description="This rule will only be applied if the message includes this text. This is optional"
                                         value={rule.onlyIfIncludes}
                                         onChange={e => onChange(e, index, "onlyIfIncludes")}
-                                    />
-                                </div>
-                                <div style={{ marginTop: "0.25em" }}>
-                                    <Select
-                                        options={scopeOptions}
-                                        isSelected={e => e === rule.scope}
-                                        select={e => onChange(e, index, "scope")}
-                                        serialize={e => e}
                                     />
                                 </div>
                                 {isRegex && renderFindError(rule.find)}
@@ -249,13 +230,13 @@ function TextReplaceTesting() {
             <HeadingSecondary>Rule Tester</HeadingSecondary>
             <Flex flexDirection="column" gap={6}>
                 <TextInput placeholder="Type a message to test rules on" onChange={setValue} />
-                <TextInput placeholder="Message with rules applied" editable={false} value={applyRules(value, "allMessages")} style={{ opacity: 0.7 }} />
+                <TextInput placeholder="Message with rules applied" editable={false} value={applyRules(value)} style={{ opacity: 0.7 }} />
             </Flex>
         </div>
     );
 }
 
-function applyRules(content: string, scope: "myMessages" | "othersMessages" | "allMessages"): string {
+function applyRules(content: string): string {
     if (content.length === 0) {
         return content;
     }
@@ -263,7 +244,6 @@ function applyRules(content: string, scope: "myMessages" | "othersMessages" | "a
     for (const rule of settings.store.stringRules) {
         if (!rule.find) continue;
         if (rule.onlyIfIncludes && !content.includes(rule.onlyIfIncludes)) continue;
-        if (rule.scope !== "allMessages" && rule.scope !== scope && scope !== "allMessages") continue;
 
         content = ` ${content} `.replaceAll(rule.find, rule.replace.replaceAll("\\n", "\n")).replace(/^\s|\s$/g, "");
     }
@@ -271,7 +251,6 @@ function applyRules(content: string, scope: "myMessages" | "othersMessages" | "a
     for (const rule of settings.store.regexRules) {
         if (!rule.find) continue;
         if (rule.onlyIfIncludes && !content.includes(rule.onlyIfIncludes)) continue;
-        if (rule.scope !== "allMessages" && rule.scope !== scope && scope !== "allMessages") continue;
 
         try {
             const regex = stringToRegex(rule.find);
@@ -285,59 +264,24 @@ function applyRules(content: string, scope: "myMessages" | "othersMessages" | "a
     return content;
 }
 
-function modifyIncomingMessage(message: Message) {
-    const currentUser = UserStore.getCurrentUser();
-    const messageAuthor = message.author;
-
-    if (!message.content || !currentUser?.id || !messageAuthor?.id || messageAuthor.id === currentUser.id) {
-        return message.content;
-    }
-
-    return applyRules(message.content, "othersMessages");
-}
-
-const TEXT_REPLACE_RULES_EXEMPT_CHANNEL_IDS = [
-    "1102784112584040479", // Vencord's Text Replace Rules Channel
-    "1419347113745059961", // Equicord's Requests Channel
-];
+const TEXT_REPLACE_RULES_CHANNEL_ID = "1102784112584040479";
 
 export default definePlugin({
     name: "TextReplace",
     description: "Replace text in your messages. You can find pre-made rules in the #textreplace-rules channel in Vencord's Server",
-    dependencies: ["MessagePopoverAPI"],
     tags: ["Chat", "Customisation", "Utility"],
-    authors: [Devs.AutumnVN, Devs.TheKodeToad, EquicordDevs.Etorix],
-    isModified: true,
-    settings,
-    modifyIncomingMessage,
+    authors: [Devs.AutumnVN, Devs.TheKodeToad],
 
-    patches: [
-        {
-            find: "!1,hideSimpleEmbedContent",
-            replacement: {
-                match: /(let{toAST:.{0,125}?)\(\i\?\?\i\).content/,
-                replace: "const textReplaceContent=$self.modifyIncomingMessage(arguments[2]?.contentMessage??arguments[1]);$1textReplaceContent"
-            }
-        },
-    ],
+    settings,
 
     start() {
-        const { stringRules, regexRules } = settings.store;
-
-        stringRules.forEach(rule => {
-            rule.scope ??= "myMessages";
-            rule.id ??= crypto.randomUUID();
-        });
-
-        regexRules.forEach(rule => {
-            rule.scope ??= "myMessages";
-            rule.id ??= crypto.randomUUID();
-        });
+        settings.store.regexRules.forEach(rule => rule.id ??= crypto.randomUUID());
+        settings.store.stringRules.forEach(rule => rule.id ??= crypto.randomUUID());
     },
 
     onBeforeMessageSend(channelId, msg) {
-        // Replacing text in channels used for sharing/requesting rules may be messy.
-        if (TEXT_REPLACE_RULES_EXEMPT_CHANNEL_IDS.includes(channelId)) return;
-        msg.content = applyRules(msg.content, "myMessages");
+        // Channel used for sharing rules, applying rules here would be messy
+        if (channelId === TEXT_REPLACE_RULES_CHANNEL_ID) return;
+        msg.content = applyRules(msg.content);
     }
 });

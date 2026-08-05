@@ -20,15 +20,13 @@ import "./styles.css";
 
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { definePluginSettings } from "@api/Settings";
-import { Heading } from "@components/Heading";
-import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { getTheme, insertTextIntoChatInputBox, Theme } from "@utils/discord";
 import { Margins } from "@utils/margins";
 import definePlugin, { IconComponent, OptionType } from "@utils/types";
 import { RenderModalProps } from "@vencord/discord-types";
-import { Modal, openModal, Parser, Select, useMemo, useState } from "@webpack/common";
+import { Forms, Modal,openModal, Parser, Select, useMemo, useState } from "@webpack/common";
 
 const settings = definePluginSettings({
     replaceMessageContents: {
@@ -90,7 +88,7 @@ function PickerModal(props: RenderModalProps) {
                 }}
             />
 
-            <Heading tag="h5">Timestamp Format</Heading>
+            <Forms.FormTitle>Timestamp Format</Forms.FormTitle>
             <div className={cl("format-select")}>
                 <Select
                     options={
@@ -111,10 +109,10 @@ function PickerModal(props: RenderModalProps) {
                 />
             </div>
 
-            <Heading tag="h5" className={Margins.bottom8}>Preview</Heading>
-            <Paragraph className={cl("preview-text")}>
+            <Forms.FormTitle className={Margins.bottom8}>Preview</Forms.FormTitle>
+            <Forms.FormText className={cl("preview-text")}>
                 {rendered} ({formatted})
-            </Paragraph>
+            </Forms.FormText>
         </Modal>
     );
 }
@@ -155,7 +153,6 @@ const SendTimestampButton: ChatBarButtonFactory = ({ isAnyChat }) => {
 export default definePlugin({
     name: "SendTimestamps",
     description: "Send timestamps easily via chat box button & text shortcuts. Read the extended description!",
-    dependencies: ["ChatInputButtonAPI", "MessagePopoverAPI"],
     tags: ["Chat", "Commands"],
     authors: [Devs.Ven, Devs.Tyler, Devs.Grzesiek11],
     settings,
@@ -183,14 +180,14 @@ export default definePlugin({
 
         return (
             <>
-                <Paragraph>
-                    To quickly send send time only timestamps, include timestamps formatted as `HH:MM` (including the backticks!) in your message
-                </Paragraph>
-                <Paragraph>
+                <Forms.FormText>
+                    To quickly send time only timestamps, include timestamps formatted as `HH:MM` (including the backticks!) in your message
+                </Forms.FormText>
+                <Forms.FormText>
                     See below for examples.
                     If you need anything more specific, use the Date button in the chat bar!
-                </Paragraph>
-                <Paragraph>
+                </Forms.FormText>
+                <Forms.FormText>
                     Examples:
                     <ul>
                         {samples.map(s => (
@@ -199,7 +196,7 @@ export default definePlugin({
                             </li>
                         ))}
                     </ul>
-                </Paragraph>
+                </Forms.FormText>
             </>
         );
     },

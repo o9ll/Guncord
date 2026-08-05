@@ -26,7 +26,7 @@ import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { Channel, User } from "@vencord/discord-types";
 import { findByPropsLazy, findCssClassesLazy } from "@webpack";
-import { Avatar, ChannelStore, Clickable, IconUtils, RelationshipStore, ScrollerThin, useMemo, UserStore } from "@webpack/common";
+import { Avatar, ChannelStore, Clickable, IconUtils, RelationshipStore, ScrollerThin, Text, useMemo, UserStore } from "@webpack/common";
 import { ComponentType, JSX } from "react";
 
 const SelectedChannelActionCreators = findByPropsLazy("selectPrivateChannel");
@@ -76,7 +76,7 @@ function renderClickableGDMs(mutualDms: Channel[], onClose: () => void) {
             </Avatar>
             <div className={MutualsListClasses.details}>
                 <div className={MutualsListClasses.name}>{getGroupDMName(c)}</div>
-                <BaseText size="xs" weight="medium">{c.recipients.length + 1} Members</BaseText>
+                <Text variant="text-xs/medium">{c.recipients.length + 1} Members</Text>
             </div>
         </Clickable>
     ));
@@ -116,7 +116,7 @@ export default definePlugin({
             find: ".WIDGETS?",
             replacement: [
                 {
-                    match: /items:(\i),.+?(?=return\(0,\i\.jsxs?\)\("div)/,
+                    match: /items:(\i),initialSection:\i,onClose:\i\}=\i.+?(?=return\(0,\i\.jsxs?\)\()/,
                     replace: "$&$self.pushSection($1,arguments[0].user);"
                 },
                 {

@@ -8,10 +8,11 @@ import { Settings } from "@api/Settings";
 import definePlugin from "@utils/types";
 import { waitFor } from "@webpack";
 import { React, useEffect, useState } from "@webpack/common";
-// Config
+
+// Config ────────────────────────────────────────────────────────────────────
 const REMOTE_VERSION_URL = "https://api.github.com/repos/o9ll/Guncord/releases/latest";
 
-// Version locale (injectee au build via define)
+// Version locale (injectee au build via define) ─────────────────────────────
 declare const VERSION: string;
 
 function getLocalVersion(): string {

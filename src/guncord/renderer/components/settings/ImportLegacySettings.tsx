@@ -146,7 +146,7 @@ export function ImportLegacySettingsButton({ settings }: { settings: any; }) {
                         background: status === "success" ? "rgba(59,165,93,0.15)" :
                             status === "error" ? "rgba(237,66,69,0.15)" :
                                 "rgba(88,101,242,0.1)",
-                        color: status === "success" ? "#3ba55d" :
+                        color: status === "success" ? "#78c18c" :
                             status === "error" ? "#ed4245" : "#5865f2",
                         marginTop: "4px"
                     }}

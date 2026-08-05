@@ -18,9 +18,8 @@
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
-import { HeadingPrimary, HeadingSecondary } from "@components/Heading";
 import { findByPropsLazy } from "@webpack";
-import { React } from "@webpack/common";
+import { Forms, React } from "@webpack/common";
 
 interface AppStartPerformance {
     prefix: string;
@@ -90,7 +89,7 @@ function TimingSection({ title, logs, traceEnd }: TimingSectionProps) {
 
     return (
         <section>
-            <HeadingPrimary>{title}</HeadingPrimary>
+            <Forms.FormTitle tag="h2">{title}</Forms.FormTitle>
             <code>
                 {traceEnd && (
                     <div style={{ color: "var(--text-strong)", marginBottom: 5, userSelect: "text" }}>
@@ -120,7 +119,7 @@ function ServerTrace({ trace }: ServerTraceProps) {
 
     return (
         <section>
-            <HeadingSecondary>Server Trace</HeadingSecondary>
+            <Forms.FormTitle tag="h3">Server Trace</Forms.FormTitle>
             <code>
                 <Flex flexDirection="column" gap="5px" style={{ color: "var(--text-strong)", userSelect: "text" }}>
                     {lines.map((line, idx) => (

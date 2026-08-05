@@ -63,6 +63,14 @@ export function isPluginEnabled(p: string) {
     ) ?? false;
 }
 
+export function isSettingHidden(settings: any, setting: any) {
+    if (!("hidden" in setting)) return false;
+
+    return typeof setting.hidden === "function"
+        ? setting.hidden.call(settings)
+        : Boolean(setting.hidden);
+}
+
 export function isSettingDisabled(definedSettings: any, setting: any): boolean {
     if (typeof setting.disabled === "function") {
         return setting.disabled.call(definedSettings);
@@ -434,6 +442,10 @@ export const initPluginManager = onlyOnce(function init() {
     }
 
     for (const p of neededApiPlugins) {
+        if (!Plugins[p]) {
+            PMLogger.error(`Missing API plugin: ${p}. Available plugins: ${Object.keys(Plugins).length}`);
+            continue;
+        }
         Plugins[p].isDependency = true;
         settings[p].enabled = true;
     }

@@ -142,13 +142,7 @@ function CompactConnectionComponent({ connection, theme }: { connection: Connect
                     : <button
                         {...tooltipProps}
                         className="vc-user-connection"
-                        onClick={() => {
-                            if (connection.type === "xbox") {
-                                VencordNative.native.openExternal(`https://www.xbox.com/en-US/play/user/${encodeURIComponent(connection.name)}`);
-                            } else {
-                                copyWithToast(connection.name);
-                            }
-                        }}
+                        onClick={() => copyWithToast(connection.name)}
                     >
                         {img}
                     </button>
@@ -168,7 +162,7 @@ export default definePlugin({
     patches: [
         {
             // Same find as ReviewDB
-            find: "#{intl::USER_PROFILE_FRIEND_REQUEST_TOAST}",
+            find: '"UserProfilePopout");',
             replacement: {
                 match: /userId:\i\.id,guild:\i\}\)(?=])/,
                 replace: "$&,$self.profilePopoutComponent(arguments[0])"

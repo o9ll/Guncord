@@ -34,9 +34,9 @@ const LAST_SEEN_HASH_KEY = "EquicordChangelog_LastSeenHash";
 const KNOWN_PLUGINS_KEY = "EquicordChangelog_KnownPlugins";
 const KNOWN_SETTINGS_KEY = "EquicordChangelog_KnownSettings";
 const LAST_REPO_CHECK_KEY = "EquicordChangelog_LastRepoCheck";
-const GITHUB_API_BASE = "https://api.github.com/repos";
+const GITHUB_COMPARE_ENDPOINT = "https://api.github.com/repos";
 const GUNCORD_RELEASES_REPO = "o9ll/Guncord";
-const GUNCORD_REPO_URL = "https://github.com/o9ll/Guncord";
+const GUNCORD_REPO_URL = `https://github.com/${GUNCORD_RELEASES_REPO}`;
 
 type KnownPluginSettingsMap = Map<string, Set<string>>;
 
@@ -62,7 +62,7 @@ async function fetchCommitsBetween(
     if (!repoSlug || typeof fetch !== "function") return [];
     try {
         const res = await fetch(
-            `${GITHUB_API_BASE}/${repoSlug}/compare/${fromHash}...${toHash}`,
+            `${GITHUB_COMPARE_ENDPOINT}/${repoSlug}/compare/${fromHash}...${toHash}`,
             {
                 headers: {
                     Accept: "application/vnd.github+json",

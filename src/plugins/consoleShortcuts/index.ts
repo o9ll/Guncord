@@ -34,12 +34,11 @@ const DESKTOP_ONLY = (f: string) => () => {
     throw new Error(`'${f}' is Discord Desktop only.`);
 };
 
-const switchBranch = (branch: string) => () => {
-    if (!IS_VESKTOP && !IS_EQUIBOP) throw new Error("This function only works on vesktop and equibop.");
+const makeVesktopSwitcher = (branch: string) => () => {
+    if (Vesktop.Settings.store.discordBranch === branch)
+        throw new Error(`Already on ${branch}`);
 
-    const target = IS_VESKTOP ? Vesktop : Equibop;
-    if (target.Settings.store.discordBranch === branch) throw new Error(`Already on ${branch}.`);
-    target.Settings.store.discordBranch = branch;
+    Vesktop.Settings.store.discordBranch = branch;
     VesktopNative.app.relaunch();
 };
 
@@ -112,7 +111,7 @@ function makeShortcuts() {
         wpsearch: search,
         wpex: extract,
         wpexs: (code: string) => extract(findModuleId(code)!),
-        loadLazyChunks: loadLazyChunks,
+        loadLazyChunks: IS_DEV ? loadLazyChunks : () => { throw new Error("loadLazyChunks is dev only."); },
         find,
         findAll: findAll,
         findByProps,
@@ -189,11 +188,10 @@ function makeShortcuts() {
                 experimentBucket: bucket,
             });
         },
-        switchBranch,
-        ...IS_EQUIBOP ? {
-            equibopStable: switchBranch("stable"),
-            equibopCanary: switchBranch("canary"),
-            equibopPtb: switchBranch("ptb"),
+        ...IS_VESKTOP ? {
+            vesktopStable: makeVesktopSwitcher("stable"),
+            vesktopCanary: makeVesktopSwitcher("canary"),
+            vesktopPtb: makeVesktopSwitcher("ptb"),
         } : {},
     };
 }

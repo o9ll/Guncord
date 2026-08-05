@@ -6,7 +6,7 @@
 
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { React, showToast, Toasts, UserStore } from "@webpack/common";
+import { React, ReactDOM, showToast, Toasts, UserStore } from "@webpack/common";
 
 function getDiscordLocale(): string {
     return (window as any).Vencord?.Webpack?.findByProps?.("getLocale")?.getLocale?.() || navigator.language || "fr";
@@ -14,6 +14,7 @@ function getDiscordLocale(): string {
 
 let domObserver: MutationObserver | null = null;
 let isPluginStarted = false;
+const roots = new Map<string, any>(); // track React 18 roots for proper unmount
 
 export async function changeHypeSquadHouse(houseId: number) {
     try {
@@ -220,7 +221,9 @@ function injectHypeSquadChangerIntoNativePanel() {
             }
 
             try {
-                ReactDOM.render(<HypeSquadSelectComponent />, container);
+                const root = (ReactDOM as any).createRoot(container);
+                roots.set(container.id, root);
+                root.render(<HypeSquadSelectComponent />);
             } catch (e) {
                 console.error("[HypeSquadChanger] Modal render failed:", e);
             }
@@ -270,7 +273,9 @@ function injectHypeSquadChangerIntoNativePanel() {
                     targetParent.appendChild(container);
 
                     try {
-                        ReactDOM.render(<HypeSquadSelectComponent />, container);
+                        const root = (ReactDOM as any).createRoot(container);
+                        roots.set(container.id, root);
+                        root.render(<HypeSquadSelectComponent />);
                     } catch (e) {
                         console.error("[HypeSquadChanger] Settings render failed:", e);
                     }
@@ -297,13 +302,13 @@ function stopDomObserver() {
         domObserver = null;
     }
     for (const id of ["guncord-hypesquad-changer-container", "guncord-hypesquad-changer-modal-container"]) {
-        const elem = document.getElementById(id);
-        if (elem) {
-            try {
-                ReactDOM.unmountComponentAtNode(elem);
-            } catch {}
-            elem.remove();
+        const root = roots.get(id);
+        if (root) {
+            try { root.unmount(); } catch {}
+            roots.delete(id);
         }
+        const elem = document.getElementById(id);
+        if (elem) elem.remove();
     }
 }
 

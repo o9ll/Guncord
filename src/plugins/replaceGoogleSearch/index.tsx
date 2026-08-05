@@ -5,7 +5,7 @@
  */
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { definePluginSettings, migratePluginSettings } from "@api/Settings";
+import { definePluginSettings } from "@api/Settings";
 import { Flex } from "@components/Flex";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
@@ -36,6 +36,7 @@ const settings = definePluginSettings({
         placeholder: "Google"
     },
     customEngineURL: {
+        displayName: "Custom Engine URL",
         description: "The URL of your Engine",
         type: OptionType.STRING,
         placeholder: "https://google.com/search?q="
@@ -127,7 +128,6 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (children, _props) 
     }
 };
 
-migratePluginSettings("ReplaceGoogleSearch", "Search");
 export default definePlugin({
     name: "ReplaceGoogleSearch",
     description: "Replaces the Google search with different Engine(s)",

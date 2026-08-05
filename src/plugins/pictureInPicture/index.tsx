@@ -31,19 +31,11 @@ export default definePlugin({
         {
             find: '["VIDEO","CLIP","AUDIO"]',
             replacement: {
-                match: /(\[\i>0&&\i\.length>0.{0,150}?children:)(\i.slice\(\i\))(?<=mimeType:(\i),downloadURL:(\i).+?showDownload:(\i).+?isVisualMediaType:(\i).+?)/,
-                replace: (_, rest, origChildren, mimeType, downloadURL, showDownload, isVisualMediaType) =>
-                    `${rest}[${showDownload}&&${isVisualMediaType}&&$self.shouldShowButton(${mimeType},${downloadURL})&&$self.PictureInPictureButton(),...${origChildren}]`
+                match: /(\[\i>0&&\i\.length>0.{0,150}?children:)(\i.slice\(\i\))(?<=showDownload:(\i).+?isVisualMediaType:(\i).+?)/,
+                replace: (_, rest, origChildren, showDownload, isVisualMediaType) => `${rest}[${showDownload}&&${isVisualMediaType}&&$self.PictureInPictureButton(),...${origChildren}]`
             }
         }
     ],
-
-    shouldShowButton(mimeType: string[] = [], downloadURL?: string) {
-        const normalizedMimeType = mimeType.join("/");
-        if (normalizedMimeType.startsWith("video/")) return true;
-        if (!downloadURL) return false;
-        return /\.(mp4|webm|mov|m4v|ogv|avi)(?:$|[?#])/i.test(downloadURL);
-    },
 
     PictureInPictureButton: ErrorBoundary.wrap(() => {
         return (
@@ -65,16 +57,44 @@ export default definePlugin({
 
                             videoClone.loop = settings.store.loop;
                             videoClone.style.display = "none";
-                            videoClone.onleavepictureinpicture = () => videoClone.remove();
 
-                            function launchPiP() {
-                                videoClone.currentTime = video.currentTime;
-                                videoClone.requestPictureInPicture();
-                                video.pause();
-                                videoClone.play();
+                            let cleaned = false;
+                            function cleanup() {
+                                if (cleaned) return;
+                                cleaned = true;
+
+                                const { currentTime } = videoClone;
+
+                                videoClone.onloadedmetadata = null;
+                                videoClone.onleavepictureinpicture = null;
+
+                                videoClone.pause();
+                                videoClone.removeAttribute("src");
+                                videoClone.load();
+                                videoClone.remove();
+
+                                // resume original if still in the document
+                                if (video.isConnected) {
+                                    video.currentTime = currentTime;
+                                    video.play().catch(() => 0);
+                                }
                             }
 
-                            if (videoClone.readyState === 4 /* HAVE_ENOUGH_DATA */)
+                            videoClone.onleavepictureinpicture = cleanup;
+
+                            async function launchPiP() {
+                                try {
+                                    videoClone.currentTime = video.currentTime;
+                                    video.pause();
+                                    await videoClone.play();
+                                    await videoClone.requestPictureInPicture();
+                                } catch (err) {
+                                    console.error("Failed to enter Picture-in-Picture", err);
+                                    cleanup();
+                                }
+                            }
+
+                            if (videoClone.readyState >= 1)
                                 launchPiP();
                             else
                                 videoClone.onloadedmetadata = launchPiP;

@@ -30,16 +30,29 @@ const openWindows = new Map<string, BrowserWindow>();
 
 const SHARED_SETTINGS_FILE = join(app.getPath("userData"), "guncord-mi-shared-settings.json");
 
-// Keys we never want to copy from one window to another (account identity)
-const SHARED_SETTINGS_BLOCKLIST = new Set(["token"]);
+// Keys we never want to copy from one window to another (account identity / session)
+const SHARED_SETTINGS_BLOCKLIST = new Set([
+    "token",
+    "default_token",
+    "multiaccount_tokens",
+    "tokens",
+    "user_id_cache",
+    "MultiAccountStore",
+    "AuthenticationStore",
+    "UserProfileStore",
+    "UserStore",
+    "login_token",
+    "email_cache"
+]);
 
 const DUMP_LOCAL_STORAGE_SCRIPT = `
 (function() {
     try {
+        const block = ["token", "default_token", "multiaccount_tokens", "tokens", "user_id_cache", "MultiAccountStore", "AuthenticationStore", "login_token"];
         const out = {};
         for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i);
-            if (!k || k === "token") continue;
+            if (!k || block.includes(k)) continue;
             out[k] = localStorage.getItem(k);
         }
         return JSON.stringify(out);
@@ -189,92 +202,79 @@ function registerWindowControlIpc(win: BrowserWindow): () => void {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function createTokenPreload(token: string, sharedSettings: Record<string, string> = {}): string {
-    // Temporary directory in userData
     const dir = join(app.getPath("userData"), "guncord-mi-preloads");
     mkdirSync(dir, { recursive: true });
 
-    const safeToken = JSON.stringify(token); // safely escape token
-    const safeSharedSettings = JSON.stringify(sharedSettings ?? {});
+    const cleanToken = String(token || "").trim().replace(/^"+|"+$/g, "");
 
-    const script = `
-// Guncord MultiInstance — token preload
-// Runs in main world BEFORE Discord
-(function() {
-    const TOKEN = ${safeToken};
-    const SHARED_SETTINGS = ${safeSharedSettings};
-    try {
-        // Pre-fills shared visual/audio settings (theme, audio device, zoom, ...)
-        // ONLY if key does not already exist in this profile, to never overwrite
-        // an already customized setting for this specific instance.
-        try {
-            for (const key in SHARED_SETTINGS) {
-                if (key === "token") continue;
-                if (localStorage.getItem(key) === null) {
-                    localStorage.setItem(key, SHARED_SETTINGS[key]);
-                }
-            }
-        } catch (e) {
-            console.warn("[GuncordMI] Shared settings seed error:", e);
-        }
+    // Serialize values to JS string literals safe to embed via JSON.stringify
+    const tokenLiteral = JSON.stringify(cleanToken);
+    const settingsLiteral = JSON.stringify(JSON.stringify(sharedSettings ?? {}));
 
-        // Set token in localStorage
-        Object.defineProperty(window, '__guncord_token', { value: TOKEN, writable: false });
+    // Inner script: runs in main world via webFrame.executeJavaScript.
+    // Must be plain JavaScript — no TypeScript syntax, no template literals.
+    const innerLines = [
+        "(function() {",
+        "  var RAW_TOKEN = " + tokenLiteral + ";",
+        "  var SETTINGS_JSON = " + settingsLiteral + ";",
+        "  var CONFLICT = ['token','default_token','multiaccount_tokens','tokens','user_id_cache','MultiAccountStore','AuthenticationStore','login_token'];",
+        "  try { localStorage.removeItem('multiaccount_tokens'); localStorage.removeItem('user_id_cache'); } catch(e) {}",
+        "  try {",
+        "    var sh = JSON.parse(SETTINGS_JSON || '{}');",
+        "    for (var k in sh) { if (CONFLICT.indexOf(k) >= 0) continue; if (localStorage.getItem(k) === null) localStorage.setItem(k, sh[k]); }",
+        "  } catch(e) {}",
+        "  if (RAW_TOKEN && RAW_TOKEN !== 'undefined') {",
+        "    var qt = JSON.stringify(RAW_TOKEN);",
+        "    try { localStorage.setItem('token', qt); } catch(e) {}",
+        "    try { localStorage.setItem('default_token', qt); } catch(e) {}",
+        "    try {",
+        "      if ((location.pathname.indexOf('/login') >= 0 || location.pathname === '/') && !window.__mi_redirected) {",
+        "        window.__mi_redirected = true;",
+        "        location.href = 'https://discord.com/channels/@me';",
+        "      }",
+        "    } catch(e) {}",
+        "  }",
+        "  try { Object.defineProperty(window, '__guncord_token', { value: RAW_TOKEN, writable: false, configurable: true }); } catch(e) {}",
+        "  (function() {",
+        "    var lastUI = 0;",
+        "    window.addEventListener('pointerdown', function(e) { if (e.isTrusted) lastUI = Date.now(); }, true);",
+        "    window.addEventListener('keydown', function(e) { if (e.isTrusted) lastUI = Date.now(); }, true);",
+        "    function patchClose() {",
+        "      var dn = window.DiscordNative;",
+        "      if (dn && dn.window && dn.window.close && !dn.window._miPatched) {",
+        "        var orig = dn.window.close;",
+        "        dn.window.close = function() { if (Date.now() - lastUI < 2000) orig.apply(this, arguments); };",
+        "        dn.window._miPatched = true;",
+        "      }",
+        "    }",
+        "    patchClose();",
+        "    document.addEventListener('DOMContentLoaded', patchClose);",
+        "    setInterval(patchClose, 1000);",
+        "  })();",
+        "  console.log('[GuncordMI] token preload active');",
+        "})();"
+    ].join("\n");
 
-        // Patch localStorage.getItem to always return token if requested
-        const _origGetItem = Storage.prototype.getItem;
-        const _origSetItem = Storage.prototype.setItem;
+    // The preload file runs in the isolated Node/Electron world.
+    // innerLines is embedded as a JSON string literal so it is never misinterpreted.
+    const innerLiteralForNode = JSON.stringify(innerLines);
 
-        Storage.prototype.getItem = function(key) {
-            if (this === localStorage && key === "token") {
-                return JSON.stringify(TOKEN);
-            }
-            return _origGetItem.call(this, key);
-        };
+    const script = [
+        "// Guncord MultiInstance — token preload",
+        "(function() {",
+        "  try {",
+        "    var wf = null;",
+        "    try { wf = require('electron').webFrame; } catch(e) {}",
+        "    if (!wf) { try { wf = require('electron/renderer').webFrame; } catch(e) {} }",
+        "    if (wf) {",
+        "      wf.executeJavaScript(" + innerLiteralForNode + ")",
+        "        .catch(function(err) { console.warn('[GuncordMI] mainWorld error:', err); });",
+        "    }",
+        "  } catch(e) { console.warn('[GuncordMI] preload error:', e); }",
+        "})();"
+    ].join("\n");
 
-        // Pre-fill as well
-        try { localStorage.setItem("token", JSON.stringify(TOKEN)); } catch(_) {}
-
-        // Intercepte DiscordNative.window.close pour empêcher la fermeture automatique
-        // en arrière-plan lorsque l'on quitte un jeu (RunningGameStore / OverlayStore)
-        // tout en laissant l'utilisateur fermer via le bouton X de la barre de titre.
-        (function() {
-            let lastUserInteraction = 0;
-            window.addEventListener("pointerdown", function(e) {
-                if (e.isTrusted) lastUserInteraction = Date.now();
-            }, true);
-            window.addEventListener("keydown", function(e) {
-                if (e.isTrusted) lastUserInteraction = Date.now();
-            }, true);
-
-            function patchNativeClose() {
-                const dn = (window as any).DiscordNative;
-                if (dn && dn.window && dn.window.close && !dn.window._miPatched) {
-                    const origClose = dn.window.close;
-                    dn.window.close = function() {
-                        const isUserAction = (Date.now() - lastUserInteraction) < 2000;
-                        if (isUserAction) {
-                            return origClose.apply(this, arguments);
-                        } else {
-                            console.log("[GuncordMI] Ignored automatic background close (game exit).");
-                        }
-                    };
-                    dn.window._miPatched = true;
-                }
-            }
-
-            patchNativeClose();
-            document.addEventListener("DOMContentLoaded", patchNativeClose);
-            setInterval(patchNativeClose, 1000);
-        })();
-
-        console.log("[GuncordMI] Token preload active ✓");
-    } catch(e) {
-        console.warn("[GuncordMI] Preload error:", e);
-    }
-})();
-`;
-
-    const filePath = join(dir, `token-preload-${Date.now()}.js`);
+    const filePath = join(dir, "token-preload-" + Date.now() + ".js");
     writeFileSync(filePath, script, "utf-8");
     return filePath;
 }
@@ -343,6 +343,10 @@ export async function openInstanceWindow(
             ? `guncord-mi-${userId}-${Date.now()}`
             : savedPartition;
         const ses = session.fromPartition(partition, { cache: !blockExternalTokenAccess });
+
+        ses.webRequest.onBeforeRequest({ urls: ["*://*.discord.com/handoff*", "*://discord.com/handoff*"] }, (details, callback) => {
+            callback({ cancel: true });
+        });
 
         ses.webRequest.onHeadersReceived((details, callback) => {
             const headers = { ...details.responseHeaders };
@@ -452,8 +456,22 @@ export async function openInstanceWindow(
         });
 
         // Injection du token
-        const safeToken = JSON.stringify(token);
-        const injectJs = `(function(){ try { localStorage.setItem("token", ${safeToken}); } catch(e) {} })();`;
+        const cleanTok = String(token || "").trim().replace(/^"+|"+$/g, "");
+        const safeTokenStr = JSON.stringify(cleanTok);
+        const injectJs = `(function(){
+            try {
+                const raw = ${safeTokenStr};
+                if (!raw || raw === "undefined") return;
+                const q = JSON.stringify(raw);
+                localStorage.setItem("token", q);
+                localStorage.setItem("default_token", q);
+                localStorage.removeItem("multiaccount_tokens");
+                if ((window.location.pathname.includes("/login") || window.location.pathname === "/") && !window.__mi_auto_redirected) {
+                    window.__mi_auto_redirected = true;
+                    window.location.href = "https://discord.com/channels/@me";
+                }
+            } catch(e) {}
+        })();`;
         wc.on("dom-ready", () => wc.executeJavaScript(injectJs).catch(() => { }));
         wc.on("did-finish-load", () => wc.executeJavaScript(injectJs).catch(() => { }));
         wc.on("did-navigate", () => wc.executeJavaScript(injectJs).catch(() => { }));
@@ -466,10 +484,15 @@ export async function openInstanceWindow(
         });
 
         wc.on("will-navigate", (e, url) => {
+            if (url.includes("/handoff")) {
+                e.preventDefault();
+                return;
+            }
             if (!/^https:\/\/(ptb\.|canary\.)?discord\.com/.test(url)) e.preventDefault();
         });
 
         wc.setWindowOpenHandler(({ url }) => {
+            if (url.includes("/handoff")) return { action: "deny" };
             if (url.startsWith("http")) require("electron").shell.openExternal(url);
             return { action: "deny" };
         });
@@ -523,6 +546,10 @@ export async function openInstanceWindowGrouped(
             ? `guncord-mi-${userId}-${Date.now()}`
             : savedPartition;
         const ses = session.fromPartition(partition, { cache: !blockExternalTokenAccess });
+
+        ses.webRequest.onBeforeRequest({ urls: ["*://*.discord.com/handoff*", "*://discord.com/handoff*"] }, (details, callback) => {
+            callback({ cancel: true });
+        });
 
         ses.webRequest.onHeadersReceived((details, callback) => {
             const headers = { ...details.responseHeaders };
@@ -609,8 +636,22 @@ export async function openInstanceWindowGrouped(
             }
         });
 
-        const safeToken = JSON.stringify(token);
-        const injectJs = `(function(){ try { localStorage.setItem("token", ${safeToken}); } catch(e) {} })();`;
+        const cleanTok = String(token || "").trim().replace(/^"+|"+$/g, "");
+        const safeTokenStr = JSON.stringify(cleanTok);
+        const injectJs = `(function(){
+            try {
+                const raw = ${safeTokenStr};
+                if (!raw || raw === "undefined") return;
+                const q = JSON.stringify(raw);
+                localStorage.setItem("token", q);
+                localStorage.setItem("default_token", q);
+                localStorage.removeItem("multiaccount_tokens");
+                if ((window.location.pathname.includes("/login") || window.location.pathname === "/") && !window.__mi_auto_redirected) {
+                    window.__mi_auto_redirected = true;
+                    window.location.href = "https://discord.com/channels/@me";
+                }
+            } catch(e) {}
+        })();`;
         wc.on("dom-ready", () => wc.executeJavaScript(injectJs).catch(() => {}));
         wc.on("did-finish-load", () => wc.executeJavaScript(injectJs).catch(() => {}));
         wc.on("did-navigate", () => wc.executeJavaScript(injectJs).catch(() => {}));
@@ -622,10 +663,15 @@ export async function openInstanceWindowGrouped(
         });
 
         wc.on("will-navigate", (e, url) => {
+            if (url.includes("/handoff")) {
+                e.preventDefault();
+                return;
+            }
             if (!/^https:\/\/(ptb\.|canary\.)?discord\.com/.test(url)) e.preventDefault();
         });
 
         wc.setWindowOpenHandler(({ url }) => {
+            if (url.includes("/handoff")) return { action: "deny" };
             if (url.startsWith("http")) require("electron").shell.openExternal(url);
             return { action: "deny" };
         });

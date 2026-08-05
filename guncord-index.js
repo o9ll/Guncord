@@ -5,6 +5,63 @@ const Module = require("module");
 const fs = require("fs");
 const { app } = require("electron");
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PENDING UPDATE CHECK — must run BEFORE any dist/ file is loaded (= locked).
+// When the in-app updater stages an update it writes a marker file next to this
+// script.  We apply it here (simple file copy) while nothing is locked yet,
+// then delete the marker and continue the normal boot.
+// This is what prevents the infinite-restart loop.
+// ─────────────────────────────────────────────────────────────────────────────
+(function applyPendingUpdate() {
+    const markerPath = path.join(__dirname, "dist", "guncord", "guncord-pending-update.json");
+    if (!fs.existsSync(markerPath)) return;
+
+    let marker;
+    try {
+        marker = JSON.parse(fs.readFileSync(markerPath, "utf-8"));
+    } catch {
+        try { fs.unlinkSync(markerPath); } catch { }
+        return;
+    }
+
+    const { stagingDir, destDir } = marker;
+    if (!stagingDir || !destDir || !fs.existsSync(stagingDir)) {
+        try { fs.unlinkSync(markerPath); } catch { }
+        return;
+    }
+
+    console.log("[Guncord] Applying pending update from", stagingDir, "→", destDir);
+
+    function copyDirSync(src, dest) {
+        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+        for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+            const srcPath = path.join(src, entry.name);
+            const destPath = path.join(dest, entry.name);
+            if (entry.isDirectory()) {
+                copyDirSync(srcPath, destPath);
+            } else {
+                try {
+                    fs.copyFileSync(srcPath, destPath);
+                } catch (e) {
+                    console.warn("[Guncord] Could not copy", srcPath, ":", e.message);
+                }
+            }
+        }
+    }
+
+    try {
+        copyDirSync(stagingDir, destDir);
+        console.log("[Guncord] Pending update applied successfully.");
+    } catch (e) {
+        console.error("[Guncord] Failed to apply pending update:", e.message);
+    }
+
+    // Always delete marker and staging dir so we don't loop
+    try { fs.unlinkSync(markerPath); } catch { }
+    try { fs.rmSync(stagingDir, { recursive: true, force: true }); } catch { }
+})();
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Guncord mod data directory is managed by DATA_DIR in constants.ts
 const guncordData = path.join(app.getPath("appData"), "Guncord");
 

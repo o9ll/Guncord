@@ -16,13 +16,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import { sleep } from "@utils/misc";
 import { Queue } from "@utils/Queue";
 import { useForceUpdater } from "@utils/react";
-import definePlugin, { OptionType } from "@utils/types";
+import definePlugin from "@utils/types";
 import { CustomEmoji, Message, ReactionEmoji, User } from "@vencord/discord-types";
 import { ChannelStore, Constants, FluxDispatcher, React, RestAPI, useEffect, useLayoutEffect, UserStore, UserSummaryItem } from "@webpack/common";
 
@@ -113,11 +112,7 @@ function ReactionUsers({ message, emoji, type }: ReactionProps) {
         <div
             style={{ marginLeft: "0.5em", transform: "scale(0.9)" }}
         >
-            <div
-                onClick={handleClickAvatar}
-                onKeyDown={handleClickAvatar}
-                style={settings.store.avatarClick ? {} : { pointerEvents: "none" }}
-            >
+            <div onClick={handleClickAvatar} onKeyDown={handleClickAvatar}>
                 <UserSummaryItem
                     users={users}
                     guildId={ChannelStore.getChannel(message.channel_id)?.guild_id}
@@ -131,22 +126,12 @@ function ReactionUsers({ message, emoji, type }: ReactionProps) {
     );
 }
 
-const settings = definePluginSettings({
-    avatarClick: {
-        description: "Toggle clicking avatars in reactions",
-        type: OptionType.BOOLEAN,
-        default: false,
-        restartNeeded: true
-    }
-});
-
 export default definePlugin({
     name: "WhoReacted",
     description: "Renders the avatars of users who reacted to a message",
     tags: ["Reactions", "Chat", "Appearance"],
     authors: [Devs.Ven, Devs.KannaDev, Devs.newwares],
-    isModified: true,
-    settings,
+
     patches: [
         {
             find: ",reactionRef:",

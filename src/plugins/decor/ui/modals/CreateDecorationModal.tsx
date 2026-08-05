@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { BaseText } from "@components/BaseText";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { Heading } from "@components/Heading";
 import { Link } from "@components/Link";
-import { Paragraph } from "@components/Paragraph";
 import { GUILD_ID, INVITE_KEY, RAW_SKU_ID } from "@plugins/decor/lib/constants";
 import { useCurrentUserDecorationsStore } from "@plugins/decor/lib/stores/CurrentUserDecorationsStore";
 import { cl, DecorationModalClasses, requireAvatarDecorationModal, requireCreateStickerModal } from "@plugins/decor/ui";
@@ -17,7 +14,7 @@ import { openInviteModal } from "@utils/discord";
 import { Margins } from "@utils/margins";
 import { RenderModalProps } from "@vencord/discord-types";
 import { filters, findComponentByCodeLazy, mapMangledModuleLazy } from "@webpack";
-import { closeAllModals, FluxDispatcher, GuildStore, Modal, NavigationRouter, openModal, TextInput, useEffect, useMemo, UserStore, useState } from "@webpack/common";
+import { closeAllModals, FluxDispatcher, Forms, GuildStore, Modal, NavigationRouter, openModal, Text, TextInput, useEffect, useMemo, UserStore, useState } from "@webpack/common";
 
 const FileUpload = findComponentByCodeLazy(".currentTarget.files", "lineClamp:1");
 
@@ -93,9 +90,9 @@ function CreateDecorationModal(props: RenderModalProps) {
                 </HelpMessage>
                 <div className={cl("create-decoration-modal-form-preview-container")}>
                     <div className={cl("create-decoration-modal-form")}>
-                        {error !== null && <BaseText size="xs" color="text-danger">{error.message}</BaseText>}
+                        {error !== null && <Text color="text-danger" variant="text-xs/normal">{error.message}</Text>}
                         <section>
-                            <Heading>File</Heading>
+                            <Forms.FormTitle tag="h5">File</Forms.FormTitle>
                             <FileUpload
                                 filename={file?.name}
                                 placeholder="Choose a file"
@@ -103,20 +100,20 @@ function CreateDecorationModal(props: RenderModalProps) {
                                 filters={[{ name: "Decoration file", extensions: ["png", "apng"] }]}
                                 onFileSelect={setFile}
                             />
-                            <Paragraph className={Margins.top8}>
+                            <Forms.FormText className={Margins.top8}>
                                 File should be APNG or PNG.
-                            </Paragraph>
+                            </Forms.FormText>
                         </section>
                         <section>
-                            <Heading>Name</Heading>
+                            <Forms.FormTitle tag="h5">Name</Forms.FormTitle>
                             <TextInput
                                 placeholder="Companion Cube"
                                 value={name}
                                 onChange={setName}
                             />
-                            <Paragraph className={Margins.top8}>
+                            <Forms.FormText className={Margins.top8}>
                                 This name will be used when referring to this decoration.
-                            </Paragraph>
+                            </Forms.FormText>
                         </section>
                     </div>
                     <div>

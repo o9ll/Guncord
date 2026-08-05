@@ -4,14 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Paragraph } from "@components/Paragraph";
 import { Auth } from "@plugins/reviewDB/auth";
 import { ReviewDBUser } from "@plugins/reviewDB/entities";
 import { fetchBlocks, unblockUser } from "@plugins/reviewDB/reviewDbApi";
 import { cl } from "@plugins/reviewDB/utils";
 import { Logger } from "@utils/Logger";
 import { useAwaiter } from "@utils/react";
-import { Modal, openModal, Tooltip, useState } from "@webpack/common";
+import { Forms, Modal,openModal, Tooltip, useState } from "@webpack/common";
 
 function UnblockButton(props: { onClick?(): void; }) {
     return (
@@ -39,7 +38,7 @@ function BlockedUser({ user, isBusy, setIsBusy }: { user: ReviewDBUser; isBusy: 
     return (
         <div className={cl("block-modal-row")}>
             <img className={cl("block-modal-avatar")} src={user.profilePhoto} alt="" />
-            <Paragraph className={cl("block-modal-username")}>{user.username}</Paragraph>
+            <Forms.FormText className={cl("block-modal-username")}>{user.username}</Forms.FormText>
             <UnblockButton
                 onClick={isBusy ? undefined : async () => {
                     setIsBusy(true);
@@ -65,9 +64,9 @@ function BlockedUsersList() {
     if (pending)
         return null;
     if (error)
-        return <Paragraph>Failed to fetch blocks: ${String(error)}</Paragraph>;
+        return <Forms.FormText>Failed to fetch blocks: ${String(error)}</Forms.FormText>;
     if (!blocks.length)
-        return <Paragraph>No blocked users.</Paragraph>;
+        return <Forms.FormText>No blocked users.</Forms.FormText>;
 
     return (
         <>
@@ -90,7 +89,7 @@ export function openBlockModal() {
             title="Blocked Users"
         >
             <div className={cl("block-modal")}>
-                {Auth.token ? <BlockedUsersList /> : <Paragraph>You are not logged into ReviewDB!</Paragraph>}
+                {Auth.token ? <BlockedUsersList /> : <Forms.FormText>You are not logged into ReviewDB!</Forms.FormText>}
             </div>
         </Modal>
     ));

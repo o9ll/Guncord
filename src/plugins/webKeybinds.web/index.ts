@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Vencord, a modification for Discord's desktop app
  * Copyright (c) 2023 Vendicated and contributors
  *
@@ -28,6 +28,7 @@ export default definePlugin({
     description: "Re-adds keybinds missing in the web version of Discord: ctrl+t, ctrl+shift+t, ctrl+tab, ctrl+shift+tab, ctrl+1-9, ctrl+,. Only works fully on Vesktop/Legcord, not inside your browser",
     tags: ["Shortcuts"],
     authors: [Devs.Ven],
+    enabledByDefault: true,
 
     onKey(e: KeyboardEvent) {
         const hasCtrl = e.ctrlKey || (e.metaKey && IS_MAC);
@@ -35,7 +36,7 @@ export default definePlugin({
         if (hasCtrl) switch (e.key) {
             case "t":
             case "T":
-                if (!IS_VESKTOP && !IS_EQUIBOP) return;
+                if (!IS_VESKTOP) return;
                 e.preventDefault();
                 if (e.shiftKey) {
                     if (SelectedGuildStore.getGuildId()) NavigationRouter.transitionToGuild("@me");
@@ -49,7 +50,7 @@ export default definePlugin({
                 }
                 break;
             case "Tab":
-                if (!IS_VESKTOP && !IS_EQUIBOP) return;
+                if (!IS_VESKTOP) return;
                 const handler = e.shiftKey ? KeyBinds.SERVER_PREV : KeyBinds.SERVER_NEXT;
                 handler.action(e);
                 break;
