@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,6 +41,7 @@ export default definePlugin({
     name: "QuickMention",
     authors: [Devs.kemo],
     description: "Adds a quick mention button to the message actions bar",
+    dependencies: ["MessagePopoverAPI"],
     tags: ["Chat", "Shortcuts"],
 
     messagePopoverButton: {

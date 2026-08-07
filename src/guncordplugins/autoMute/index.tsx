@@ -1,6 +1,6 @@
 /*
  * Guncord, a Discord client mod
- * Copyright (c) 2026 Guncord contributors
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -107,10 +107,8 @@ const UserContextMenuPatch: NavContextMenuPatchCallback = (children, ctx: { user
 export default definePlugin({
     name: "AutoMute",
     description: "Automatically server mutes selected users and re-mutes them instantly if they unmute.",
-    authors: [
-        { name: "Guncord", id: 0n }
-    ],
-    enabledByDefault: true,
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
+    enabledByDefault: false,
 
     contextMenus: {
         "user-context": UserContextMenuPatch

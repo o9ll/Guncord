@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -9,6 +9,12 @@ import { RestAPI } from "@webpack/common";
 import { logger } from "./misc";
 
 export function isCdnUrlExpired(url: string): boolean {
+    if (
+        !url?.startsWith("https://cdn.discordapp.com")
+        && !url?.startsWith("https://media.discordapp.net")
+        && !url?.startsWith("https://images-ext-1.discordapp.net")
+        && !url?.startsWith("https://images-ext-2.discordapp.net")
+    ) return false;
     try {
         const ex = new URL(url).searchParams.get("ex");
         if (!ex) return false;

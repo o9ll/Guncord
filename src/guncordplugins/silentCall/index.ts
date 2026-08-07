@@ -2,13 +2,6 @@
  * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
- *
- * SilentCall — start DM/group calls without ringing the other members.
- *
- * See DESIGN.md for the full rationale. In short: Discord's client fires a
- * separate `ring` request when you start a call. If we never fire it, nobody
- * gets the incoming-call notification — but the call is still joinable and you
- * stay connected. This plugin monkeypatches that `ring` at runtime.
  */
 
 import { definePluginSettings } from "@api/Settings";

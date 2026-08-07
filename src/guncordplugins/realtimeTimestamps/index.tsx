@@ -111,6 +111,7 @@ function renderTooltipText(date: Date) {
 
 export default definePlugin({
     name: "RealtimeTimestamps",
+    enabledByDefault: false,
     description: "Replaces Discord timestamps (e.g. 15:31) with live seconds (e.g. 15:34:21), updated every second.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     tags: ["Appearance", "Chat", "Utility"],

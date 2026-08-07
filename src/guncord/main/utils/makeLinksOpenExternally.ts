@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -57,6 +57,13 @@ export function handleExternalUrl(url: string, protocol?: string): { action: "de
             return { action: "deny" };
         }
     }
+
+    try {
+        const u = new URL(url);
+        if (u.pathname.startsWith("/popout") && (u.hostname === "discord.com" || u.hostname.endsWith(".discord.com") || DISCORD_HOSTNAMES.includes(u.hostname))) {
+            return { action: "deny" };
+        }
+    } catch {}
 
     switch (protocol) {
         case "http:":
@@ -227,4 +234,3 @@ export function makeLinksOpenExternally(win: BrowserWindow) {
         }
     });
 }
-

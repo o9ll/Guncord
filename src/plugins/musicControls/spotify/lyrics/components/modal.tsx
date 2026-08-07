@@ -1,11 +1,11 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { BaseText } from "@components/BaseText";
-import { SpotifyStore, Track } from "@plugins/musicControls/spotify/SpotifyStore";
+import { SpotifyStore, Track } from "@equicordplugins/musicControls/spotify/SpotifyStore";
 import { openImageModal } from "@utils/discord";
 import { RenderModalProps } from "@vencord/discord-types";
 import { Modal,React } from "@webpack/common";

@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,8 @@ import { migratePluginSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { CheckedTextInput } from "@components/CheckedTextInput";
 import { Flex } from "@components/Flex";
+import { Heading } from "@components/Heading";
+import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import { getGuildAcronym } from "@utils/discord";
 import { Logger } from "@utils/Logger";
@@ -28,7 +30,7 @@ import definePlugin from "@utils/types";
 import { Guild, GuildSticker } from "@vencord/discord-types";
 import { StickerFormatType } from "@vencord/discord-types/enums";
 import { findByCodeLazy } from "@webpack";
-import { Constants, EmojiStore, FluxDispatcher, Forms, GuildStore, IconUtils, Menu, Modal, openModalLazy, PermissionsBits, PermissionStore, React, RestAPI, StickersStore, Toasts, Tooltip, UserStore } from "@webpack/common";
+import { Constants, EmojiStore, FluxDispatcher, GuildStore, IconUtils, Menu, Modal, openModalLazy, PermissionsBits, PermissionStore, React, RestAPI, StickersStore, Toasts, Tooltip, UserStore } from "@webpack/common";
 import { Promisable } from "type-fest";
 
 const uploadEmoji = findByCodeLazy(".GUILD_EMOJIS(", "EMOJI_UPLOAD_START");
@@ -228,7 +230,7 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
 
     return (
         <>
-            <Forms.FormTitle>Custom Name</Forms.FormTitle>
+            <Heading tag="h5">Custom Name</Heading>
             <CheckedTextInput
                 initialValue={name}
                 onChange={v => {
@@ -294,7 +296,7 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                                         alt={g.name}
                                     />
                                 ) : (
-                                    <Forms.FormText
+                                    <Paragraph
                                         style={{
                                             fontSize: getFontSize(getGuildAcronym(g)),
                                             width: "100%",
@@ -305,7 +307,7 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                                         }}
                                     >
                                         {getGuildAcronym(g)}
-                                    </Forms.FormText>
+                                    </Paragraph>
                                 )}
                             </div>
                         )}

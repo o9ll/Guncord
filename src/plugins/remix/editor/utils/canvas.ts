@@ -1,10 +1,10 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { brushCanvas } from "@plugins/remix/editor/components/Canvas";
+import { brushCanvas } from "@equicordplugins/remix/editor/components/Canvas";
 
 export function fillCircle(x: number, y: number, radius: number, canvas = brushCanvas) {
     canvas.beginPath();

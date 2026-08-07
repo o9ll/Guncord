@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,9 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { definePluginSettings } from "@api/Settings";
+import { definePluginSettings, migratePluginToSettings, Settings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { Devs } from "@utils/constants";
+import { getCustomColorString } from "@equicordplugins/customUserColors";
+import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { openUserProfile } from "@utils/discord";
 import { isNonNullish } from "@utils/guards";
@@ -46,6 +47,12 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: true,
         description: "Show a more useful message when several users are typing"
+    },
+    amITyping: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        restartNeeded: true,
+        description: "Shows you if other people can see you typing"
     }
 });
 
@@ -68,6 +75,17 @@ interface TypingUserProps {
     guildId: string;
 }
 
+function typingUserColor(guildId: string, userId: string): string | undefined {
+    if (!settings.store.showRoleColors) return;
+
+    if (Settings.plugins.CustomUserColors.enabled) {
+        const customColor = getCustomColorString(userId, true);
+        if (customColor) return customColor;
+    }
+
+    return GuildMemberStore.getMember(guildId, userId)?.colorString;
+}
+
 const TypingUser = ErrorBoundary.wrap(function TypingUser({ user, guildId }: TypingUserProps) {
     return (
         <strong
@@ -77,7 +95,7 @@ const TypingUser = ErrorBoundary.wrap(function TypingUser({ user, guildId }: Typ
                 openUserProfile(user.id);
             }}
             style={{
-                color: settings.store.showRoleColors ? GuildMemberStore.getMember(guildId, user.id)?.colorString : undefined,
+                color: settings.store.showRoleColors ? typingUserColor(guildId, user.id) : undefined,
             }}
         >
             {settings.store.showAvatars && (
@@ -95,12 +113,14 @@ const TypingUser = ErrorBoundary.wrap(function TypingUser({ user, guildId }: Typ
     );
 }, { noop: true });
 
+migratePluginToSettings(true, "TypingTweaks", "AmITyping", "amITyping");
 export default definePlugin({
     name: "TypingTweaks",
     description: "Show avatars and role colours in the typing indicator",
     tags: ["Appearance", "Customisation"],
-    authors: [Devs.zt, Devs.sadan],
+    authors: [Devs.zt, Devs.sadan, EquicordDevs.MrDiamond],
     settings,
+    isModified: true,
 
     managedStyle,
 
@@ -132,6 +152,14 @@ export default definePlugin({
                     predicate: () => settings.store.alternativeFormatting
                 }
             ]
+        },
+        {
+            find: "this.handleDismissInviteEducation",
+            predicate: () => settings.store.amITyping,
+            replacement: {
+                match: /\i\.default\.getCurrentUser\(\)/,
+                replace: "\"\""
+            }
         }
     ],
 
@@ -145,7 +173,11 @@ export default definePlugin({
             const myId = useStateFromStores([AuthenticationStore], () => AuthenticationStore.getId());
 
             return Object.keys(typingUsers)
-                .filter(id => id && id !== myId && !RelationshipStore.isBlockedOrIgnored(id))
+                .filter(id => {
+                    if (!id || RelationshipStore.isBlockedOrIgnored(id)) return false;
+                    if (id === myId) return settings.store.amITyping;
+                    return true;
+                })
                 .map(id => UserStore.getUser(id))
                 .filter(isNonNullish);
         } catch (e) {

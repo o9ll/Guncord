@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { Channel, User } from "@vencord/discord-types";
 import { findByPropsLazy, findCssClassesLazy } from "@webpack";
-import { Avatar, ChannelStore, Clickable, IconUtils, RelationshipStore, ScrollerThin, Text, useMemo, UserStore } from "@webpack/common";
+import { Avatar, ChannelStore, Clickable, IconUtils, RelationshipStore, ScrollerThin, useMemo, UserStore } from "@webpack/common";
 import { ComponentType, JSX } from "react";
 
 const SelectedChannelActionCreators = findByPropsLazy("selectPrivateChannel");
@@ -76,7 +76,7 @@ function renderClickableGDMs(mutualDms: Channel[], onClose: () => void) {
             </Avatar>
             <div className={MutualsListClasses.details}>
                 <div className={MutualsListClasses.name}>{getGroupDMName(c)}</div>
-                <Text variant="text-xs/medium">{c.recipients.length + 1} Members</Text>
+                <BaseText size="xs" weight="medium">{c.recipients.length + 1} Members</BaseText>
             </div>
         </Clickable>
     ));

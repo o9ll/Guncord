@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -150,6 +150,8 @@ function VencordChatBarButtons(props: ChatBarProps) {
 
 export function _injectButtons(buttons: ReactNode[], props: ChatBarProps) {
     if (props.disabled || buttons.length === 0) return;
+    // Guard: don't inject if already present (patch may fire in multiple bundle modules)
+    if ((buttons as any[]).some((b: any) => b?.key === "vencord-chat-buttons")) return;
 
     buttons.unshift(<VencordChatBarButtons key="vencord-chat-buttons" {...props} />);
 }
@@ -195,7 +197,7 @@ export const ChatBarButton = ErrorBoundary.wrap((props: ChatBarButtonProps) => {
     );
 }, { noop: true });
 
-/* Vencord Buttons context menu removed — managed by Backpack plugin */
+/* Guncord Buttons context menu removed — managed by Backpack plugin */
 
 function CompactChatPopout({ chatBarProps, closePopout }: any) {
     const { chatBarButtons } = useSettings(["uiElements.chatBarButtons.*"]).uiElements;

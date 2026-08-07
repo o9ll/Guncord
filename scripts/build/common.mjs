@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -456,6 +456,7 @@ export const commonOpts = {
         "@webpack/patcher": "./src/webpack/patchWebpack",
         "@webpack": "./src/webpack/webpack",
         "@guncordplugins": "./src/guncordplugins",
+        "@equicordplugins": "./src/plugins",
         "@Guncord/types/webpack/common": "./src/webpack/common",
         "@Guncord/types/webpack": "./src/webpack/webpack",
         "@Guncord/types/utils": "./src/utils",

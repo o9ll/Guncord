@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ const FriendInvites = findByPropsLazy("createFriendInvite");
 export default definePlugin({
     name: "FriendInvites",
     description: "Create and manage friend invite links via slash commands (/create friend invite, /view friend invites, /revoke friend invites).",
+    dependencies: ["CommandsAPI"],
     tags: ["Friends", "Commands"],
     authors: [Devs.afn, Devs.Dziurwa],
     commands: [

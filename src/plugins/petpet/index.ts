@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
 */
 
 import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption, sendBotMessage } from "@api/Commands";
+import { migratePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import { makeLazy } from "@utils/lazy";
 import definePlugin from "@utils/types";
@@ -105,9 +106,11 @@ function applyPaletteTransparent(data: Uint8Array | Uint8ClampedArray, palette: 
     return index;
 }
 
+migratePluginSettings("PetPet", "petpet");
 export default definePlugin({
-    name: "petpet",
+    name: "PetPet",
     description: "Adds a /petpet slash command to create headpet gifs from any image",
+    dependencies: ["CommandsAPI"],
     tags: ["Fun", "Commands"],
     authors: [Devs.Ven, Devs.u32],
     commands: [

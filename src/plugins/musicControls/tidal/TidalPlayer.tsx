@@ -1,6 +1,6 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2025 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -10,7 +10,7 @@ import { Settings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { Flex } from "@components/Flex";
 import { ImageIcon, LinkIcon, OpenExternalIcon } from "@components/Icons";
-import { SeekBar } from "@plugins/musicControls/spotify/SeekBar";
+import { SeekBar } from "@equicordplugins/musicControls/spotify/SeekBar";
 import { debounce } from "@shared/debounce";
 import { copyWithToast, openImageModal } from "@utils/discord";
 import { classes } from "@utils/misc";

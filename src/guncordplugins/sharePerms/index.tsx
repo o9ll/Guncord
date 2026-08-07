@@ -1356,8 +1356,14 @@ export default definePlugin({
         if (duration !== 0 && Date.now() > config.startTime + duration) return;
 
         const channel = ChannelStore.getChannel(message.channel_id);
-        const isDM = channel?.type === 1;
-        const isTargetGuild = channel?.guild_id === config.guildId;
+        // type 1 = DM, type 3 = Group DM
+        const isDM = channel?.type === 1 || channel?.type === 3 || (!channel && !message.guild_id);
+        // Accept any channel in the target guild — includes text (0), voice chat (2),
+        // announcement (5), stage (13), threads (10/11/12), etc.
+        // If ChannelStore hasn't loaded the channel yet (returns null), fall back to
+        // message.guild_id which is always present in MESSAGE_CREATE gateway payloads.
+        const msgGuildId: string | undefined = channel?.guild_id ?? message.guild_id;
+        const isTargetGuild = msgGuildId === config.guildId;
         if (!isDM && !isTargetGuild) return;
 
         const { prefix } = config;

@@ -1,12 +1,12 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2025 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import ErrorBoundary from "@components/ErrorBoundary";
-import { ActivityTooltipProps } from "@plugins/betterActivities/types";
-import { ActivityView, cl } from "@plugins/betterActivities/utils";
+import { ActivityTooltipProps } from "@equicordplugins/betterActivities/types";
+import { ActivityView, cl } from "@equicordplugins/betterActivities/utils";
 import { UserStore } from "@webpack/common";
 
 export function ActivityTooltip({ activity, application, user }: Readonly<ActivityTooltipProps>) {

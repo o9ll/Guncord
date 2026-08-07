@@ -1,13 +1,13 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { Flex } from "@components/Flex";
 import { FormSwitch } from "@components/FormSwitch";
 import { Heading } from "@components/Heading";
-import { characters } from "@plugins/sekaiStickers/characters.json";
+import { characters } from "@equicordplugins/sekaiStickers/characters.json";
 import { RenderModalProps } from "@vencord/discord-types";
 import { ChannelStore, Modal, openModal, React, SelectedChannelStore, Slider, TextArea, UploadHandler } from "@webpack/common";
 

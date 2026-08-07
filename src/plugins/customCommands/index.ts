@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -90,6 +90,7 @@ migratePluginSettings("CustomCommands", "MessageTags");
 export default definePlugin({
     name: "CustomCommands",
     description: "Allows you to create custom slash commands / tags",
+    dependencies: ["CommandsAPI"],
     searchTerms: ["MessageTags"],
     authors: [Devs.Ven, Devs.Luna,],
     tags: ["Commands", "Customisation", "Utility"],

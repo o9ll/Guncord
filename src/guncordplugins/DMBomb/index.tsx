@@ -344,7 +344,7 @@ function DMBombModal({ rootProps, guildId }: { rootProps: any; guildId: string; 
 
 export default definePlugin({
     name: "DMBomb",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Sends an aggressive message to ALL server members or a specific role via right click with optional multi-account token rotation.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
 

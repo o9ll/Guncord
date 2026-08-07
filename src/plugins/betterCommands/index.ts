@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2025 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -12,7 +12,7 @@ import { FluxDispatcher, UserStore } from "@webpack/common";
 
 const settings = definePluginSettings({
     autoFillArguments: {
-        description: "Automatically fill command with all arguements instead of just required ones",
+        description: "Automatically fill command with all arguments instead of just required ones.",
         type: OptionType.BOOLEAN,
         default: true,
     },

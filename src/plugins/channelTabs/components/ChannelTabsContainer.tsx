@@ -1,13 +1,13 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { Flex } from "@components/Flex";
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
-import { BasicChannelTabsProps, ChannelTabsProps, clearStaleNavigationContext, closeTab, createTab, handleChannelSwitch, isNavigationFromSource, isTabSelected, moveToTab, openedTabs, openStartupTabs, saveTabs, settings, setUpdaterFunction, useGhostTabs } from "@plugins/channelTabs/util";
+import { BasicChannelTabsProps, ChannelTabsProps, clearStaleNavigationContext, closeTab, createTab, handleChannelSwitch, isNavigationFromSource, isTabSelected, moveToTab, openedTabs, openStartupTabs, saveTabs, settings, setUpdaterFunction, useGhostTabs } from "@equicordplugins/channelTabs/util";
 import { classNameFactory } from "@utils/css";
 import { classes } from "@utils/misc";
 import { useForceUpdater } from "@utils/react";
@@ -102,22 +102,28 @@ export default function ChannelsTabsContainer(props: BasicChannelTabsProps) {
     const _update = useForceUpdater();
     const update = useCallback((save = true) => {
         _update();
-        if (save) saveTabs(userId);
-    }, [userId]);
+        const currentUserId = UserStore.getCurrentUser()?.id;
+        if (save && currentUserId) void saveTabs(currentUserId);
+    }, []);
 
     const ref = useRef<HTMLDivElement>(null);
     const scrollerRef = useRef<HTMLDivElement>(null);
+    const currentChannelRef = useRef(props);
+    currentChannelRef.current = props;
 
     useEffect(() => {
-        setUpdaterFunction(update);
-        const onLogin = () => {
-            const { id } = UserStore.getCurrentUser();
-            if (id === userId && openedTabs.length) return;
-            setUserId(id);
+        return setUpdaterFunction(update);
+    }, [update]);
 
-            openStartupTabs({ ...props, userId: id }, setUserId);
+    useEffect(() => {
+        const onLogin = () => {
+            const user = UserStore.getCurrentUser();
+            if (!user) return;
+
+            void openStartupTabs({ ...currentChannelRef.current, userId: user.id }, setUserId);
         };
 
+        onLogin();
         FluxDispatcher.subscribe("CONNECTION_OPEN_SUPPLEMENTAL", onLogin);
         return () => {
             FluxDispatcher.unsubscribe("CONNECTION_OPEN_SUPPLEMENTAL", onLogin);

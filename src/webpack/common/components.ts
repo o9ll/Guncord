@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,35 +59,31 @@ export const TooltipContainer = TooltipContainerComponent as never;
 // FIXME: t.TextInput was for the old void components, and is not 100% correct for the mana component
 export const TextInput = waitForComponent<t.TextInput>("TextInput", filters.componentByCode('setHasValue?.(""!==', '="text",'));
 export const TextArea = waitForComponent<t.TextArea>("TextArea", filters.componentByCode("!0,rows:", "showRemainingCharacterCount:"));
-export const Select = waitForComponent<t.Select>("Select",
-    m => filters.componentByCode("renderLeading:", "isSelected:", "renderOptionLabel:")(m)
-    || filters.componentByCode('selectionMode:"single",onSelectionChange:', "isSelected:")(m)
-    || filters.componentByCode("isSelected:", "serialize:", "closeOnSelect:")(m)
-    || filters.componentByCode("onSelectionChange:", "isSelected:", "serialize:")(m)
-);
-export const SearchableSelect = waitForComponent<t.SearchableSelect>("SearchableSelect",
-    m => filters.componentByCode('?"multiple":"single",required:')(m)
-    // Fallback for Discord 2025+ bundle where "single"/"multiple" string changed:
-    || filters.componentByCode('required:', 'multi:', 'filterText:')(m)
-    || filters.componentByCode('required:', '"multiple"', 'filterText:')(m)
-);
+export const Select = waitForComponent<t.Select>("Select", filters.componentByCode('selectionMode:"single",onSelectionChange:', "isSelected:"));
+export const SearchableSelect = waitForComponent<t.SearchableSelect>("SearchableSelect", filters.componentByCode('?"multiple":"single",required:'));
 export const Slider = waitForComponent<t.Slider>("Slider", filters.componentByCode("markDash", "this.renderMark("));
 export const Popout = waitForComponent<t.Popout>("Popout", filters.componentByCode("ref:this.ref,", "renderPopout:this.renderPopout,"));
 export const Dialog = waitForComponent<t.Dialog>("Dialog", filters.componentByCode('role:"dialog",tabIndex:-1'));
-export const TabBar = waitForComponent("TabBar", m =>
-    filters.componentByCode("ref:this.tabBarRef,className:")(m) ||
-    filters.componentByCode("tablist")(m)
-);
+export const TabBar = waitForComponent("TabBar", filters.componentByCode("ref:this.tabBarRef,className:"));
 // TODO: remake this component
-export const Clickable = waitForComponent<t.Clickable>("Clickable", filters.componentByCode("renderNonInteractive"));
+export const Clickable = waitForComponent<t.Clickable>("Clickable", filters.componentByCode("this.context?this.renderNonInteractive():"));
 export const Avatar = waitForComponent<t.Avatar>("Avatar", filters.componentByCode(".size-1.375*"));
+export const UserSummaryItem = waitForComponent("UserSummaryItem", filters.componentByCode("defaultRenderUser", "showDefaultAvatarsForNullUsers"));
 
 export let ColorPicker: t.ColorPicker = () => null;
 export function setColorPicker(component: t.ColorPicker) {
     ColorPicker = component;
 }
 
-export const UserSummaryItem = waitForComponent("UserSummaryItem", filters.componentByCode("defaultRenderUser", "showDefaultAvatarsForNullUsers"));
+export let RoleMemberPopout: t.RoleMemberPopout = () => null;
+export function setRoleMemberPopout(component: t.RoleMemberPopout) {
+    RoleMemberPopout = component;
+}
+
+export let NewCustomizationSection: t.ComponentSection = () => null;
+export function setNewCustomizationSection(component: t.ComponentSection) {
+    NewCustomizationSection = component;
+}
 
 export let createScroller: ((scrollbarClassName: string, fadeClassName: string, customThemeClassName: string) => t.ScrollerThin) | undefined;
 export function setCreateScroller(cs: NonNullable<typeof createScroller>) {
@@ -136,11 +132,3 @@ export const Animations = mapMangledModuleLazy(".assign({colorNames:", {
     Transition: filters.componentByCode('["items","children"]', ",null,"),
     animated: filters.byProps("div", "text")
 });
-
-export const Paginator = waitForComponent("Paginator", filters.componentByCode("maxVisiblePages", "pageSize"));
-
-export let RoleMemberPopout: t.RoleMemberPopout = () => null;
-export function setRoleMemberPopout(component: t.RoleMemberPopout) {
-    RoleMemberPopout = component;
-}
-

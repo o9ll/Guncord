@@ -1,11 +1,6 @@
 /*
- * Guncord — CustomStreamPreview (internal tool for the Guncord project)
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * Rebuilt from the older VencordCustomScreenSharePreview plugin to use Vencord's
- * RestAPI (no manual token handling) and DataStore instead of raw fetch + a custom
- * state manager.
- *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 

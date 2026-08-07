@@ -1,11 +1,13 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Button as NewButton } from "@components/Button";
+import { BaseText } from "@components/BaseText";
+import { Button, Button as NewButton } from "@components/Button";
 import { Flex } from "@components/Flex";
+import { Paragraph } from "@components/Paragraph";
 import { Decoration, getPresets, Preset } from "@plugins/decor/lib/api";
 import { GUILD_ID, INVITE_KEY } from "@plugins/decor/lib/constants";
 import { useAuthorizationStore } from "@plugins/decor/lib/stores/AuthorizationStore";
@@ -22,7 +24,7 @@ import { copyWithToast, openInviteModal } from "@utils/discord";
 import { Margins } from "@utils/margins";
 import { Queue } from "@utils/Queue";
 import { RenderModalProps, User } from "@vencord/discord-types";
-import { Button, closeAllModals, ConfirmModal, FluxDispatcher, Forms, GuildStore, Modal, NavigationRouter, openModal, Parser, Text, Tooltip, useEffect, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
+import { closeAllModals, ConfirmModal, FluxDispatcher, Forms, GuildStore, Modal, NavigationRouter, openModal, Parser, Tooltip, useEffect, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
 
 import { openCreateDecorationModal } from "./CreateDecorationModal";
 import { openGuidelinesModal } from "./GuidelinesModal";
@@ -81,9 +83,9 @@ function SectionHeader({ section }: SectionHeaderProps) {
             />}
         </Flex>
         {hasSubtitle &&
-            <Forms.FormText className={Margins.bottom8}>
+            <Paragraph className={Margins.bottom8}>
                 {section.subtitle}
-            </Forms.FormText>
+            </Paragraph>
         }
     </div>;
 }
@@ -244,17 +246,18 @@ function ChangeDecorationModal(props: RenderModalProps) {
                 />
                 {isActiveDecorationPreset && <Forms.FormTitle className="">Part of the {activeDecorationPreset.name} Preset</Forms.FormTitle>}
                 {typeof activeSelectedDecoration === "object" &&
-                    <Text
-                        variant="text-sm/semibold"
-                        color="text-strong"
+                    <BaseText
+                        size="sm"
+                        weight="semibold"
+                        style={{ color: "var(--text-strong)" }}
                     >
                         {activeSelectedDecoration?.alt}
-                    </Text>
+                    </BaseText>
                 }
                 {activeDecorationHasAuthor && (
-                    <Text key={`createdBy-${activeSelectedDecoration.authorId}`}>
+                    <BaseText key={`createdBy-${activeSelectedDecoration.authorId}`}>
                         Created by {Parser.parse(`<@${activeSelectedDecoration.authorId}>`)}
-                    </Text>
+                    </BaseText>
                 )}
                 {isActiveDecorationPreset && (
                     <Button onClick={() => copyWithToast(activeDecorationPreset.id)}>

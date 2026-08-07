@@ -1,6 +1,6 @@
 /*
- * @vencord/discord-types
- * Copyright (c) 2024 Vendicated, Nuckyz and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 

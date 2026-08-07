@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -42,7 +42,7 @@ export default definePlugin({
             find: "UNREAD_IMPORTANT:",
             replacement: [
                 {
-                    match: /\.Children\.count.+?:null(?<=,channel:(\i).+?)/,
+                    match: /\.Children\.count.+?:null(?<=,channel:\i.+?)/,
                     replace: "$&,$self.CountBadge({channel: arguments[0].channel})",
                 },
             ]

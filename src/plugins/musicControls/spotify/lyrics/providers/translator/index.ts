@@ -1,11 +1,11 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import settings from "@plugins/musicControls";
-import { Provider, SyncedLyric } from "@plugins/musicControls/spotify/lyrics/providers/types";
+import settings from "@equicordplugins/musicControls";
+import { Provider, SyncedLyric } from "@equicordplugins/musicControls/spotify/lyrics/providers/types";
 
 // stolen from src/plugins/translate/utils.ts
 

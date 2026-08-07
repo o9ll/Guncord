@@ -1,13 +1,12 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import * as DataStore from "@api/DataStore";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
-import { disableStyle, enableStyle } from "@api/Styles";
 import usrbg from "@plugins/usrbg";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
@@ -73,14 +72,13 @@ export default definePlugin({
     ],
 
     data: {},
+    managedStyle: style,
 
     async start() {
-        enableStyle(style);
         this.data = await DataStore.get(DATASTORE_KEY) || {};
     },
 
     stop() {
-        disableStyle(style);
         DataStore.set(DATASTORE_KEY, this.data);
     },
 

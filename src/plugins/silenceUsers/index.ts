@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -57,6 +57,7 @@ export default definePlugin({
     name: "SilenceUsers",
     description: "Silences @mention pings and server badge counts from specific users. Regular messages and DMs are untouched.",
     authors: [EquicordDevs.dka],
+    tags: ["Notifications"],
     settings,
     start() {
         FluxDispatcher.addInterceptor(interceptor);

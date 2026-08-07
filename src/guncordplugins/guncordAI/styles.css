@@ -80,86 +80,92 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 18px;
+    padding: 11px 16px;
     background: var(--background-secondary);
-    border-bottom: 1px solid var(--background-modifier-accent);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     flex-shrink: 0;
-    gap: 12px;
+    gap: 10px;
 }
 
 .nai-header-left {
     display: flex;
     align-items: center;
-    gap: 11px;
+    gap: 9px;
     min-width: 0;
 }
 
 .nai-avatar {
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #5865F2 0%, #EB459E 100%);
+    width: 28px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    box-shadow: 0 0 16px rgba(88, 101, 242, 0.35);
+    color: #949ba4;
+    opacity: 0.8;
 }
 
 .nai-header-info {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
     min-width: 0;
 }
 
 .nai-header-title-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
 }
 
 .nai-header-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--header-primary);
-    letter-spacing: -0.2px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #dbdee1;
+    letter-spacing: 0;
 }
 
 .nai-header-badge {
-    background: rgba(88, 101, 242, 0.18);
-    color: #7289da;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 7px;
-    border-radius: 10px;
-    letter-spacing: 0.4px;
-    border: 1px solid rgba(88, 101, 242, 0.25);
+    background: transparent;
+    color: #5e6272;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0;
+    border: none;
+    padding: 0;
+}
+
+.nai-header-sep {
+    color: #3e4148;
+    font-size: 14px;
+    line-height: 1;
+    flex-shrink: 0;
 }
 
 .nai-header-status {
     display: flex;
     align-items: center;
     gap: 5px;
-    font-size: 12px;
-    color: #f2f3f5;
+    font-size: 11px;
+    color: #5e6272;
 }
 
 .nai-dot {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
 }
 
 .nai-dot--on {
     background: #23a55a;
-    box-shadow: 0 0 5px rgba(35, 165, 90, 0.7);
     animation: nai-pulse 2.5s ease-in-out infinite;
 }
 
 .nai-dot--off {
     background: #ed4245;
+    opacity: 0.7;
 }
 
 @keyframes nai-pulse {
@@ -171,15 +177,15 @@
     }
 
     50% {
-        opacity: 0.6;
-        transform: scale(0.85);
+        opacity: 0.5;
+        transform: scale(0.8);
     }
 }
 
 .nai-header-right {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     flex-shrink: 0;
 }
 
@@ -254,6 +260,7 @@
 .nai-empty-icon {
     margin-bottom: 6px;
     opacity: 0.85;
+    color: #c8ccd2;
 }
 
 .nai-empty-title {
@@ -343,8 +350,8 @@
 }
 
 .nai-msg--assistant .nai-msg-avatar {
-    background: linear-gradient(135deg, #5865F2 0%, #EB459E 100%);
-    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+    color: #c8ccd2;
     border: none;
 }
 
@@ -717,9 +724,9 @@
     display: flex !important;
     align-items: center !important;
     gap: 12px !important;
-    padding: 0 4px !important;
+    padding: 0 8px !important;
     margin-left: 8px !important;
-    width: calc(100% - 8px) !important;
+    width: calc(100% - 16px) !important;
     height: 42px !important;
     border-radius: 4px !important;
     cursor: pointer !important;

@@ -1,23 +1,32 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
+import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
-import definePlugin from "@utils/types";
+import definePlugin, { OptionType } from "@utils/types";
+import { MessageActions, PinActions } from "@webpack/common";
+
+const settings = definePluginSettings({
+    noShiftDelete: {
+        type: OptionType.BOOLEAN,
+        description: "Remove requirement to hold shift for deleting a message.",
+        default: true,
+    },
+    noShiftPin: {
+        type: OptionType.BOOLEAN,
+        description: "Remove requirement to hold shift for pinning a message.",
+        default: true,
+    },
+    noQuickReacts: {
+        default: true,
+        restartNeeded: true,
+        type: OptionType.BOOLEAN,
+        description: "Hide quick reacts. By default, showing the full menu hides quick react buttons.",
+    },
+});
 
 export default definePlugin({
     name: "ShowAllMessageButtons",
@@ -25,15 +34,41 @@ export default definePlugin({
     description: "Always show all message buttons no matter if you are holding the shift key or not.",
     tags: ["Chat", "Utility"],
     authors: [Devs.Nuckyz],
+    settings,
 
     patches: [
         {
             find: "#{intl::MESSAGE_UTILITIES_A11Y_LABEL}",
-            replacement: {
-                // isExpanded: isShiftPressed && other conditions...
-                match: /isExpanded:\i&&(.+?),/,
-                replace: "isExpanded:$1,"
-            }
-        }
-    ]
+            replacement: [
+                {
+                    match: /isExpanded:\i&&(.+?),/,
+                    replace: "isExpanded:$1,"
+                },
+                {
+                    predicate: () => settings.store.noShiftDelete,
+                    match: /onClick:.{10,20}(?=,dangerous:!0)/,
+                    replace: "onClick:() => $self.deleteMessage(arguments[0].message)",
+                },
+                {
+                    predicate: () => settings.store.noShiftPin,
+                    match: /onClick:.{10,30}(?=\},"pin")/,
+                    replace: "onClick:() => $self.toggleMessagePin(arguments[0]),"
+                },
+                {
+                    predicate: () => !settings.store.noQuickReacts,
+                    match: /\i(\?null:\(0,\i\.jsxs\).{0,100}message:\i\}\)),\(0,\i\.jsxs?\)\(\i,\{\}\)/,
+                    replace: "false$1"
+                },
+            ]
+        },
+    ],
+
+    deleteMessage({ channel_id, id }) {
+        MessageActions.deleteMessage(channel_id, id);
+    },
+    toggleMessagePin({ channel, message }) {
+        if (message.pinned) return PinActions.unpinMessage(channel, message.id);
+
+        PinActions.pinMessage(channel, message.id);
+    },
 });

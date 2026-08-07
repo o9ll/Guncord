@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -478,6 +478,7 @@ app.whenReady().then(() => {
             if (channel === FULLSCREEN_CHANNEL) {
                 if (_fullscreenPatched) return;
                 _fullscreenPatched = true;
+                try { electron.ipcMain.removeHandler(FULLSCREEN_CHANNEL); } catch {}
                 // No-op : on enregistre un handler vide pour que Discord ne crash pas
                 // ("no handler registered"), mais on ne fait RIEN — le fullscreen est
                 // géré par before-input-event (F11) côté main process.
@@ -486,6 +487,9 @@ app.whenReady().then(() => {
                 });
                 return;
             }
+            try {
+                electron.ipcMain.removeHandler(channel);
+            } catch {}
             try {
                 return _originalHandle(channel, listener);
             } catch (e: any) {

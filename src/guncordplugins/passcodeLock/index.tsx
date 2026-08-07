@@ -1,6 +1,6 @@
 /*
  * Guncord, a Discord client mod
- * Ported from PasscodeLock by arg0NNY (https://github.com/okdevme/DiscordPlugins)
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 

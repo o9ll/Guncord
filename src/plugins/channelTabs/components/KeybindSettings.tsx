@@ -1,6 +1,6 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -8,7 +8,7 @@ import { Divider } from "@components/Divider";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
-import { settings } from "@plugins/channelTabs/util";
+import { settings } from "@equicordplugins/channelTabs/util";
 import { IS_MAC } from "@utils/constants";
 import { Button, React, Text, useEffect, useRef, useState } from "@webpack/common";
 import { JSX } from "react";

@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -488,7 +488,7 @@ export async function createWindows() {
     const startMinimized = CommandLine.values["start-minimized"];
 
     let splash: BrowserWindow | undefined;
-    if (Settings.store.enableSplashScreen !== false) {
+    if (Settings.store.enableSplashScreen === true) {
         splash = await createSplashWindow(startMinimized);
 
         if (isDeckGameMode) splash.setFullScreen(true);

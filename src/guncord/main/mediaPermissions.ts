@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -45,7 +45,7 @@ export function registerMediaPermissionsForSession(ses: Session) {
         writable: false,
         configurable: true
     });
-    
+
     Object.defineProperty(ses, 'setPermissionCheckHandler', {
         value: () => {},
         writable: false,

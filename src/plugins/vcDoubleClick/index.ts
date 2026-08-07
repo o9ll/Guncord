@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { ChannelStore, SelectedChannelStore } from "@webpack/common";
+import { ChannelRouter, ChannelStore, SelectedChannelStore } from "@webpack/common";
 
 const timers = {} as Record<string, {
     timeout?: NodeJS.Timeout;
@@ -30,7 +30,7 @@ export default definePlugin({
     enabledByDefault: true,
     description: "Join voice chats via double click instead of single click",
     tags: ["Voice"],
-    authors: [Devs.Ven, Devs.D3SOX],
+    authors: [Devs.Ven, Devs.D3SOX, Devs.sadan],
     patches: [
         // Stage Channels & Voice Channels
         // the find is for stage channels, but it also handles voice
@@ -57,8 +57,24 @@ export default definePlugin({
                 replace: (_, onClick, props) => ""
                     + `onClick:(vcDoubleClickEvt)=>$self.shouldRunOnClick(vcDoubleClickEvt,${props})&&${onClick}()`,
             }
+        },
+        // Voice channels in the active now section
+        {
+            find: ',["embedded_background"]',
+            replacement: {
+                // There are two onClick events for this section, one for the server icon, and another for the channel name
+                // The server icon takes you to the voice channel, but doesnt join it. The channel name joins the voice channel
+                match: /(?=children)(?<=selectVoiceChannel\((\i)\.id\).{0,100})/,
+                replace: "onClick:$self.goToChannel.bind(null,$1),"
+            }
         }
     ],
+
+    goToChannel(props: { id?: string; } | undefined) {
+        const { id } = props ?? {};
+        if (!id) return console.error("No channel id found");
+        ChannelRouter.transitionToChannel(id);
+    },
 
     shouldRunOnClick(e: MouseEvent, { channelId }) {
         const channel = ChannelStore.getChannel(channelId);

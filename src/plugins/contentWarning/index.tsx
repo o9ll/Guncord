@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2023 Vendicated, camila314, and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -158,8 +158,8 @@ export default definePlugin({
         {
             find: ".VOICE_HANGOUT_INVITE?",
             replacement: {
-                match: /(compact:\i}=(\i).+?)(\(0,.+\}\)\]\}\))/,
-                replace: "$1 $self.modify(arguments[0].message,$3)"
+                match: /(compact:\i}=\i.+?)(\(0,.+\}\)\]\}\))/,
+                replace: "$1 $self.modify(arguments[0].message,$2)"
             }
         }
     ],

@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,7 +35,7 @@ function toggleStreamerMode({ streamKey }: StreamEvent, value: boolean) {
 }
 
 export default definePlugin({
-    name: "StreamerModeOnStream",
+    name: "StreamerModeOn",
     description: "Automatically enables streamer mode when you start streaming in Discord",
     tags: ["Privacy", "Utility"],
     authors: [Devs.IcedMarina],

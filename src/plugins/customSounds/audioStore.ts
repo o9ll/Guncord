@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2025 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -95,6 +95,7 @@ export async function getAudioDataURI(id: string): Promise<string | undefined> {
         return entry.dataUri;
     }
 
+    console.log(`[CustomSounds] No cached data URI for ${id}, generating...`);
     const dataUri = await generateDataURI(entry.buffer, entry.type, entry.name);
 
     const current = await getAllAudio();

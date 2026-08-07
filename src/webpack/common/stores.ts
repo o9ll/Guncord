@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -85,6 +85,27 @@ export let QuestStore: t.QuestStore;
 export let PendingReplyStore: t.PendingReplyStore;
 export let ExperimentStore: GenericStore;
 export let UserAffinitiesStore: GenericStore;
+export let BasicGuildStore: t.BasicGuildStore;
+
+export let SortedGuildStore: t.SortedGuildStore;
+export let JoinedThreadsStore: t.JoinedThreadsStore;
+export let SafetyHubStore: t.SafetyHubStore;
+export let PrivateChannelSortStore: t.PrivateChannelSortStore;
+export let ApplicationStreamingSettingsStore: t.ApplicationStreamingSettingsStore;
+export let UserProfileSettingsStore: t.UserProfileSettingsStore;
+export let AuthorizedAppsStore: t.AuthorizedAppsStore;
+export let ChannelSectionStore: t.ChannelSectionStore;
+export let ExpandedGuildFolderStore: t.ExpandedGuildFolderStore;
+export let AuthSessionsStore: t.AuthSessionsStore;
+export let ClientThemesBackgroundStore: t.ClientThemesBackgroundStore;
+export let ConnectedAccountsStore: t.ConnectedAccountsStore;
+export let ChannelMemberStore: t.ChannelMemberStore;
+export let ThreadMemberListStore: t.ThreadMemberListStore;
+export let CollapsedVoiceChannelStore: t.CollapsedVoiceChannelStore;
+export let ReferencedMessageStore: t.ReferencedMessageStore;
+export let SessionsStore: t.SessionsStore;
+export let GuildAvailabilityStore: t.GuildAvailabilityStore;
+export let UserGuildJoinRequestStore: t.UserGuildJoinRequestStore;
 
 /**
  * @see jsdoc of {@link t.useStateFromStores}
@@ -142,6 +163,26 @@ waitForStore("PendingReplyStore", m => PendingReplyStore = m);
 waitForStore("ExperimentStore", m => ExperimentStore = m);
 waitForStore("QuestStore", m => QuestStore = m);
 waitForStore("UserAffinitiesV2Store", m => UserAffinitiesStore = m);
+waitForStore("SortedGuildStore", m => SortedGuildStore = m);
+waitForStore("JoinedThreadsStore", m => JoinedThreadsStore = m);
+waitForStore("SafetyHubStore", m => SafetyHubStore = m);
+waitForStore("PrivateChannelSortStore", m => PrivateChannelSortStore = m);
+waitForStore("ApplicationStreamingSettingsStore", m => ApplicationStreamingSettingsStore = m);
+waitForStore("UserProfileSettingsStore", m => UserProfileSettingsStore = m);
+waitForStore("AuthorizedAppsStore", m => AuthorizedAppsStore = m);
+waitForStore("ChannelSectionStore", m => ChannelSectionStore = m);
+waitForStore("ExpandedGuildFolderStore", m => ExpandedGuildFolderStore = m);
+waitForStore("AuthSessionsStore", m => AuthSessionsStore = m);
+waitForStore("ClientThemesBackgroundStore", m => ClientThemesBackgroundStore = m);
+waitForStore("ConnectedAccountsStore", m => ConnectedAccountsStore = m);
+waitForStore("ChannelMemberStore", m => ChannelMemberStore = m);
+waitForStore("ThreadMemberListStore", m => ThreadMemberListStore = m);
+waitForStore("CollapsedVoiceChannelStore", m => CollapsedVoiceChannelStore = m);
+waitForStore("ReferencedMessageStore", m => ReferencedMessageStore = m);
+waitForStore("SessionsStore", m => SessionsStore = m);
+waitForStore("GuildAvailabilityStore", m => GuildAvailabilityStore = m);
+waitForStore("UserGuildJoinRequestStore", m => UserGuildJoinRequestStore = m);
+waitForStore("BasicGuildStore", m => BasicGuildStore = m);
 waitForStore("ThemeStore", m => {
     ThemeStore = m;
     import("@api/Themes").then(({ initQuickCssThemeStore }) => initQuickCssThemeStore(m));

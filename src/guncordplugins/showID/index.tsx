@@ -1,6 +1,6 @@
 /*
  * Guncord, a Discord client mod
- * Copyright (c) 2024 contributors
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -89,7 +89,7 @@ const UserIDSection = ErrorBoundary.wrap(({ userId }: { userId: string; }) => (
 
 export default definePlugin({
     name: "ShowID",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Shows the user ID in Discord profiles, below the 'Member Since' section.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
 

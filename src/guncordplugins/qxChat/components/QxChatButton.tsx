@@ -1,3 +1,9 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { ContextMenuApi, FluxDispatcher, Menu, React, ReactDOM, Tooltip } from "@webpack/common";
 import { t } from "@api/i18n";
 import { plugins, stopPlugin } from "@api/PluginManager";

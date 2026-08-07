@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -67,7 +67,7 @@ export default defineConfig(
                 "error",
                 {
                     "files": [`${import.meta.dirname}/scripts/header-new.txt`, `${import.meta.dirname}/scripts/header-old.txt`],
-                    "templates": { "author": [".*", "Vendicated and contributors"] }
+                    "templates": { "author": [".*", "o9"] }
                 }
             ],
 

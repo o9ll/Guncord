@@ -1,11 +1,11 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { DataStore } from "@api/index";
-import { ChannelUnreadState, reconcileUnreadFallbackCache } from "@plugins/channelTabs/util/unreadState";
+import { ChannelUnreadState, reconcileUnreadFallbackCache } from "@equicordplugins/channelTabs/util/unreadState";
 
 export interface PersistedUnreadFallbacks {
     [userId: string]: Record<string, number>;

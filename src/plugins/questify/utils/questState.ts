@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -51,6 +51,11 @@ interface QuestPanelPercentCompleteOptions {
 interface QuestPanelPercentCompleteResult {
     percentComplete: number;
     percentCompleteText?: string;
+}
+
+interface QuestEmbedProgressResult {
+    completedRatio: number;
+    completedRatioDisplay?: string;
 }
 
 interface QuestProgressEntry {
@@ -151,12 +156,15 @@ function getCurrentIgnoredQuestIds(): string[] {
 }
 
 function getAutoCompleteShowcaseQuest(): Quest | null {
+    const entries = getActiveAutoCompletes();
+    const runningEntries = entries.filter(entry => entry.status === "running");
+    const showcaseEntries = runningEntries.length > 0 ? runningEntries : entries;
     let bestQuest: Quest | null = null;
     let bestTimeRemaining = Infinity;
     let currentQuest: Quest | null = null;
     let currentTimeRemaining = Infinity;
 
-    for (const entry of getActiveAutoCompletes()) {
+    for (const entry of showcaseEntries) {
         const quest = QuestStore.getQuest(entry.questId);
 
         if (!quest) {
@@ -273,6 +281,14 @@ export function getQuestPanelPercentComplete({
         percentComplete,
         percentCompleteText: `${Math.floor(percentComplete * 100)}%`,
     };
+}
+
+export function getQuestEmbedProgress(quest: Quest | null): QuestEmbedProgressResult | null {
+    const progress = getQuestPanelPercentComplete({ quest, percentCompleteText: " " });
+
+    return progress
+        ? { completedRatio: progress.percentComplete, completedRatioDisplay: progress.percentCompleteText }
+        : null;
 }
 
 export function getQuestStatus(

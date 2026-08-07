@@ -1,6 +1,6 @@
 /*
- * ConsoleWatcher — Developer tool for monitoring and collecting console events for debugging
- * Copyright © 2026 o9
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 

@@ -251,20 +251,20 @@ const SOUNDCORD_SECTION_PATHS = [
 
 function useSoundCordState() {
     const [state, setState] = useState({ playing: null as any, isPlaying: false, favorites: [] as any[], favIndex: -1, volume: 80 });
-    
+
     useEffect(() => {
         const handleUpdate = (e: any) => {
             if (e.state) setState(e.state);
         };
         // Request initial state in case the player is already running
         FluxDispatcher.dispatch({ type: "SOUNDCORD_REQUEST_STATE" });
-        
+
         FluxDispatcher.subscribe("SOUNDCORD_STATE_UPDATE", handleUpdate);
         return () => {
             FluxDispatcher.unsubscribe("SOUNDCORD_STATE_UPDATE", handleUpdate);
         };
     }, []);
-    
+
     return state;
 }
 
@@ -313,14 +313,14 @@ function SoundCordSection({ sc }: { sc: ReturnType<typeof useSoundCordState> }) 
                     </div>
                 )}
             </div>
-            
+
             {showVolume && (
                 <div style={{ padding: "0 4px" }}>
-                    <input 
-                        type="range" 
-                        min={0} 
-                        max={100} 
-                        value={sc.volume} 
+                    <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={sc.volume}
                         className="vc-guncord-dynamic-island-volume-slider"
                         style={{ "--value-percent": `${sc.volume}%` } as React.CSSProperties}
                         onChange={(e: any) => {
@@ -376,12 +376,12 @@ function ParticipantRow({ p, channel, currentUser }: { p: { user: any; member: a
         ? useStateFromStores([MediaEngineStore], () => MediaEngineStore.isSelfMute())
         : useStateFromStores([MediaEngineStore], () => MediaEngineStore.isLocalMute(p.user.id), [p.user.id]);
 
-    const avatarUrl = typeof p.user.getAvatarURL === "function" 
+    const avatarUrl = typeof p.user.getAvatarURL === "function"
         ? p.user.getAvatarURL(channel?.guild_id, 32)
         : p.user.avatarURL;
 
     return (
-        <div 
+        <div
             className="vc-guncord-dynamic-island-participant-row"
             onContextMenu={(e) => {
                 e.preventDefault();
@@ -389,20 +389,20 @@ function ParticipantRow({ p, channel, currentUser }: { p: { user: any; member: a
                 if (copy) copy(p.user.id);
                 else navigator.clipboard.writeText(p.user.id);
             }}
-            style={{ 
-                display: "flex", 
-                alignItems: "center", 
-                gap: "10px", 
-                padding: "6px 8px", 
+            style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "6px 8px",
                 borderRadius: "8px",
                 cursor: "context-menu",
                 transition: "background-color 0.15s ease"
             }}
             title={t("Right click to copy ID")}
         >
-            <img 
-                src={avatarUrl} 
-                style={{ width: "26px", height: "26px", borderRadius: "50%", objectFit: "cover" }} 
+            <img
+                src={avatarUrl}
+                style={{ width: "26px", height: "26px", borderRadius: "50%", objectFit: "cover" }}
                 alt=""
             />
             <div style={{ display: "flex", flexDirection: "column", lineHeight: "1.2", flexGrow: 1, minWidth: 0 }}>
@@ -413,18 +413,18 @@ function ParticipantRow({ p, channel, currentUser }: { p: { user: any; member: a
                     {p.user.username}
                 </span>
             </div>
-            
+
             {showParticipantButtons && (
-                <div 
+                <div
                     style={{ display: "flex", alignItems: "center", gap: "4px" }}
                     onClick={(e) => e.stopPropagation()}
                     onContextMenu={(e) => e.stopPropagation()}
                 >
                     {/* Mute Button */}
-                    <ControlButton 
-                        label={isMuted ? t("Unmute") : t("Mute")} 
-                        danger={isMuted} 
-                        compact 
+                    <ControlButton
+                        label={isMuted ? t("Unmute") : t("Mute")}
+                        danger={isMuted}
+                        compact
                         onClick={() => {
                             if (isSelf) IslandVoiceActions.toggleSelfMute();
                             else IslandVoiceActions.toggleLocalMute(p.user.id);
@@ -436,9 +436,9 @@ function ParticipantRow({ p, channel, currentUser }: { p: { user: any; member: a
                     {!isSelf && (
                         <>
                             {/* Follow Button */}
-                            <ControlButton 
+                            <ControlButton
                                 label={isFollowingUser ? t("Unfollow") : t("Follow")} 
-                                compact 
+                                compact
                                 active={isFollowingUser}
                                 danger={isFollowingUser}
                                 onClick={() => {
@@ -458,9 +458,9 @@ function ParticipantRow({ p, channel, currentUser }: { p: { user: any; member: a
                             </ControlButton>
 
                             {/* Friend Button */}
-                            <ControlButton 
-                                label={isFriend ? t("Remove Friend") : (isOutgoing || isIncoming ? t("Cancel Request") : t("Add Friend"))} 
-                                compact 
+                            <ControlButton
+                                label={isFriend ? t("Remove Friend") : (isOutgoing || isIncoming ? t("Cancel Request") : t("Add Friend"))}
+                                compact
                                 onClick={() => {
                                     if (isFriend) RelationshipActions.removeFriend(p.user.id);
                                     else if (isOutgoing) RelationshipActions.cancelFriendRequest(p.user.id);
@@ -513,28 +513,28 @@ function VoiceSection({ channelId }: { channelId: string; }) {
     }).filter(Boolean) as { user: any, member: any }[] : [];
 
     return (
-        <div 
-            className={cl("section")} 
-            style={{ 
-                display: "flex", 
-                flexDirection: "column", 
-                alignItems: "stretch", 
-                padding: 0, 
-                gap: 0 
+        <div
+            className={cl("section")}
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "stretch",
+                padding: 0,
+                gap: 0
             }}
         >
-            <div 
+            <div
                 aria-label={t("Discord call controls")}
-                style={{ 
-                    display: "flex", 
-                    minWidth: 0, 
-                    padding: "8px", 
-                    alignItems: "center", 
-                    gap: "10px" 
+                style={{
+                    display: "flex",
+                    minWidth: 0,
+                    padding: "8px",
+                    alignItems: "center",
+                    gap: "10px"
                 }}
             >
-                <div 
-                    className={cl("section-info")} 
+                <div
+                    className={cl("section-info")}
                     onClick={() => {
                         if (showCallParticipants) setExpanded(!expanded);
                     }}
@@ -561,14 +561,14 @@ function VoiceSection({ channelId }: { channelId: string; }) {
                     </div>
                 )}
             </div>
-            
+
             {showCallParticipants && expanded && participants.length > 0 && (
-                <div 
+                <div
                     className="vc-guncord-dynamic-island-voice-participants-list"
-                    style={{ 
-                        display: "flex", 
-                        flexDirection: "column", 
-                        gap: "6px", 
+                    style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
                         padding: "4px 8px 8px 8px",
                         maxHeight: "220px",
                         overflowY: "auto",
@@ -767,7 +767,7 @@ function DynamicIsland({ onlySoundCord }: { onlySoundCord?: boolean }) {
     const dateString = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
     return (
-        <div 
+        <div
             className={cl("root", `color-${islandColor}`, {
                 "root-expanded": expanded || isHovered,
                 "root-idle": idle,

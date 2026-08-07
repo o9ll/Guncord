@@ -1,10 +1,10 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { settings as PluginSettings } from "@plugins/toastNotifications/index";
+import { settings as PluginSettings } from "@equicordplugins/toastNotifications/index";
 import { Channel, Message } from "@vencord/discord-types";
 import { createRoot } from "@webpack/common";
 import type { JSX } from "react";

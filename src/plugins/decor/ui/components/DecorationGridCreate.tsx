@@ -1,12 +1,12 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { BaseText } from "@components/BaseText";
 import { PlusIcon } from "@components/Icons";
 import { getIntlMessage } from "@utils/discord";
-import { Text } from "@webpack/common";
 import { HTMLProps } from "react";
 
 import { DecorationGridItem } from ".";
@@ -21,11 +21,11 @@ export default function DecorationGridCreate(props: DecorationGridCreateProps) {
         isSelected={false}
     >
         <PlusIcon />
-        <Text
-            variant="text-xs/normal"
+        <BaseText
+            size="xs"
             color="text-strong"
         >
             {getIntlMessage("CREATE")}
-        </Text>
+        </BaseText>
     </DecorationGridItem >;
 }

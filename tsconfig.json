@@ -60,6 +60,9 @@
             "@guncordplugins/*": [
                 "./guncordplugins/*"
             ],
+            "@equicordplugins/*": [
+                "./plugins/*"
+            ],
             "main/*": [
                 "./guncord/main/*"
             ],

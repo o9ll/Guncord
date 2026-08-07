@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2025 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -233,8 +233,8 @@ export default definePlugin({
 
         const mainEntry = buildEntry({
             key: "equicord_main",
-            title: "Settings",
-            panelTitle: "Settings",
+            title: "Guncord",
+            panelTitle: "Guncord Settings",
             Component: VencordTab,
             Icon: MainSettingsIcon
         });

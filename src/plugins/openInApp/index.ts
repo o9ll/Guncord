@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -63,6 +63,16 @@ const UrlReplacementRules: Record<string, URLReplacementRule> = {
         displayName: "iTunes",
         description: "Open Apple Music links in the iTunes app"
     },
+    vrcx: {
+        match: /^https:\/\/vrchat.com\/home\/(user|avatar|world|group)\/(.+)$/,
+        replace: (_, type, id) => `vrcx://${type}/${id}`,
+        description: "Open VRChat links in the VRCX app"
+    },
+    telegram: {
+        match: /^https:\/\/t\.me\/([a-zA-Z0-9_]+)$/,
+        replace: (_, username) => `tg://resolve?domain=${username}`,
+        description: "Open Telegram links in the Telegram app"
+    }
 };
 
 const pluginSettings = definePluginSettings(
@@ -86,6 +96,7 @@ export default definePlugin({
     tags: ["Utility"],
     authors: [Devs.Ven, Devs.surgedevs],
     settings: pluginSettings,
+    isModified: true,
 
     patches: [
         {

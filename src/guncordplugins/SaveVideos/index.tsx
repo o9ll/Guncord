@@ -1,6 +1,6 @@
 /*
  * Guncord, a Discord client mod
- * Copyright (c) 2026 contributors
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -306,7 +306,7 @@ export default definePlugin({
     description: "Download all media (images & videos) from a message, or all media from a user in a channel.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["MessagePopoverAPI"],
-    enabledByDefault: true,
+    enabledByDefault: false,
 
     contextMenus: {
         "message": MessageContextMenuPatch,

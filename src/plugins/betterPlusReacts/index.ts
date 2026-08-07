@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -26,7 +26,7 @@ export default definePlugin({
                     replace: "$&.replace(/^\\++/, '+')"
                 },
                 {
-                    match: /=(\i\.\i\.getMessages\(\i\.id\))\.last\(\)(?=.{78,85}.getByName\((\i)\.)/,
+                    match: /=\i\.\i\.getMessages\(\i\.id\)\.last\(\)(?=.{78,85}.getByName\(\i\.)/,
                     replace: "=$self.getMsgReference()"
                 }
             ]

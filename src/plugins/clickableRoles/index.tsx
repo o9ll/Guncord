@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -153,7 +153,7 @@ export default definePlugin({
         {
             find: "#{intl::zr0Y5R::raw}",
             replacement: {
-                match: /(\.colorString\?\?\i;)return(.*?enableTooltip:!1\}\):null,\i\]\}\))/,
+                match: /(\.colorString\?\?\i;)return(.*?enableTooltip:!1\}\)\}\):null,\i\]\}\))/,
                 replace: "$1return $self.wrapRolePill(arguments[0],()=>$2)",
             },
         },

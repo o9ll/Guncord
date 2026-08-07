@@ -1,9 +1,10 @@
-import { t } from "../autoTranslateGuncord";
 /*
  * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
+import { t } from "../autoTranslateGuncord";
 
 import { ApplicationCommandInputType, ApplicationCommandOptionType, sendBotMessage } from "@api/Commands";
 import { CommandArgument, CommandContext } from "@vencord/discord-types";
@@ -485,7 +486,7 @@ const ctxMenuPatch: NavContextMenuPatchCallback = (children, props) => {
 
 export default definePlugin({
     name: "BigFileUpload",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Bypasses Discord's upload limit via GoFile, Catbox, or a custom uploader. Button in the right-click menu or /fileupload command.",
     authors: [Devs.ScattrdBlade],
     settings,

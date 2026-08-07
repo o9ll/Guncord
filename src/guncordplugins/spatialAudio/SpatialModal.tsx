@@ -1,8 +1,9 @@
 /*
-* Guncord, a Discord client mod
-* Copyright (c) 2026 o9*
-* SPDX-License-Identifier: GPL-3.0-or-later
-*/
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { ChannelStore, GuildMemberStore, React, useStateFromStores, UserStore, VoiceStateStore } from "@webpack/common";
 
 import {

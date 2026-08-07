@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2023 Vendicated, FieryFlames and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -11,13 +11,13 @@ import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { UserStore } from "@webpack/common";
 
-import { CDN_URL, RAW_SKU_ID, SKU_ID } from "./lib/constants";
+import { CDN_URL, RAW_SKU_ID, setBaseUrl, SKU_ID } from "./lib/constants";
 import { useAuthorizationStore } from "./lib/stores/AuthorizationStore";
 import { useCurrentUserDecorationsStore } from "./lib/stores/CurrentUserDecorationsStore";
 import { useUserDecorAvatarDecoration, useUsersDecorationsStore } from "./lib/stores/UsersDecorationsStore";
 import { settings } from "./settings";
 import { setAvatarDecorationModalPreview, setDecorationGridDecoration, setDecorationGridItem } from "./ui/components";
-import DecorSection from "./ui/components/DecorSection";
+import DecorSection, { DecorSectionProps } from "./ui/components/DecorSection";
 
 export interface AvatarDecoration {
     asset: string;
@@ -34,8 +34,8 @@ export default definePlugin({
         {
             find: "getAvatarDecorationURL:",
             replacement: {
-                match: /(?<=function \i\(\i\){)(?=let{avatarDecoration)/,
-                replace: "const vcDecorDecoration=$self.getDecorAvatarDecorationURL(arguments[0]);if(vcDecorDecoration)return vcDecorDecoration;"
+                match: /(?<=function \i\((\i)\){)(?=.{0,20}let{avatarDecoration)/,
+                replace: "const vcDecorDecoration=$self.getDecorAvatarDecorationURL($1);if(vcDecorDecoration)return vcDecorDecoration;"
             }
         },
         // Patch profile customization settings to include Decor section
@@ -116,6 +116,16 @@ export default definePlugin({
                     replace: "$self.AvatarDecorationModalPreview=$&"
                 }
             ]
+        },
+        // 2026-03-wysiwyg-user-profile-editing
+        {
+            find: '("UserProfileModalV2EditingPanel")',
+            replacement: [
+                {
+                    match: /"inline"===.{0,100}bannerErrorMessage:\i\}\)/,
+                    replace: "$self.ExperimentDecorSection(),$&"
+                }
+            ]
         }
     ],
     settings,
@@ -149,6 +159,7 @@ export default definePlugin({
     useUserDecorAvatarDecoration,
 
     async start() {
+        await setBaseUrl(settings.store.baseUrl);
         useUsersDecorationsStore.getState().fetch(UserStore.getCurrentUser().id, true);
     },
 
@@ -164,5 +175,9 @@ export default definePlugin({
         }
     },
 
-    DecorSection: ErrorBoundary.wrap(DecorSection, { noop: true })
+    DecorSection: ErrorBoundary.wrap(DecorSection, { noop: true }),
+    ExperimentDecorSection: ErrorBoundary.wrap(
+        (props: DecorSectionProps) => <DecorSection {...props} useNewSection />,
+        { noop: true }
+    ),
 });

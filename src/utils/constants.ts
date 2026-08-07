@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1305,6 +1305,50 @@ export const EquicordDevs = Object.freeze({
     nickwoah: {
         name: "nickwoah",
         id: 644298972420374528n
+    },
+    BachLe2000: {
+        name: "BachLe2000",
+        id: 624091967625625610n
+    },
+    pandaptable: {
+        name: "pandaptable",
+        id: 97153209843335168n
+    },
+    SobakinTech: {
+        name: "sobakintech",
+        id: 745203026335236178n
+    },
+    Nyro: {
+        name: "zeyno36",
+        id: 1325431712406179962n
+    },
+    Jahsohsani: {
+        name: "jahsohsani",
+        id: 806442568564604968n
+    },
+    dawn: {
+        name: "dawn",
+        id: 604653220341743618n
+    },
+    Willow: {
+        name: "Willow",
+        id: 965933914092888074n
+    },
+    kat: {
+        name: "kat",
+        id: 665120188047556609n
+    },
+    bastih18: {
+        name: "bastih18",
+        id: 273797150880563201n
+    },
+    lucabeyer: {
+        name: "luca.beyer",
+        id: 405090676771127317n
+    },
+    k304: {
+        name: "k304",
+        id: 255004979637649408n
     },
 } satisfies Record<string, Dev>);
 

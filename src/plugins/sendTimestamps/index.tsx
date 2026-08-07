@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,13 +20,15 @@ import "./styles.css";
 
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { definePluginSettings } from "@api/Settings";
+import { Heading } from "@components/Heading";
+import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { getTheme, insertTextIntoChatInputBox, Theme } from "@utils/discord";
 import { Margins } from "@utils/margins";
 import definePlugin, { IconComponent, OptionType } from "@utils/types";
 import { RenderModalProps } from "@vencord/discord-types";
-import { Forms, Modal,openModal, Parser, Select, useMemo, useState } from "@webpack/common";
+import { Modal, openModal, Parser, Select, useMemo, useState } from "@webpack/common";
 
 const settings = definePluginSettings({
     replaceMessageContents: {
@@ -88,7 +90,7 @@ function PickerModal(props: RenderModalProps) {
                 }}
             />
 
-            <Forms.FormTitle>Timestamp Format</Forms.FormTitle>
+            <Heading tag="h5">Timestamp Format</Heading>
             <div className={cl("format-select")}>
                 <Select
                     options={
@@ -109,10 +111,10 @@ function PickerModal(props: RenderModalProps) {
                 />
             </div>
 
-            <Forms.FormTitle className={Margins.bottom8}>Preview</Forms.FormTitle>
-            <Forms.FormText className={cl("preview-text")}>
+            <Heading tag="h5" className={Margins.bottom8}>Preview</Heading>
+            <Paragraph className={cl("preview-text")}>
                 {rendered} ({formatted})
-            </Forms.FormText>
+            </Paragraph>
         </Modal>
     );
 }
@@ -153,6 +155,7 @@ const SendTimestampButton: ChatBarButtonFactory = ({ isAnyChat }) => {
 export default definePlugin({
     name: "SendTimestamps",
     description: "Send timestamps easily via chat box button & text shortcuts. Read the extended description!",
+    dependencies: ["ChatInputButtonAPI", "MessagePopoverAPI"],
     tags: ["Chat", "Commands"],
     authors: [Devs.Ven, Devs.Tyler, Devs.Grzesiek11],
     settings,
@@ -180,14 +183,14 @@ export default definePlugin({
 
         return (
             <>
-                <Forms.FormText>
+                <Paragraph>
                     To quickly send time only timestamps, include timestamps formatted as `HH:MM` (including the backticks!) in your message
-                </Forms.FormText>
-                <Forms.FormText>
+                </Paragraph>
+                <Paragraph>
                     See below for examples.
                     If you need anything more specific, use the Date button in the chat bar!
-                </Forms.FormText>
-                <Forms.FormText>
+                </Paragraph>
+                <Paragraph>
                     Examples:
                     <ul>
                         {samples.map(s => (
@@ -196,7 +199,7 @@ export default definePlugin({
                             </li>
                         ))}
                     </ul>
-                </Forms.FormText>
+                </Paragraph>
             </>
         );
     },

@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -114,7 +114,8 @@ export default definePlugin({
 
         // Old Discord Android clients have a delay of around 17 days
         // This is a workaround for that
-        if (-delta >= DISCORD_KT_DELAY - 86400000) { // One day of padding for good measure
+        if (-delta >= DISCORD_KT_DELAY - 86400000) {
+            // One day of padding for good measure
             isDiscordKotlin = detectDiscordKotlin;
             delta += DISCORD_KT_DELAY;
         }

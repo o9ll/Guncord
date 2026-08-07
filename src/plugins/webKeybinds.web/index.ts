@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ export default definePlugin({
         if (hasCtrl) switch (e.key) {
             case "t":
             case "T":
-                if (!IS_VESKTOP) return;
+                if (!IS_VESKTOP && !IS_EQUIBOP) return;
                 e.preventDefault();
                 if (e.shiftKey) {
                     if (SelectedGuildStore.getGuildId()) NavigationRouter.transitionToGuild("@me");
@@ -50,7 +50,7 @@ export default definePlugin({
                 }
                 break;
             case "Tab":
-                if (!IS_VESKTOP) return;
+                if (!IS_VESKTOP && !IS_EQUIBOP) return;
                 const handler = e.shiftKey ? KeyBinds.SERVER_PREV : KeyBinds.SERVER_NEXT;
                 handler.action(e);
                 break;

@@ -141,8 +141,8 @@ export function FloodModal({ channel, rootProps, onRunningChange }: Props) {
                 <HeadingSecondary className={Margins.bottom8}>{t("Messages source")}</HeadingSecondary>
                 {isEditing ? (
                     <div className={Margins.bottom16}>
-                        <TextArea 
-                            value={editValue} 
+                        <TextArea
+                            value={editValue}
                             onChange={(v: string) => setEditValue(v)}
                             placeholder={t("Write your phrases here, one per line...")}
                             rows={8}

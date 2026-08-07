@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,11 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { migratePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 
+migratePluginSettings("IloveSpam", "iLoveSpam");
 export default definePlugin({
-    name: "iLoveSpam",
+    name: "ILoveSpam",
     description: "Do not hide messages from 'likely spammers'",
     tags: ["Utility", "Chat"],
     authors: [Devs.botato, Devs.Nyako],

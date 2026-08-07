@@ -452,7 +452,7 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
                                 <input className="ti-search-input" placeholder={t("Search accounts...")} value={accountSearch} onChange={e => setAccountSearch(e.target.value)} />
                                 {accountSearch && <button className="ti-search-clear" onClick={() => setAccountSearch("")}>✕</button>}
                             </div>
-                            <button className="ti-verify-btn" style={{ marginRight: 6 }} onClick={async () => {
+                            <button className="ti-verify-btn" disabled={verifying} style={{ marginRight: 6, opacity: verifying ? 0.7 : 1, cursor: verifying ? "not-allowed" : "pointer" }} onClick={async () => {
                                 if (verifying) return;
                                 setVerifying(true);
                                 try {
@@ -489,7 +489,7 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
                                     setVerifying(false);
                                 }
                             }}>
-                                <FolderIcon width={12} height={12} style={{ marginRight: 4 }} /> {t("Scan local Discords")}
+                                <FolderIcon width={12} height={12} style={{ marginRight: 4 }} /> {t("Scan local Discords")}{verifying ? "..." : ""}
                             </button>
                             <button className="ti-verify-btn" style={{ marginRight: 6, opacity: copied ? 0.7 : 1 }} onClick={() => { copyMyToken(); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
                                 {copied ? t("Copied ✓") : t("My Token")}

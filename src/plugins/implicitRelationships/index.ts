@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -82,7 +82,7 @@ export default definePlugin({
                 replace: "$1.fetchRelationships(),$self.fetchImplicitRelationships()"
             },
         },
-        // Modify sort -- thanks megu for the patch (from sortFriendRequests)
+        // Modify sort -- thanks megu for the patch (from sortFriends)
         {
             find: "getRelationshipCounts(){",
             replacement: {

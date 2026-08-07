@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -51,6 +51,7 @@ export default definePlugin({
     name: "ClearURLs",
     enabledByDefault: true,
     description: "Automatically removes tracking elements from URLs you send",
+    dependencies: ["MessageEventsAPI"],
     tags: ["Privacy", "Utility"],
     authors: [Devs.adryd, Devs.thororen],
 

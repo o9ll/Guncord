@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -56,6 +56,9 @@ export function sortPermissionOverwrites<T extends { id: string; type: number; }
         const roleA = roles[a.id];
         const roleB = roles[b.id];
 
-        return roleB.position - roleA.position;
+        const posA = roleA?.position ?? -Infinity;
+        const posB = roleB?.position ?? -Infinity;
+
+        return posB - posA;
     });
 }

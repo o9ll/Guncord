@@ -1,11 +1,11 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { getMimeFromExtension } from "@equicordplugins/fileUpload/utils/getMediaUrl";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { getMimeFromExtension } from "@plugins/fileUpload/utils/getMediaUrl";
 import { insertTextIntoChatInputBox, MessageOptions } from "@utils/discord";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
 import { ChannelStore, CloudUploader, Constants, DraftStore, FluxDispatcher, MessageActions, PendingReplyStore, RestAPI, showToast, SnowflakeUtils, Toasts, UploadHandler } from "@webpack/common";

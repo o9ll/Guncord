@@ -1,5 +1,5 @@
 /*
- * Vencord, a modification for Discord's desktop app
+ * Guncord, a modification for Discord's desktop app
  * Copyright (c) 2022 Vendicated, Samu and contributors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption, OptionalMessageOption, RequiredMessageOption, sendBotMessage } from "@api/Commands";
 import { addMessagePreEditListener, addMessagePreSendListener, MessageObject, removeMessagePreEditListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { migratePluginSettings } from "@api/Settings";
-import { Devs, EquicordDevs } from "@utils/constants";
+import { Devs, EquicordDevs, GUILD_IDS } from "@utils/constants";
 import { sendMessage } from "@utils/discord";
 import definePlugin from "@utils/types";
 import { DraftType, UploadHandler, UploadManager, UserAffinitiesStore, UserStore } from "@webpack/common";
@@ -33,7 +33,7 @@ import {
     generatePoissonDiskPosition,
     getCuteAnimeBoys,
     getCuteNeko,
-    getMessage,
+    getFavoriteGif,
     isMorse,
     loadFriendImage,
     loadImage,
@@ -184,10 +184,8 @@ export default definePlugin({
                     type: ApplicationCommandOptionType.STRING,
                     required: true,
                     choices: [
-                        { name: "cat",
-     value: "cat", label: "cat" },
-                        { name: "dog",
-     value: "dog", label: "dog" },
+                        { name: "cat", value: "cat", label: "cat" },
+                        { name: "dog", value: "dog", label: "dog" },
                     ]
                 }
             ],
@@ -257,16 +255,11 @@ export default definePlugin({
                     type: ApplicationCommandOptionType.STRING,
                     required: true,
                     choices: [
-                        { name: "toLowerCase",
-     value: "toLowerCase", label: "toLowerCase" },
-                        { name: "toUpperCase",
-     value: "toUpperCase", label: "toUpperCase" },
-                        { name: "toLocaleLowerCase",
-     value: "toLocaleLowerCase", label: "toLocaleLowerCase" },
-                        { name: "toLocaleUpperCase",
-     value: "toLocaleUpperCase", label: "toLocaleUpperCase" },
-                        { name: "stay the same",
-     value: "same", label: "stay the same" }
+                        { name: "toLowerCase", value: "toLowerCase", label: "toLowerCase" },
+                        { name: "toUpperCase", value: "toUpperCase", label: "toUpperCase" },
+                        { name: "toLocaleLowerCase", value: "toLocaleLowerCase", label: "toLocaleLowerCase" },
+                        { name: "toLocaleUpperCase", value: "toLocaleUpperCase", label: "toLocaleUpperCase" },
+                        { name: "stay the same", value: "same", label: "stay the same" }
                     ]
                 },
                 {
@@ -287,14 +280,10 @@ export default definePlugin({
                     type: ApplicationCommandOptionType.STRING,
                     required: false,
                     choices: [
-                        { name: "NFC",
-     value: "NFC", label: "NFC" },
-                        { name: "NFD",
-     value: "NFD", label: "NFD" },
-                        { name: "NFKC",
-     value: "NFKC", label: "NFKC" },
-                        { name: "NFKD",
-     value: "NFKD", label: "NFKD" }
+                        { name: "NFC", value: "NFC", label: "NFC" },
+                        { name: "NFD", value: "NFD", label: "NFD" },
+                        { name: "NFKC", value: "NFKC", label: "NFKC" },
+                        { name: "NFKD", value: "NFKD", label: "NFKD" }
                     ]
                 },
             ],
@@ -481,9 +470,15 @@ export default definePlugin({
         {
             name: "gifroulette",
             description: "Tempt fate and send a gif",
-            execute: (opts, other) => ({
-                content: getMessage(opts, other)
-            }),
+            execute: (opts, other) => {
+                if (GUILD_IDS.includes(other?.guild?.id ?? "")) return sendBotMessage(other.channel.id, {
+                    content: "This command is restricted in this server."
+                });
+
+                return {
+                    content: getFavoriteGif(opts, other)
+                };
+            }
         },
         {
             inputType: ApplicationCommandInputType.BUILT_IN,
@@ -871,7 +866,7 @@ export default definePlugin({
             find: ".isPureReactComponent=!0;",
             predicate: () => settings.store.uwuEverything,
             replacement: {
-                match: /(\.defaultProps\).{0,80}return \i\(\i,\i,void 0,void 0,null,)(\i)\)/,
+                match: /(\.defaultProps\).{0,80}return \i\(\i,\i,)(\i)\)/,
                 replace: "$1$self.uwuifyProps($2))"
             }
         }

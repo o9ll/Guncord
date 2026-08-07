@@ -1,6 +1,6 @@
 /*
  * Guncord, a Discord client mod
- * Copyright (c) 2024 Guncord contributors
+ * Copyright (c) 2024 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 

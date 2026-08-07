@@ -1,14 +1,14 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { BaseText } from "@components/BaseText";
 import { TooltipContainer } from "@components/TooltipContainer";
-import { settings } from "@plugins/musicControls/settings";
-import { SpotifyLrcStore } from "@plugins/musicControls/spotify/lyrics/providers/store";
-import { SpotifyStore } from "@plugins/musicControls/spotify/SpotifyStore";
+import { settings } from "@equicordplugins/musicControls/settings";
+import { SpotifyLrcStore } from "@equicordplugins/musicControls/spotify/lyrics/providers/store";
+import { SpotifyStore } from "@equicordplugins/musicControls/spotify/SpotifyStore";
 import { ContextMenuApi, openModal,React, useEffect, useState, useStateFromStores } from "@webpack/common";
 
 import { LyricsContextMenu } from "./ctxMenu";

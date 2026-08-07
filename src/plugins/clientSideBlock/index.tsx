@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -155,8 +155,8 @@ export default definePlugin({
         {
             find: ".NITRO_NOTIFICATION,[",
             replacement: {
-                match: /renderContentOnly:\i}=\i;/,
-                replace: "$&if($self.shouldHideUser(arguments[0].message.author.id, arguments[0].message.channel_id)) return null; "
+                match: /\i\(\)\(\i\.type.{0,40}Message must not be a thread starter message/,
+                replace: "if($self.shouldHideUser(arguments[0].message.author.id, arguments[0].message.channel_id)) return null;$&"
             }
         },
         // friends list (should work with all tabs)

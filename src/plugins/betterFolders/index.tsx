@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -107,6 +107,11 @@ export const settings = definePluginSettings({
         description: "Close other folders when opening a folder",
         default: false
     },
+    closeServerFolder: {
+        type: OptionType.BOOLEAN,
+        description: "Close folder when selecting a server in that folder",
+        default: false,
+    },
     forceOpen: {
         type: OptionType.BOOLEAN,
         description: "Force a folder to open when switching to a server of that folder",
@@ -138,6 +143,7 @@ export default definePlugin({
     name: "BetterFolders",
     description: "Shows server folders on dedicated sidebar and adds folder related improvements",
     authors: [Devs.juby, Devs.AutumnVN, Devs.Nuckyz],
+    isModified: true,
     tags: ["Organisation", "Servers", "Appearance"],
     settings,
 
@@ -257,7 +263,7 @@ export default definePlugin({
                     replace: (m, conditions, props) => `${m},${conditions}$self.FolderSideBar(${props})`
                 },
                 {
-                    // Add grid styles to fix aligment with other visual refresh elements
+                    // Add grid styles to fix alignment with other visual refresh elements
                     match: /(?<=className:)\i\.\i(?=,"data-fullscreen")/,
                     replace: `"${GRID_STYLE_NAME} "+$&`
                 }
@@ -276,7 +282,7 @@ export default definePlugin({
 
     flux: {
         CHANNEL_SELECT(data) {
-            if (!settings.store.closeAllFolders && !settings.store.forceOpen)
+            if (!settings.store.closeAllFolders && !settings.store.forceOpen && !settings.store.closeServerFolder)
                 return;
 
             if (lastGuildId !== data.guildId) {
@@ -285,6 +291,9 @@ export default definePlugin({
 
                 if (guildFolder?.folderId) {
                     if (settings.store.forceOpen && !ExpandedGuildFolderStore.isFolderExpanded(guildFolder.folderId)) {
+                        FolderUtils.toggleGuildFolderExpand(guildFolder.folderId);
+                    }
+                    if (settings.store.closeServerFolder && ExpandedGuildFolderStore.isFolderExpanded(guildFolder.folderId)) {
                         FolderUtils.toggleGuildFolderExpand(guildFolder.folderId);
                     }
                 } else if (settings.store.closeAllFolders) {
@@ -317,7 +326,6 @@ export default definePlugin({
 
     FolderSideBar,
     closeFolders,
-
 
     wrapGuildNodeComponent(node: any, originalComponent: () => ReactNode, isBetterFolders: boolean, expandedFolderIds?: Set<any>) {
         if (

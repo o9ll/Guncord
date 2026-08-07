@@ -1,10 +1,10 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { iconsModule } from "@plugins/_core/concatenatedModules";
+import { iconsModule } from "@equicordplugins/_core/concatenatedModules";
 import { Icon } from "@vencord/discord-types";
 
 let iconNames: string[] | undefined;

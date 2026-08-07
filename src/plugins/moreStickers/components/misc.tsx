@@ -1,6 +1,6 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -11,12 +11,12 @@ import { Divider } from "@components/Divider";
 import { Flex } from "@components/Flex";
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
-import { convert as convertLineEP, getIdFromUrl as getLineEmojiPackIdFromUrl, getStickerPackById as getLineEmojiPackById, isLineEmojiPackHtml, parseHtml as getLineEPFromHtml } from "@plugins/moreStickers/lineEmojis";
-import { convert as convertLineSP, getIdFromUrl as getLineStickerPackIdFromUrl, getStickerPackById as getLineStickerPackById, isLineStickerPackHtml, parseHtml as getLineSPFromHtml } from "@plugins/moreStickers/lineStickers";
-import { isV1, migrate } from "@plugins/moreStickers/migrate-v1";
-import { deleteStickerPack, getStickerPack, getStickerPackMetas, saveStickerPack } from "@plugins/moreStickers/stickers";
-import { SettingsTabsKey, Sticker, StickerPack, StickerPackMeta } from "@plugins/moreStickers/types";
-import { cl, clPicker, Mutex } from "@plugins/moreStickers/utils";
+import { convert as convertLineEP, getIdFromUrl as getLineEmojiPackIdFromUrl, getStickerPackById as getLineEmojiPackById, isLineEmojiPackHtml, parseHtml as getLineEPFromHtml } from "@equicordplugins/moreStickers/lineEmojis";
+import { convert as convertLineSP, getIdFromUrl as getLineStickerPackIdFromUrl, getStickerPackById as getLineStickerPackById, isLineStickerPackHtml, parseHtml as getLineSPFromHtml } from "@equicordplugins/moreStickers/lineStickers";
+import { isV1, migrate } from "@equicordplugins/moreStickers/migrate-v1";
+import { deleteStickerPack, getStickerPack, getStickerPackMetas, saveStickerPack } from "@equicordplugins/moreStickers/stickers";
+import { SettingsTabsKey, Sticker, StickerPack, StickerPackMeta } from "@equicordplugins/moreStickers/types";
+import { cl, clPicker, Mutex } from "@equicordplugins/moreStickers/utils";
 import { Button, React, TabBar, TextArea, Toasts } from "@webpack/common";
 import { JSX } from "react";
 

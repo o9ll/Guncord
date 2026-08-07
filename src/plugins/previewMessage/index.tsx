@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -129,6 +129,7 @@ const PreviewButton: ChatBarButtonFactory = ({ isAnyChat, isEmpty, type: { attac
 export default definePlugin({
     name: "PreviewMessage",
     description: "Lets you preview your message before sending it.",
+    dependencies: ["ChatInputButtonAPI"],
     tags: ["Chat", "Utility"],
     authors: [Devs.Aria],
     // start early to ensure we're the first plugin to add our button

@@ -1,17 +1,20 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import "./styles.css";
 
+import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
+import showMeYourName from "@plugins/showMeYourName";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { User } from "@vencord/discord-types";
 import { GuildRoleStore, SelectedGuildStore, useState } from "@webpack/common";
+import { JSX } from "react";
 
 const settings = definePluginSettings({
     showAtSymbol: {
@@ -48,12 +51,12 @@ export default definePlugin({
     description: "Shows user avatars and role icons inside mentions",
     tags: ["Appearance", "Customisation"],
     authors: [Devs.Ven, Devs.SerStars],
-
     patches: [{
+        // HEY THOR UPDATE SHOW ME YOUR NAME IF THIS SHIT CHANGES TY :)
         find: ".USER_MENTION)",
         replacement: {
             match: /children:`@\$\{(\i\?\?\i)\}`(?<=\.useName\((\i)\).+?)/,
-            replace: "children:$self.renderUsername({username:$1,user:$2})"
+            replace: "children:$self.renderUsername({username:$1,user:$2,showMeYourNameMention:typeof showMeYourNameMention!=='undefined'?showMeYourNameMention:undefined})"
         }
     },
     {
@@ -62,30 +65,55 @@ export default definePlugin({
             match: /children:\[\i&&.{0,100}className:\i.\i,background:!1,.{0,50}?,\i(?=\])/,
             replace: "$&,$self.renderRoleIcon(arguments[0])"
         }
+    },
+    {
+        // show avatar in the chat input box
+        find: '"text":"locked"',
+        replacement: {
+            match: /(?<=,(\i)\).{0,55})`@\$\{(\i)\}`/,
+            replace: "$self.renderInputMention($2,$1)"
+        }
     }],
 
     settings,
 
-    renderUsername: ErrorBoundary.wrap((props: { user: User, username: string; }) => {
-        const { user, username } = props;
+    renderUsername: ErrorBoundary.wrap(({ user, username, showMeYourNameMention }: { user: User, username: string, showMeYourNameMention: JSX.Element | null | undefined; }) => {
         const [isHovering, setIsHovering] = useState(false);
 
-        if (!user) return <>{getUsernameString(username)}</>;
+        const nameContent = isPluginEnabled(showMeYourName.name) && showMeYourNameMention
+            ? showMeYourNameMention : <>{getUsernameString(username)}</>;
 
         return (
             <span
                 onMouseEnter={() => setIsHovering(true)}
                 onMouseLeave={() => setIsHovering(false)}
+                className="vc-mentionAvatars-container"
             >
+                {user && (
+                    <img
+                        src={user.getAvatarURL(SelectedGuildStore.getGuildId(), 16, isHovering)}
+                        className="vc-mentionAvatars-icon"
+                        style={{ borderRadius: "50%" }}
+                    />
+                )}
+                {nameContent}
+            </span>
+        );
+    }, { noop: true }),
+
+    renderInputMention(username: string, user: User) {
+        if (!user) return getUsernameString(username);
+        return (
+            <>
                 <img
-                    src={user.getAvatarURL(SelectedGuildStore.getGuildId(), 16, isHovering)}
+                    src={user.getAvatarURL(SelectedGuildStore.getGuildId(), 16)}
                     className="vc-mentionAvatars-icon"
                     style={{ borderRadius: "50%" }}
                 />
                 {getUsernameString(username)}
-            </span>
+            </>
         );
-    }, { noop: true }),
+    },
 
     renderRoleIcon: ErrorBoundary.wrap(({ roleId, guildId }: { roleId: string, guildId: string; }) => {
         // Discord uses Role Mentions for uncached users because .... idk

@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 import "./style.css";
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { definePluginSettings } from "@api/Settings";
+import { definePluginSettings, migratePluginSettings } from "@api/Settings";
 import { CodeBlock } from "@components/CodeBlock";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { HeadingSecondary } from "@components/Heading";
@@ -31,7 +31,6 @@ import definePlugin, { IconComponent, OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { ChannelStore, GuildRoleStore, Menu, Modal, openModal, UserProfileStore } from "@webpack/common";
 import { MouseEventHandler } from "react";
-
 
 const CopyRawIcon: IconComponent = ({ height = 20, width = 20, className }) => {
     return (
@@ -136,7 +135,6 @@ function MakeContextCallback(name: "Guild" | "Role" | "User" | "Channel" | "Mess
         const isMessage = name === "Message";
         if (isMessage && !settings.store.messageContextMenu) return;
 
-
         // typescript parser goes crazy if this is inline
         const id = `vc-view-${name.toLowerCase()}-raw`;
         const action = isMessage
@@ -173,9 +171,11 @@ const devContextCallback: NavContextMenuPatchCallback = (children, { id }: { id:
     );
 };
 
+migratePluginSettings("ViewRaw", "ViewRawVariant");
 export default definePlugin({
     name: "ViewRaw",
     description: "Copy and view the raw content/data of any message, channel or guild",
+    dependencies: ["MessagePopoverAPI"],
     tags: ["Chat", "Developers"],
     authors: [Devs.KingFish, Devs.Ven, Devs.rad, Devs.ImLvna],
     settings,

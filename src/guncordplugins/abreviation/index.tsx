@@ -229,7 +229,7 @@ function onPreSend(_channelId: string, messageObj: { content: string; }) {
 
 export default definePlugin({
     name: "Abbreviation",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Automatically replaces abbreviations with full sentences before sending the message.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
 

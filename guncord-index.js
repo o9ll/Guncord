@@ -239,43 +239,6 @@ app.once("ready", () => {
     }
 });
 
-// Protection against freeze after crash — check and repair LevelDB localStorage
-// When Discord crashes during a localStorage write, the LevelDB file can
-// become corrupted and freeze the renderer on next startup.
-try {
-    const lsPath = path.join(app.getPath("userData"), "Local Storage", "leveldb");
-    if (fs.existsSync(lsPath)) {
-        // Detect corruption: locked LOCK file or missing LOG file
-        const lockFile = path.join(lsPath, "LOCK");
-        const logFile = path.join(lsPath, "LOG");
-        let corrupted = false;
-        if (fs.existsSync(lockFile)) {
-            try {
-                // Try opening LOCK for writing — if it fails, a zombie process holds it
-                const fd = fs.openSync(lockFile, "r+");
-                fs.closeSync(fd);
-            } catch (e) {
-                // LOCK locked by a zombie — delete to unlock
-                try { fs.unlinkSync(lockFile); } catch { }
-                corrupted = true;
-            }
-        }
-        // Also check corrupted .ldb files (size 0)
-        if (!corrupted) {
-            const files = fs.readdirSync(lsPath).filter(f => f.endsWith(".ldb"));
-            for (const f of files) {
-                const size = fs.statSync(path.join(lsPath, f)).size;
-                if (size === 0) { corrupted = true; break; }
-            }
-        }
-        if (corrupted) {
-            console.warn("[Guncord] Corrupted LevelDB localStorage detected — repairing...");
-            try { fs.rmSync(lsPath, { recursive: true, force: true }); } catch { }
-            console.warn("[Guncord] LevelDB deleted — localStorage data will be recreated");
-        }
-    }
-} catch (e) { console.warn("[Guncord] LevelDB check failed:", e.message); }
-
 // Bundled modules in guncord-dist/modules/
 const bundledModulesPath = path.join(path.dirname(process.execPath), "modules");
 const moduleDataPath = path.join(app.getPath("appData"), "discord", "module_data");

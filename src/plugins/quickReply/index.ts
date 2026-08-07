@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -143,7 +143,7 @@ function getNextMessage(isUp: boolean, isReply: boolean) {
         if (!isReply && m.author.id !== meId) return false; // editing only own messages
         if (!MessageTypeSets.REPLYABLE.has(m.type) || m.hasFlag(MessageFlags.EPHEMERAL)) return false;
         if (settings.store.ignoreBlockedAndIgnored && RelationshipStore.isBlockedOrIgnored(m.author.id)) return false;
-        if (hasNoBlockedMessages && NoBlockedMessagesPlugin.shouldIgnoreMessage(m)) return false;
+        if (hasNoBlockedMessages && NoBlockedMessagesPlugin.isSuppressed(m).suppressed) return false;
 
         return true;
     });

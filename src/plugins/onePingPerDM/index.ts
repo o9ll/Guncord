@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -31,6 +31,18 @@ const settings = definePluginSettings({
         description: "Receive audio pings for @everyone and @here in group DMs",
         default: false,
     },
+    ignoreUsers: {
+        type: OptionType.STRING,
+        description: "User IDs (comma + space) whose pings should NEVER be throttled",
+        restartNeeded: true,
+        default: ""
+    },
+    alwaysPlaySound: {
+        type: OptionType.BOOLEAN,
+        description: "Play the message notification sound even when its disabled",
+        restartNeeded: true,
+        default: false
+    }
 });
 
 export default definePlugin({
@@ -38,23 +50,29 @@ export default definePlugin({
     description: "If unread messages are sent by a user in DMs multiple times, you'll only receive one audio ping. Read the messages to reset the limit",
     tags: ["Notifications", "Customisation"],
     authors: [Devs.ProffDea],
+    isModified: true,
     settings,
     patches: [
         {
             find: '"NotificationStore"',
             replacement: [
                 {
-                    match: /(\i\.\i\.getDesktopType\(\)===\i\.\i\.NEVER)\)/,
-                    replace: "$&if(!$self.isPrivateChannelRead(arguments[0]?.message))return;else "
+                    match: /\i\.\i\.getDesktopType\(\)===\i\.\i\.NEVER\)(?=.*?(\i\.\i\.playNotificationSound\(.{0,5}\)))/,
+                    replace: "$&if(!$self.isPrivateChannelRead(arguments[0]?.message))return;else if($self.playSound())return $1;else "
                 },
                 {
-                    match: /sound:(\i\?\i:void 0,volume:\i,onClick)/,
-                    replace: "sound:!$self.isPrivateChannelRead(arguments[0]?.message)?undefined:$1"
+                    match: /sound:(\i\?(\i):void 0,volume:\i,onClick)/,
+                    replace: "sound:!$self.isPrivateChannelRead(arguments[0]?.message)?undefined:$self.playSound()?$2:$1"
                 }
             ]
         }
     ],
+    playSound() {
+        return settings.store.alwaysPlaySound;
+    },
     isPrivateChannelRead(message: MessageJSON) {
+        const ignoreList = settings.store.ignoreUsers.split(", ").filter(Boolean);
+        if (ignoreList.includes(message.author.id)) return true;
         const channelType = ChannelStore.getChannel(message.channel_id)?.type;
         if (
             (channelType !== ChannelType.DM && channelType !== ChannelType.GROUP_DM) ||

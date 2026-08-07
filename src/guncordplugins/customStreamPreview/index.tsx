@@ -1,11 +1,6 @@
 /*
- * Guncord — CustomStreamPreview (internal tool for the Guncord project)
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * A clean rebuild of VencordCustomScreenSharePreview: lets you pick a custom
- * image as your screen-share preview. Uses Vencord's RestAPI (no manual token),
- * DataStore for the saved image, and the User Area button API.
- *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 

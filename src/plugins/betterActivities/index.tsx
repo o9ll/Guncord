@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -48,9 +48,9 @@ export default definePlugin({
         },
         {
             // Show all activities in the user popout/sidebar
-            find: /onOpenUserProfileModal:\i,onClose:\i\}\),null/,
+            find: '"UserProfilePopout");',
             replacement: {
-                match: /((\i)=.{0,10}(\i)\.id\).*?,onOpenUserProfileModal:\i\}\),).{0,250}onClose:\i\}\)/,
+                match: /((\i)=.{0,10}(\i)\.id\).*?)\(0,\i\.jsxs?.{0,150}onClose:\i\}\)(?=.{0,30}userId:\i\.id)/,
                 replace: "$1$self.showAllActivitiesComponent({ activity: $2, user: $3 })"
             },
             predicate: () => settings.store.userPopout

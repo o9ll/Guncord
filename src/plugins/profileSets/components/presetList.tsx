@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -67,6 +67,8 @@ export function PresetList({
                     renamePreset(actualIndex, nextName, section, guildId);
                     onUpdate();
                 };
+
+                const showMoveOptions = actualIndex > 0 || actualIndex < allPresets.length - 1 || currentPage > 1;
 
                 return (
                     <div
@@ -192,7 +194,7 @@ export function PresetList({
                                                     }}
                                                 />
                                             )}
-                                            <Menu.MenuSeparator />
+                                            {showMoveOptions && <Menu.MenuSeparator />}
                                             <Menu.MenuItem
                                                 id="delete"
                                                 label="Delete"

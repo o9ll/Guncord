@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -20,10 +20,11 @@ interface regexes {
         };
     };
 }
+// TODO: add grams, kilograms, ounces, and pounds
 const regexes: regexes = {
     // matches imperial units, converts them to metric
     imperial: {
-        fahrenheit: {
+        farenheight: {
             regex: /(-?\d+(?:\.\d+)?)°?(f)(?!\w)/ig,
             convert(...groups) {
                 const c = ((parseFloat(groups[1]) - 32) * (5 / 9)).toFixed(2);
@@ -90,7 +91,7 @@ const regexes: regexes = {
             },
         }
     },
-    // matches metric units, converts them into imperial
+    // matches metric untis, converts them into imperial
     metric: {
         // i dont think people ever write metric units as 1m3cm or something like that
         celcius: {
@@ -118,7 +119,7 @@ const regexes: regexes = {
                 return `${m.toFixed(0)}ft${((m % 1) * 12).toFixed(2)}in`;
             },
         },
-        // convert to miles
+        // covnert to miles
         kilometers: {
             regex: /(\d+(?:\.\d+)?) ?(km|kilometers?|kms?)(?!\w)/gi,
             convert(...groups) {

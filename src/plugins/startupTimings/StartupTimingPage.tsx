@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,8 +18,9 @@
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
+import { HeadingPrimary, HeadingSecondary } from "@components/Heading";
 import { findByPropsLazy } from "@webpack";
-import { Forms, React } from "@webpack/common";
+import { React } from "@webpack/common";
 
 interface AppStartPerformance {
     prefix: string;
@@ -89,7 +90,7 @@ function TimingSection({ title, logs, traceEnd }: TimingSectionProps) {
 
     return (
         <section>
-            <Forms.FormTitle tag="h2">{title}</Forms.FormTitle>
+            <HeadingPrimary>{title}</HeadingPrimary>
             <code>
                 {traceEnd && (
                     <div style={{ color: "var(--text-strong)", marginBottom: 5, userSelect: "text" }}>
@@ -119,7 +120,7 @@ function ServerTrace({ trace }: ServerTraceProps) {
 
     return (
         <section>
-            <Forms.FormTitle tag="h3">Server Trace</Forms.FormTitle>
+            <HeadingSecondary>Server Trace</HeadingSecondary>
             <code>
                 <Flex flexDirection="column" gap="5px" style={{ color: "var(--text-strong)", userSelect: "text" }}>
                     {lines.map((line, idx) => (

@@ -10,8 +10,8 @@ import * as fs from "fs";
 
 // Mapping: style value → folder path segments inside mac/mac/
 const STYLE_FOLDER: Record<string, [string, string]> = {
-    modern_shadow:    ["1. Sierra and newer",      "2. With Shadow"],
-    modern_no_shadow: ["1. Sierra and newer",      "1. No Shadow"],
+    modern_shadow:    ["1. Sierra and newer", "2. With Shadow"],
+    modern_no_shadow: ["1. Sierra and newer", "1. No Shadow"],
     classic_shadow:   ["2. El Capitan and before", "2. With Shadow"],
     classic_no_shadow:["2. El Capitan and before", "1. No Shadow"],
 };
@@ -26,8 +26,8 @@ const SIZE_FOLDER: Record<string, string> = {
 const CURSOR_MAP: Record<string, string> = {
     Arrow:           "Normal",
     Hand:            "Link",
-    AppStarting:     "Link",       // closest match — "working in background"
-    Wait:            "Pan",        // spinning wheel closest to Pan
+    AppStarting:     "Link", // closest match — "working in background"
+    Wait:            "Pan", // spinning wheel closest to Pan
     IBeam:           "Text",
     SizeAll:         "Move",
     SizeNESW:        "Diagonal Resize 1",

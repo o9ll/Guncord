@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -11,5 +11,5 @@ const videoExtensions = ["mp4", "ogg", "webm", "avi", "wmv", "flv", "mov", "mkv"
 
 export function getFormat(url: string) {
     const extension = getUrlExtension(url);
-    return url.startsWith("https://media.tenor") || extension == null || videoExtensions.includes(extension) ? Format.VIDEO : Format.IMAGE;
+    return extension != null && videoExtensions.includes(extension) ? Format.VIDEO : Format.IMAGE;
 }

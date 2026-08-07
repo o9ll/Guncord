@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -98,6 +98,7 @@ function makeCommand(name: string, formatUrl: (track: Track) => string): Command
 export default definePlugin({
     name: "SpotifyShareCommands",
     description: "Share your current Spotify track, album or artist via slash command (/track, /album, /artist)",
+    dependencies: ["CommandsAPI"],
     tags: ["Media", "Commands"],
     authors: [Devs.katlyn],
     commands: [

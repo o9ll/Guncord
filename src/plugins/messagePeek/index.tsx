@@ -1,6 +1,6 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -10,7 +10,7 @@ import { DecoratorProps } from "@api/MemberListDecorators";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import { AttachmentIcon, GifIcon, ImageIcon, Microphone, StickerIcon, VideoIcon } from "@components/Icons";
-import betterActivities from "@plugins/betterActivities";
+import betterActivities from "@equicordplugins/betterActivities";
 import showMeYourName from "@plugins/showMeYourName";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
@@ -225,7 +225,9 @@ function Timestamp({ channel }: { channel: Channel; }) {
     if (!lastMessage) return null;
 
     const timestamp = SnowflakeUtils.extractTimestamp(lastMessage.id);
-    const className = ExperimentStore.getUserExperimentBucket("2026-01-favorites-server") > 0 ? cl("timestamp-favorites") : cl("timestamp");
+    const isChannelPinned = UserGuildSettingsStore.isMessagesFavorite(channel?.id);
+    const isFavoritesEnabled = ExperimentStore.getUserExperimentBucket("2026-01-favorites-server") > 0;
+    const className = isFavoritesEnabled || isChannelPinned ? cl("timestamp-favorites") : cl("timestamp");
     return <span className={className}>{formatRelativeTime(timestamp)}</span>;
 }
 
@@ -248,7 +250,7 @@ export default definePlugin({
         {
             find: "PrivateChannel.renderAvatar",
             replacement: {
-                match: /,subText:(\i)\.isSystemDM\(\).{0,500}:null,(?=name:)/,
+                match: /,subText:\i\.isSystemDM\(\).{0,700}:null,(?=name:)/,
                 replace: ",subText:$self.getSubText(arguments[0]),"
             }
         }

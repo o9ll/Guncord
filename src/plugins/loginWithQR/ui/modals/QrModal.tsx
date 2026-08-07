@@ -1,14 +1,14 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { BaseText } from "@components/BaseText";
 import { QrCodeIcon } from "@components/Icons";
 import { wrapTab } from "@components/settings";
-import loginWithQR from "@plugins/loginWithQR";
-import { images } from "@plugins/loginWithQR/images";
+import loginWithQR from "@equicordplugins/loginWithQR";
+import { images } from "@equicordplugins/loginWithQR/images";
 import { findByPropsLazy } from "@webpack";
 import {
     RestAPI,

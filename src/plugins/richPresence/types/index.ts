@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -9,8 +9,8 @@ export enum ServiceTab {
     Tosu = "tosu",
     StatsFm = "statsfm",
     Jellyfin = "jellyfin",
-    ListenBrainz = "listenbrainz",
     GensokyoRadio = "gensokyoRadio",
+    Navidrome = "navidrome",
 }
 
 export const enum NameFormat {

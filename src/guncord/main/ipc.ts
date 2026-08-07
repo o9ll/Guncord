@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -205,11 +205,15 @@ handle(IpcEvents.SELECT_VENCORD_DIR, async (_e, value?: null) => {
     return "ok";
 });
 
-handle(IpcEvents.SET_BADGE_COUNT, (_, count: number) => setBadgeCount(count));
+handle(IpcEvents.SET_BADGE_COUNT, (e, count: number) => {
+    const win = getWindow(e);
+    setBadgeCount(count, win);
+});
 
-handle(IpcEvents.FLASH_FRAME, (_, flag: boolean) => {
-    if (!mainWin || mainWin.isDestroyed() || (flag && mainWin.isFocused())) return;
-    mainWin.flashFrame(flag);
+handle(IpcEvents.FLASH_FRAME, (e, flag: boolean) => {
+    const win = getWindow(e);
+    if (!win || win.isDestroyed() || (flag && win.isFocused())) return;
+    win.flashFrame(flag);
 });
 
 handle(IpcEvents.CLIPBOARD_COPY_IMAGE, async (_, buf: ArrayBuffer, src: string) => {

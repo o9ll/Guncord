@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -9,7 +9,7 @@ import "./styles.css";
 import { definePluginSettings } from "@api/Settings";
 import { Heading } from "@components/Heading";
 import { DeleteIcon, PlusIcon } from "@components/Icons";
-import { Devs, EquicordDevs } from "@utils/constants";
+import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { Button, Select, TextInput, useState } from "@webpack/common";
@@ -109,7 +109,7 @@ export default definePlugin({
     name: "BetterBanReasons",
     description: "Create custom reasons to use in the Discord ban modal, and/or show a text input by default instead of the options.",
     tags: ["Appearance", "Customisation"],
-    authors: [Devs.Inbestigator, EquicordDevs.yonn2222],
+    authors: [Devs.Inbestigator],
 
     durationSetter: null as ((v: number) => void) | null,
 

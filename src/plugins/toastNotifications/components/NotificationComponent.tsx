@@ -1,13 +1,13 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import "./styles.css";
 
 import ErrorBoundary from "@components/ErrorBoundary";
-import { settings as PluginSettings } from "@plugins/toastNotifications/index";
+import { settings as PluginSettings } from "@equicordplugins/toastNotifications/index";
 import { classNameFactory } from "@utils/css";
 import { findComponentByCodeLazy } from "@webpack";
 import { FluxDispatcher, GuildStore, IconUtils, React, useEffect, useMemo, useRef, useState } from "@webpack/common";

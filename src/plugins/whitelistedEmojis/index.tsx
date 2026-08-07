@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -305,10 +305,8 @@ const uploadEmojis = async () => {
     } else {
         const [file] = await DiscordNative.fileManager.openFiles({
             filters: [
-                { name: "Whitelisted Emojis",
-     extensions: ["json"] },
-                { name: "all",
-     extensions: ["*"] }
+                { name: "Whitelisted Emojis", extensions: ["json"] },
+                { name: "all", extensions: ["*"] }
             ]
         });
         if (!file) return;

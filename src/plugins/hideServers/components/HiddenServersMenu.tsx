@@ -1,12 +1,12 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { BaseText } from "@components/BaseText";
 import { Heading } from "@components/Heading";
-import { HiddenServersStore } from "@plugins/hideServers/HiddenServersStore";
+import { HiddenServersStore } from "@equicordplugins/hideServers/HiddenServersStore";
 import { classNameFactory } from "@utils/css";
 import { getGuildAcronym } from "@utils/discord";
 import { classes } from "@utils/misc";

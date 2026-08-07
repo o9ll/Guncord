@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -76,7 +76,8 @@ export default definePlugin({
         });
     },
 
-    getIdleTimeout() { // milliseconds, default is 6e5
+    getIdleTimeout() {
+        // milliseconds, default is 6e5
         const { idleTimeout } = settings.store;
         return idleTimeout === 0 ? Infinity : idleTimeout * 60000;
     }

@@ -1,3 +1,9 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { app, BrowserWindow, session, shell } from "electron";
 import * as fs from "fs";
 import * as path from "path";

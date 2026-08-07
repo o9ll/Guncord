@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -53,7 +53,7 @@ export default definePlugin({
             }]
         },
         {
-            find: ".GIFT_PROMOTION]).",
+            find: '("ChannelTextAreaButtons")',
             replacement: [
                 {
                     match: /(?<=(,\i\.stickers\?\.button.{0,50}\i\.push\(\(.{0,100})\},"sticker"\)\))/,

@@ -1,3 +1,9 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { Toasts } from "@webpack/common";
 import { t } from "../autoTranslateGuncord";
 import fixWebmDuration from "fix-webm-duration";
@@ -48,7 +54,7 @@ export async function startRecording(opts: RecordingOptions): Promise<boolean> {
 
     try {
         recordedChunks = [];
-        pendingChunkPromises = [];
+        pendingChunkPromises = [];  // always reset on new recording
         startTimeMs = Date.now();
 
         const ext = opts.mode === "video"
@@ -274,7 +280,8 @@ export function stopRecording(): Promise<void> {
                 const native = (window as any).VencordNative?.pluginHelpers?.AutoCallRecorder;
                 if (isStreamMode && native?.finalizeStreamRecording) {
                     try {
-                        const ok = await native.finalizeStreamRecording(opts.savePath, currentFilename);
+                        const durationMs = Math.max(0, Math.round(Date.now() - startTimeMs));
+                        const ok = await native.finalizeStreamRecording(opts.savePath, currentFilename, durationMs);
                         if (ok && opts.showSaveToast !== false) {
                             Toasts.show(Toasts.create(t("Save record"), Toasts.Type.SUCCESS));
                         }
@@ -330,14 +337,11 @@ async function saveBlobFallback(blob: Blob, opts: RecordingOptions, filename: st
         }
     };
 
-    // Only apply fixWebmDuration on smaller blobs to avoid thread lockups/OOM
     let finalBlob = blob;
-    if (blob.size < 30 * 1024 * 1024) {
-        try {
-            const durationMs = Date.now() - startTimeMs;
-            finalBlob = await fixWebmDuration(blob, durationMs);
-        } catch { }
-    }
+    try {
+        const durationMs = Date.now() - startTimeMs;
+        finalBlob = await fixWebmDuration(blob, durationMs);
+    } catch { }
 
     const native = (window as any).VencordNative?.pluginHelpers?.AutoCallRecorder;
     if (native?.saveRecording) {

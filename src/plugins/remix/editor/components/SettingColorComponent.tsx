@@ -1,11 +1,8 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-
-// brutally ripped out of usercss
-// (remove when usercss is merged)
 
 import "./colorStyles.css";
 

@@ -1,12 +1,12 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { initInput } from "@plugins/remix/editor/input";
-import { bounds } from "@plugins/remix/editor/tools/crop";
-import { heightFromBounds, widthFromBounds } from "@plugins/remix/editor/utils/canvas";
+import { initInput } from "@equicordplugins/remix/editor/input";
+import { bounds } from "@equicordplugins/remix/editor/tools/crop";
+import { heightFromBounds, widthFromBounds } from "@equicordplugins/remix/editor/utils/canvas";
 import { useEffect, useRef } from "@webpack/common";
 
 export let canvas: HTMLCanvasElement | null = null;

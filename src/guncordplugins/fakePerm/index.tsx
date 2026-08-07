@@ -4,13 +4,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { addContextMenuPatch, NavContextMenuPatchCallback, removeContextMenuPatch } from "@api/ContextMenu";
-import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, openModal } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
-import { Button, GuildChannelStore, GuildMemberStore, GuildRoleStore, GuildStore, Menu, React, Select, TextArea, SelectedGuildStore, UserStore, FluxDispatcher, VoiceStateStore, showToast, PermissionsBits } from "@webpack/common";
-import { findStoreLazy } from "@webpack";
+import { FluxDispatcher, GuildMemberStore, GuildRoleStore, PermissionsBits, RestAPI, UserStore, VoiceStateStore } from "@webpack/common";
+import { findByPropsLazy, findStoreLazy } from "@webpack";
 
 const PermissionStore = findStoreLazy("PermissionStore") as any;
+const ChannelMemberStore = findStoreLazy("ChannelMemberStore") as any;
+const RolePermissionUtils1 = findByPropsLazy("isRoleHigher", "canManageRole") as any;
+const RolePermissionUtils2 = findByPropsLazy("canManageUserRole") as any;
+const RolePermissionUtils3 = findByPropsLazy("isRoleHigherThan") as any;
+const RolePermissionUtils4 = findByPropsLazy("getHighestRolePosition") as any;
 
 let cachedAllPermissions: bigint | null = null;
 function getAllPermissions() {
@@ -23,474 +26,261 @@ function getAllPermissions() {
 
 let isEnabled = false;
 
-function fpHide(el: HTMLElement) {
-    el.style.display = "none";
-    el.setAttribute("data-fp-hidden", "true");
-}
-
-const mutedUsers = new Map<string, boolean>();
-const deafenedUsers = new Map<string, boolean>();
+// Local maps for fake simulations
+const fakeMutes = new Map<string, boolean>();
+const fakeDeafs = new Map<string, boolean>();
+// channelId: string = moved to channel, null = disconnected from voice
+const fakeChannelIds = new Map<string, string | null>();
+// guildId:userId -> nickname ("" means reset to base display name)
 const fakeNicks = new Map<string, string>();
-const disconnectedUsers = new Set<string>();
-const kickedUsers = new Set<string>();
-const bannedUsers = new Set<string>();
-const deletedMessages = new Set<string>();
+// guildId:userId -> Set<roleId>
+const fakeRoles = new Map<string, Set<string>>();
 
-let badgeVersion = 0;
-const badgeListeners = new Set<() => void>();
-function notifyBadgeChange() { badgeVersion++; badgeListeners.forEach(fn => fn()); }
-
-function getCurrentGuildId(): string | null {
-    try { return SelectedGuildStore?.getGuildId() ?? null; } catch { return null; }
-}
-
-function notifyMemberListChange() {
-    if (!isEnabled) return;
-    try {
-        const guildId = getCurrentGuildId();
-        if (!guildId) return;
-
-        const myId = UserStore?.getCurrentUser()?.id;
-        if (myId && VoiceStateStore) {
-            const myVS = VoiceStateStore.getVoiceStateForUser(myId);
-            if (!myVS || myVS.guildId !== guildId) return;
+let styleElement: HTMLStyleElement | null = null;
+function injectFakePermStyle(enable: boolean) {
+    if (enable) {
+        if (!styleElement) {
+            styleElement = document.createElement("style");
+            styleElement.id = "fake-perm-placeholder-fix";
+            styleElement.textContent = `
+                .placeholder__27cc6.member__5d473,
+                div[class*="placeholder__"][class*="member__"] {
+                    display: none !important;
+                }
+            `;
+            document.head.appendChild(styleElement);
         }
-
-        FluxDispatcher?.dispatch({ type: "GUILD_MEMBER_LIST_UPDATE", ops: [], id: "everyone", guildId });
-    } catch { }
-}
-
-
-function hideMessageInDOM(messageId: string) {
-    // Only ever hide the single targeted message row (its <li>). We used to also
-    // scan every sibling afterwards to hide "orphaned" date separators, but
-    // Discord's message list is virtualized: DOM order does not reliably match
-    // chronological/visual order (nodes get recycled/repositioned as you scroll),
-    // so that sibling scan could end up hiding unrelated messages along with the
-    // target one. Better to occasionally leave a stray date header than to hide
-    // messages the user never asked to hide.
-    let msgEl: HTMLElement | null =
-        document.querySelector(`[data-list-item-id$="${messageId}"]`) ??
-        document.querySelector(`li[id$="-${messageId}"]`) ??
-        document.querySelector(`[id$="-${messageId}"]`);
-    if (!msgEl) {
-        for (const li of document.querySelectorAll("ol[data-list-id='chat-messages'] > li")) {
-            if ((li as HTMLElement).id.includes(messageId)) { msgEl = li as HTMLElement; break; }
+    } else {
+        if (styleElement) {
+            styleElement.remove();
+            styleElement = null;
         }
     }
-    if (!msgEl) return;
-    // Always hide the whole row, not a smaller nested element that might happen
-    // to share the same id suffix (e.g. an inner content/aria-label wrapper),
-    // otherwise part of the message could stay visible.
-    const row = (msgEl.closest("li") as HTMLElement | null) ?? msgEl;
-    fpHide(row);
 }
 
-function getGuild(guildId: string | null) {
-    if (!guildId) return null;
-    try { return (GuildStore as any)?.getGuild?.(guildId) ?? null; } catch { return null; }
-}
-
-function getMember(guildId: string | null, userId: string) {
-    if (!guildId) return null;
-    try { return GuildMemberStore?.getMember(guildId, userId) ?? null; } catch { return null; }
-}
-
-function isUserInVoice(userId: string, guildId: string | null): boolean {
-    if (!guildId) return false;
+function computeMemberRoleProperties(guildId: string, roleIds: string[]) {
     try {
-        const vs = VoiceStateStore?.getVoiceStateForUser(userId);
-        return !!(vs && vs.guildId === guildId && vs.channelId);
+        const guildRolesMap = GuildRoleStore?.getGuildRoles?.(guildId) ?? GuildRoleStore?.getRoles?.(guildId) ?? {};
+        const rolesList: any[] = Array.isArray(guildRolesMap) ? guildRolesMap : Object.values(guildRolesMap);
+
+        if (!rolesList || rolesList.length === 0) {
+            return {};
+        }
+
+        const roleSet = new Set(roleIds.map(String));
+        const memberRoles = rolesList.filter((r: any) => r && roleSet.has(String(r.id)));
+
+        // Sort descending by position (higher position = higher role hierarchy)
+        memberRoles.sort((a: any, b: any) => (Number(b.position) || 0) - (Number(a.position) || 0));
+
+        const highestRoleId = memberRoles[0]?.id ? String(memberRoles[0].id) : null;
+        const hoistRole = memberRoles.find((r: any) => Boolean(r.hoist));
+        const hoistRoleId = hoistRole?.id ? String(hoistRole.id) : null;
+
+        const colorRole = memberRoles.find((r: any) => (r.color && r.color !== 0) || Boolean(r.colorString));
+        const colorRoleId = colorRole?.id ? String(colorRole.id) : null;
+        const colorString = colorRole?.colorString ?? null;
+
+        return {
+            hoistRoleId,
+            colorRoleId,
+            highestRoleId,
+            colorString
+        };
     } catch {
-        return false;
+        return {};
     }
 }
 
-function getVoiceChannelId(userId: string, guildId: string | null): string | null {
-    if (!guildId) return null;
-    try { return VoiceStateStore?.getVoiceStateForUser(userId)?.channelId ?? null; } catch { return null; }
-}
+function patchMemberListProps(guildId: string, props: any) {
+    if (!props) return props;
 
-function getGuildRoles(guildId: string | null): Array<{ id: string; name: string; color: number; }> {
-    if (!guildId) return [];
     try {
-        return (GuildRoleStore as any)?.getSortedRoles?.(guildId)?.filter((r: any) => r.id !== guildId).map((r: any) => ({ id: r.id, name: r.name, color: r.color })) ?? [];
-    } catch {
-        try {
-            const guild = getGuild(guildId);
-            if (!guild?.roles) return [];
-            return Object.values(guild.roles as Record<string, any>).filter((r: any) => r.id !== guildId).sort((a: any, b: any) => b.position - a.position).map((r: any) => ({ id: r.id, name: r.name, color: r.color }));
-        } catch { return []; }
-    }
-}
-
-function getMemberRoleIds(guildId: string | null, userId: string): string[] {
-    if (!guildId) return [];
-    try { return (GuildMemberStore as any)?.getMember?.(guildId, userId)?.roles ?? []; } catch { return getMember(guildId, userId)?.roles ?? []; }
-}
-
-function toast(msg: string) {
-    try { showToast(msg); } catch { }
-}
-
-function findVoiceUserElement(userId: string): HTMLElement | null {
-    const byAttr = document.querySelector(`[data-user-id="${userId}"]`) as HTMLElement | null;
-    if (byAttr) return byAttr;
-    const voiceUsers = document.querySelectorAll("[class*='voiceUser'], [class*='VoiceUser']");
-    for (const el of voiceUsers) {
-        for (const img of el.querySelectorAll("img")) {
-            if ((img as HTMLImageElement).src.includes(userId)) return el as HTMLElement;
-        }
-    }
-    return null;
-}
-
-function Btn({ label, onClick, primary = false }: { label: string; onClick: () => void; primary?: boolean; }) {
-    return <button onClick={onClick} style={{ background: primary ? "var(--brand-experiment)" : "none", border: "none", borderRadius: primary ? 3 : 0, color: primary ? "#fff" : "var(--text-normal)", cursor: "pointer", padding: "8px 16px", fontWeight: primary ? 600 : 400 }}>{label}</button>;
-}
-
-// ─── Common Styles ───────────────────────────────────────────────────────────
-
-const modalTitle: React.CSSProperties = { fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 600, lineHeight: "24px", color: "#ffffff", margin: 0, padding: 0 };
-const footerStyle: React.CSSProperties = { display: "flex", gap: "24px", padding: "16px" };
-function footerBtn(bg: string): React.CSSProperties { return { flex: 1, fontFamily: "var(--font-primary)", fontSize: "14px", fontWeight: 500, height: "38px", background: bg, color: "#ffffff", border: "none", borderRadius: "8px", cursor: "pointer" }; }
-function textareaStyle(height = "100px"): React.CSSProperties { return { fontFamily: "var(--font-primary)", width: "100%", height, background: "#383a40", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px", padding: "10px 12px", color: "#ffffff", fontSize: "16px", fontWeight: 400, lineHeight: "22px", outline: "none", resize: "none", boxSizing: "border-box", overflowY: "auto", scrollbarWidth: "thin" } as React.CSSProperties; }
-function sectionLabel(mb = "8px"): React.CSSProperties { return { fontFamily: "var(--font-primary)", fontSize: "16px", fontWeight: 600, color: "#ffffff", marginBottom: mb }; }
-
-// ─── Modals ───────────────────────────────────────────────────────────────────
-
-function RenameModal({ rootProps, user, guildId }: { rootProps: any; user: any; guildId: string | null; }) {
-    const member = getMember(guildId, user.id);
-    const [nick, setNick] = React.useState<string>(fakeNicks.get(user.id) ?? member?.nick ?? user.username ?? "");
-    function applyNick() {
-        const trimmed = nick.trim();
-        if (trimmed) fakeNicks.set(user.id, trimmed);
-        else fakeNicks.delete(user.id);
-        notifyMemberListChange();
-        toast(`Nickname changed → ${trimmed || "(reset)"}`);
-        rootProps.onClose();
-    }
-    return (
-        <ModalRoot {...rootProps} size="small">
-            <ModalHeader separator={false}><h2 style={{ ...modalTitle, flex: 1 }}>Change Nickname</h2><ModalCloseButton onClick={rootProps.onClose} /></ModalHeader>
-            <ModalContent style={{ padding: "0 16px 20px" }}>
-                <div style={sectionLabel()}>Nickname</div>
-                <input value={nick} onChange={e => setNick(e.target.value)} autoFocus maxLength={32} onKeyDown={e => { if (e.key === "Enter") applyNick(); }} style={{ width: "100%", background: "#383a40", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px", padding: "10px 12px", color: "#ffffff", fontFamily: "var(--font-primary)", fontSize: "16px", outline: "none", boxSizing: "border-box" as any }} />
-            </ModalContent>
-            <ModalFooter>
-                <div style={{ display: "flex", gap: "12px", width: "100%", padding: "16px" }}>
-                    <button onClick={rootProps.onClose} style={footerBtn("#4e5058") as any}>Cancel</button>
-                    <button onClick={applyNick} style={footerBtn("#5865f2") as any}>Apply</button>
-                </div>
-            </ModalFooter>
-        </ModalRoot>
-    );
-}
-
-function KickModal({ rootProps, user, guildId }: { rootProps: any; user: any; guildId: string | null; }) {
-    const [reason, setReason] = React.useState("");
-    const username = user.globalName ?? user.username ?? "this user";
-    const tag = user.username ?? "";
-    return (
-        <ModalRoot {...rootProps} size="small">
-            <ModalHeader separator={false}>
-                <h2 style={{ fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 700, color: "#ffffff", margin: 0, flex: 1 }}>
-                    Kick {username} from server
-                </h2>
-                <ModalCloseButton onClick={rootProps.onClose} />
-            </ModalHeader>
-            <ModalContent style={{ padding: "8px 16px 20px" }}>
-                <p style={{ fontFamily: "var(--font-primary)", fontSize: "14px", color: "#ffffff", lineHeight: "20px", marginBottom: "16px", marginTop: "4px" }}>
-                    Are you sure you want to kick @{tag} from the server? They will be able to return with a new invitation.
-                </p>
-                <div style={{ fontFamily: "var(--font-primary)", fontSize: "14px", fontWeight: 600, color: "#ffffff", marginBottom: "8px" }}>Reason for kick</div>
-                <textarea
-                    value={reason}
-                    onChange={e => setReason(e.target.value)}
-                    placeholder=""
-                    style={{ width: "100%", height: "120px", background: "var(--input-background, #1e1f22)", border: "1px solid var(--background-tertiary, #1e1f22)", borderRadius: "4px", padding: "10px", color: "#ffffff", fontFamily: "var(--font-primary)", fontSize: "14px", lineHeight: "20px", resize: "none", outline: "none", boxSizing: "border-box" as any }}
-                />
-            </ModalContent>
-            <ModalFooter>
-                <div style={{ display: "flex", gap: "8px", width: "100%", padding: "16px" }}>
-                    <button onClick={rootProps.onClose} style={footerBtn("#4e5058") as any}>Cancel</button>
-                    <button onClick={() => { kickedUsers.add(user.id); disconnectedUsers.add(user.id); notifyMemberListChange(); toast(`@${tag} kicked (local)`); rootProps.onClose(); }}
-                        style={footerBtn("#da373c") as any}>
-                        Kick
-                    </button>
-                </div>
-            </ModalFooter>
-        </ModalRoot>
-    );
-}
-
-const BAN_REASONS = [
-    { label: "Suspicious account or spam", value: "spam" },
-    { label: "Compromised or hacked account", value: "compromised" },
-    { label: "Non-respect of server rules", value: "rules" },
-    { label: "Other", value: "other" },
-];
-const DELETE_OPTIONS = [
-    { label: "Don't delete anything", value: "0" },
-    { label: "Last hour", value: "3600" },
-    { label: "Last 24 hours", value: "86400" },
-    { label: "Last 7 days", value: "604800" },
-];
-
-function BanModal({ rootProps, user }: { rootProps: any; user: any; }) {
-    const [reason, setReason] = React.useState<string | null>(null);
-    const [customReason, setCustomReason] = React.useState("");
-    const [deleteValue, setDeleteValue] = React.useState("3600");
-    return (
-        <ModalRoot {...rootProps} size="small">
-            <ModalHeader separator={false}><h2 style={{ ...modalTitle, flex: 1 }}>Ban @{user.username}?</h2><ModalCloseButton onClick={rootProps.onClose} /></ModalHeader>
-            <ModalContent style={{ padding: "0 16px 20px" }}>
-                <div style={sectionLabel()}>Reason</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
-                    {BAN_REASONS.map(opt => (
-                        <label key={opt.value} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer", fontFamily: "var(--font-primary)", fontSize: "16px", color: "#ffffff", userSelect: "none" as any }} onClick={() => setReason(opt.value)}>
-                            <div style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, border: reason === opt.value ? "6px solid #5865f2" : "2px solid #4e5058", background: reason === opt.value ? "#fff" : "transparent", boxSizing: "border-box" as any }} />
-                            {opt.label}
-                        </label>
-                    ))}
-                </div>
-                {reason === "other" && <TextArea value={customReason} onChange={(v: string) => setCustomReason(v)} rows={3} style={{ marginBottom: "16px" }} />}
-                <div style={sectionLabel()}>Delete messages</div>
-                <Select options={DELETE_OPTIONS} select={(v: string) => setDeleteValue(v)} isSelected={(v: string) => v === deleteValue} serialize={(v: string) => v} maxVisibleItems={5} closeOnSelect={true} />
-            </ModalContent>
-            <ModalFooter>
-                <div style={{ display: "flex", gap: "12px", width: "100%", padding: "16px", justifyContent: "flex-end" }}>
-                    <Button look={Button.Looks.LINK} color={Button.Colors.PRIMARY} onClick={rootProps.onClose}>Cancel</Button>
-                    <Button look={Button.Looks.FILLED} color={Button.Colors.RED} onClick={() => { if (!reason) return toast("Select a reason"); bannedUsers.add(user.id); kickedUsers.add(user.id); disconnectedUsers.add(user.id); notifyMemberListChange(); toast(`@${user.username} banned (local)`); rootProps.onClose(); }}>Ban</Button>
-                </div>
-            </ModalFooter>
-        </ModalRoot>
-    );
-}
-
-const TIMEOUT_DURATIONS = [
-    { label: "60 sec", seconds: 60 }, { label: "5 min", seconds: 300 },
-    { label: "10 min", seconds: 600 }, { label: "1 hour", seconds: 3600 },
-    { label: "1 day", seconds: 86400 }, { label: "1 week", seconds: 604800 },
-];
-
-function TimeoutModal({ rootProps, user }: { rootProps: any; user: any; }) {
-    const [selectedIdx, setSelectedIdx] = React.useState(0);
-    const [reason, setReason] = React.useState("");
-    const username = user.globalName ?? user.username ?? "this user";
-    const tag = user.username ?? "";
-    return (
-        <ModalRoot {...rootProps} size="small">
-            <ModalHeader separator={false}>
-                <h2 style={{ fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 700, color: "#ffffff", margin: 0, flex: 1 }}>
-                    Timeout {username}
-                </h2>
-                <ModalCloseButton onClick={rootProps.onClose} />
-            </ModalHeader>
-            <ModalContent style={{ padding: "8px 16px 20px" }}>
-                <p style={{ fontFamily: "var(--font-primary)", fontSize: "14px", color: "#ffffff", lineHeight: "20px", marginBottom: "20px", marginTop: "4px" }}>
-                    Temporarily timed out members cannot send messages or react in text channels. They are also not allowed to join voice or conference channels.{" "}
-                    <span style={{ color: "#00a8fc", cursor: "pointer" }}>Learn more</span>
-                </p>
-                <div style={{ fontFamily: "var(--font-primary)", fontSize: "14px", fontWeight: 600, color: "#ffffff", marginBottom: "8px" }}>Duration</div>
-                <div style={{ display: "flex", marginBottom: "20px", borderRadius: "4px", overflow: "hidden", border: "1px solid var(--background-modifier-accent, rgba(255,255,255,0.1))" }}>
-                    {TIMEOUT_DURATIONS.map((d, i) => (
-                        <button key={i} onClick={() => setSelectedIdx(i)} style={{
-                            flex: 1,
-                            fontFamily: "var(--font-primary)",
-                            fontSize: "14px",
-                            fontWeight: 500,
-                            background: selectedIdx === i ? "#5865f2" : "var(--background-secondary, #2b2d31)",
-                            color: "#ffffff",
-                            border: "none",
-                            borderRight: i < TIMEOUT_DURATIONS.length - 1 ? "1px solid var(--background-modifier-accent, rgba(255,255,255,0.1))" : "none",
-                            padding: "8px 2px",
-                            height: "36px",
-                            cursor: "pointer",
-                            whiteSpace: "nowrap" as any,
-                            textAlign: "center" as any,
-                            boxSizing: "border-box" as any,
-                        }}>
-                            {d.label}
-                        </button>
-                    ))}
-                </div>
-                <div style={{ fontFamily: "var(--font-primary)", fontSize: "14px", fontWeight: 600, color: "#ffffff", marginBottom: "8px" }}>Reason</div>
-                <textarea
-                    value={reason}
-                    onChange={e => setReason(e.target.value)}
-                    placeholder="Enter a reason. It will only be visible in server logs and this member won't be able to see it."
-                    style={{ width: "100%", height: "100px", background: "var(--input-background, #1e1f22)", border: "1px solid var(--background-tertiary, #1e1f22)", borderRadius: "4px", padding: "10px", color: "#ffffff", fontFamily: "var(--font-primary)", fontSize: "14px", lineHeight: "20px", resize: "none", outline: "none", boxSizing: "border-box" as any }}
-                />
-            </ModalContent>
-            <ModalFooter>
-                <div style={{ display: "flex", gap: "8px", width: "100%", padding: "16px" }}>
-                    <button onClick={rootProps.onClose} style={footerBtn("#4e5058") as any}>Cancel</button>
-                    <button onClick={() => {
-                        const d = TIMEOUT_DURATIONS[selectedIdx];
-                        disconnectedUsers.add(user.id);
-                        notifyMemberListChange();
-                        toast(`@${tag} timed out for ${d.label} (local)`);
-                        setTimeout(() => { disconnectedUsers.delete(user.id); notifyMemberListChange(); }, d.seconds * 1000);
-                        rootProps.onClose();
-                    }} style={footerBtn("#5865f2") as any}>
-                        Timeout
-                    </button>
-                </div>
-            </ModalFooter>
-        </ModalRoot>
-    );
-}
-
-function AddRoleModal({ rootProps, user, guildId }: { rootProps: any; user: any; guildId: string | null; }) {
-    const [search, setSearch] = React.useState("");
-    const allRoles = getGuildRoles(guildId);
-    const memberRoleIds = getMemberRoleIds(guildId, user.id);
-    const filtered = allRoles.filter(r => r.name.toLowerCase().includes(search.toLowerCase()));
-    return (
-        <ModalRoot {...rootProps} size="small">
-            <ModalContent style={{ padding: "8px 0 0", background: "var(--background-floating, #18191c)", borderRadius: 8, minWidth: 220 }}>
-                <div style={{ padding: "4px 8px" }}>
-                    <input autoFocus placeholder="Role" value={search} onChange={e => setSearch(e.target.value)} style={{ width: "100%", background: "transparent", border: "1px solid var(--brand-experiment, #5865f2)", borderRadius: 4, outline: "none", color: "var(--text-normal, #dcddde)", fontSize: 14, padding: "4px 8px", boxSizing: "border-box" }} />
-                </div>
-                <div style={{ maxHeight: 300, overflowY: "auto", scrollbarWidth: "none", padding: "4px 0" }}>
-                    {filtered.map(role => {
-                        const color = role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "#80848e";
-                        return (
-                            <div key={role.id} onClick={() => { toast(`Role ${role.name} — simulation`); rootProps.onClose(); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", opacity: memberRoleIds.includes(role.id) ? 0.5 : 1 }} onMouseEnter={e => (e.currentTarget.style.background = "var(--background-modifier-hover)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                                <div style={{ width: 12, height: 12, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                                <span style={{ color: "var(--text-normal, #dcddde)", fontSize: 14 }}>{role.name}</span>
-                            </div>
-                        );
-                    })}
-                </div>
-            </ModalContent>
-        </ModalRoot>
-    );
-}
-
-// ─── Context menu patches ─────────────────────────────────────────────────────
-
-function findGroupWithItem(children: any[], itemIds: string[]): number {
-    for (let i = 0; i < children.length; i++) {
-        const el = children[i];
-        if (!el?.props) continue;
-        const sub = Array.isArray(el.props.children) ? el.props.children : el.props.children ? [el.props.children] : [];
-        for (const child of sub) {
-            if (child?.props?.id && itemIds.includes(child.props.id)) return i;
-        }
-    }
-    return -1;
-}
-
-const messageContextPatch: NavContextMenuPatchCallback = (children, { message }: any) => {
-    if (!children || !Array.isArray(children) || !isEnabled || !message?.id) return;
-    try {
-        const guildId = getCurrentGuildId();
-        if (!guildId) return;
-        const hasDelete = children.some((g: any) => {
-            const sub = Array.isArray(g?.props?.children) ? g.props.children : [];
-            return sub.some((c: any) => c?.props?.id === "delete-message");
-        });
-        children.splice(-1, 0, (
-            <Menu.MenuGroup key="fp-msg-group">
-                <Menu.MenuItem key="fp-delete-msg" id="fp-delete-msg" label={hasDelete ? "Delete for me (fake)" : "Delete message"} color="danger"
-                    action={() => { deletedMessages.add(message.id); hideMessageInDOM(message.id); toast("Message deleted (local)"); }} />
-            </Menu.MenuGroup>
-        ));
-    } catch (e) {
-        console.error("[FakePerm] Message context patch error:", e);
-    }
-};
-
-const userContextPatch: NavContextMenuPatchCallback = (children, { user }: any) => {
-    if (!children || !Array.isArray(children) || !isEnabled || !user) return;
-    try {
-        const guildId = getCurrentGuildId();
-        if (!guildId) return;
-
-        const HIDDEN_IDS = new Set(["roles", "perm-viewer-permissions"]);
-        for (let i = 0; i < children.length; i++) {
-            const group = children[i];
-            if (!group?.props?.children) continue;
-            const sub: any[] = Array.isArray(group.props.children)
-                ? group.props.children
-                : [group.props.children];
-            const filtered = sub.filter((child: any) => !HIDDEN_IDS.has(child?.props?.id ?? ""));
-            if (filtered.length !== sub.length) {
-                children[i] = React.cloneElement(group, { children: filtered });
+        const fakeUserIds = new Set<string>();
+        for (const key of fakeRoles.keys()) {
+            if (key.startsWith(`${guildId}:`)) {
+                fakeUserIds.add(key.split(":")[1]);
             }
         }
-        const { username } = user;
-        const allRoles = getGuildRoles(guildId);
-        const memberRoleIds = getMemberRoleIds(guildId, user.id);
 
-        const groupA = (
-            <Menu.MenuGroup key="fp-group-a">
-                <Menu.MenuItem key="fp-rename" id="fp-rename" label="Change Nickname" action={() => openModal(p => <RenameModal rootProps={p} user={user} guildId={guildId} />)} />
-                <Menu.MenuItem key="fp-roles" id="fp-roles" label="Roles">
-                    {allRoles.length === 0
-                        ? <Menu.MenuItem key="fp-roles-empty" id="fp-roles-empty" label="No roles" disabled />
-                        : [...allRoles.map(role => {
-                            const hasRole = memberRoleIds.includes(role.id);
-                            const color = role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "#80848e";
-                            return (
-                                <Menu.MenuItem key={`fp-role-${role.id}`} id={`fp-role-${role.id}`} label={role.name} action={() => { }}
-                                    render={() => (
-                                        <div style={{ display: "flex", alignItems: "center", padding: "8px 10px", gap: 8, width: "100%", boxSizing: "border-box", cursor: "pointer" }}>
-                                            <div style={{ width: 14, height: 14, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                                            <span style={{ flex: 1, color: "#ffffff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{role.name}</span>
-                                            <div style={{ width: 16, height: 16, borderRadius: 3, flexShrink: 0, border: hasRole ? "none" : "1.5px solid #72767d", background: hasRole ? "#5865f2" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                                {hasRole && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                                            </div>
-                                        </div>
-                                    )} />
-                            );
-                        }),
-                        <Menu.MenuItem key="fp-role-add" id="fp-role-add" label="+ Add a role" action={() => openModal(p => <AddRoleModal rootProps={p} user={user} guildId={guildId} />)}
-                            render={() => <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderTop: "1px solid rgba(79,84,92,0.48)", color: "#b9bbbe", fontSize: 13, cursor: "pointer" }}><span>+</span><span>Add a role</span></div>} />,
-                        ]}
-                </Menu.MenuItem>
-                <Menu.MenuItem key="fp-move" id="fp-move" label="Move to">
-                    {(() => {
-                        const allChannels: Array<{ id: string; name: string; position: number; }> = [];
-                        try {
-                            const gc = (GuildChannelStore as any)?.getChannels?.(guildId) ?? {};
-                            const va: any[] = [...(gc.VOCAL ?? []), ...(gc[2] ?? []), ...(gc[13] ?? [])];
-                            if (va.length === 0) for (const arr of Object.values(gc)) { if (Array.isArray(arr)) for (const item of arr as any[]) { const ch = (item as any).channel ?? item; if ((ch?.type === 2 || ch?.type === 13) && ch.id && ch.name) va.push(item); } }
-                            const seen = new Set<string>();
-                            for (const item of va) { const ch = (item as any).channel ?? item; if (ch?.id && ch?.name && !seen.has(ch.id)) { seen.add(ch.id); allChannels.push({ id: ch.id, name: ch.name, position: ch.position ?? 0 }); } }
-                        } catch { }
-                        allChannels.sort((a, b) => a.position - b.position);
-                        if (allChannels.length === 0) return <Menu.MenuItem key="fp-move-empty" id="fp-move-empty" label="No voice channels" disabled />;
-                        return allChannels.map(ch => <Menu.MenuItem key={`fp-move-${ch.id}`} id={`fp-move-${ch.id}`} label={`🔊 ${ch.name}`} action={() => toast(`Moved to #${ch.name} — simulation`)} />);
-                    })()}
-                </Menu.MenuItem>
-                <Menu.MenuCheckboxItem key="fp-mute" id="fp-mute" label="Server Mute" color="danger" checked={mutedUsers.get(user.id) === true} action={() => { const next = !mutedUsers.get(user.id); mutedUsers.set(user.id, next); notifyBadgeChange(); }} />
-                <Menu.MenuCheckboxItem key="fp-deafen" id="fp-deafen" label="Server Deafen" color="danger" checked={deafenedUsers.get(user.id) === true} action={() => { const next = !deafenedUsers.get(user.id); deafenedUsers.set(user.id, next); notifyBadgeChange(); }} />
-                <Menu.MenuItem key="fp-disconnect" id="fp-disconnect" label="Disconnect" color="danger" action={() => { disconnectedUsers.add(user.id); notifyMemberListChange(); toast(`@${username} disconnected from voice (local)`); }} />
-                <Menu.MenuItem key="fp-kick" id="fp-kick" label={`Timeout ${username}`} color="danger" action={() => openModal(p => <TimeoutModal rootProps={p} user={user} />)} />
-                <Menu.MenuItem key="fp-expulser" id="fp-expulser" label={`Kick ${username}`} color="danger" action={() => openModal(p => <KickModal rootProps={p} user={user} guildId={guildId} />)} />
-                <Menu.MenuItem key="fp-ban" id="fp-ban" label={`Ban ${username}`} color="danger" action={() => openModal(p => <BanModal rootProps={p} user={user} />)} />
-            </Menu.MenuGroup>
-        );
+        if (fakeUserIds.size === 0) return props;
 
-        const idxBlock = findGroupWithItem(children, ["block", "ignore"]);
-        if (idxBlock >= 0) children.splice(idxBlock + 1, 0, groupA);
-        else children.splice(-1, 0, groupA);
-    } catch (e) {
-        console.error("[FakePerm] User context patch error:", e);
+        const groups = Array.isArray(props.groups) ? props.groups.map((g: any) => ({ ...g })) : props.groups;
+        let rows = Array.isArray(props.rows) ? [...props.rows] : (Array.isArray(props.list) ? [...props.list] : null);
+
+        for (const userId of fakeUserIds) {
+            const member = GuildMemberStore.getMember(guildId, userId);
+            if (!member) continue;
+
+            const targetHoistId = member.hoistRoleId;
+
+            if (rows && rows.length > 0) {
+                let oldHoistId: string | null = null;
+                const existingIdx = rows.findIndex((r: any) => r && (r.id === userId || r.userId === userId || r.record?.user?.id === userId));
+
+                if (existingIdx !== -1) {
+                    for (let i = existingIdx - 1; i >= 0; i--) {
+                        const r = rows[i];
+                        if (r && (r.type === "GROUP" || r.rowType === "GROUP")) {
+                            oldHoistId = String(r.id || r.groupId || r.key || "");
+                            break;
+                        }
+                    }
+                }
+
+                if (oldHoistId && targetHoistId && String(oldHoistId) === String(targetHoistId)) {
+                    continue;
+                }
+
+                let userRecord: any = null;
+                if (existingIdx !== -1) {
+                    [userRecord] = rows.splice(existingIdx, 1);
+                } else {
+                    const user = UserStore?.getUser?.(userId);
+                    userRecord = {
+                        type: "MEMBER",
+                        id: userId,
+                        userId,
+                        key: userId,
+                        record: { user, member }
+                    };
+                }
+
+                if (userRecord) {
+                    userRecord.group = targetHoistId || "online";
+                    userRecord.groupId = targetHoistId || "online";
+                    if (userRecord.record) {
+                        userRecord.record = {
+                            ...userRecord.record,
+                            member
+                        };
+                    }
+                }
+
+                let insertIdx = -1;
+                if (targetHoistId) {
+                    insertIdx = rows.findIndex((r: any) => r && (r.type === "GROUP" || r.rowType === "GROUP") && String(r.id || r.groupId || r.key) === String(targetHoistId));
+                }
+
+                if (insertIdx === -1) {
+                    insertIdx = rows.findIndex((r: any) => r && (r.type === "GROUP" || r.rowType === "GROUP") && (r.id === "online" || r.id === "@everyone" || r.id === "offline"));
+                }
+
+                if (insertIdx !== -1) {
+                    rows.splice(insertIdx + 1, 0, userRecord);
+                } else {
+                    rows.push(userRecord);
+                }
+
+                if (targetHoistId && Array.isArray(groups)) {
+                    let targetGrp = groups.find((g: any) => String(g.id || g.groupId || g.key) === String(targetHoistId));
+                    if (!targetGrp) {
+                        const role = GuildRoleStore?.getRole?.(guildId, targetHoistId);
+                        if (role) {
+                            targetGrp = {
+                                id: targetHoistId,
+                                key: targetHoistId,
+                                count: 1,
+                                title: role.name
+                            };
+                            groups.unshift(targetGrp);
+                            if (rows) {
+                                rows.unshift({
+                                    type: "GROUP",
+                                    id: targetHoistId,
+                                    key: targetHoistId,
+                                    group: targetGrp
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Recalculate group counts based on actual MEMBER rows in each section
+        if (rows && Array.isArray(groups)) {
+            let currentGrpId: string | null = null;
+            const actualCounts = new Map<string, number>();
+
+            for (const r of rows) {
+                if (!r) continue;
+                if (r.type === "GROUP" || r.rowType === "GROUP") {
+                    currentGrpId = String(r.id || r.groupId || r.key || "");
+                    if (!actualCounts.has(currentGrpId)) {
+                        actualCounts.set(currentGrpId, 0);
+                    }
+                } else if (currentGrpId) {
+                    actualCounts.set(currentGrpId, (actualCounts.get(currentGrpId) || 0) + 1);
+                }
+            }
+
+            for (const g of groups) {
+                const gId = String(g.id || g.groupId || g.key || "");
+                if (actualCounts.has(gId)) {
+                    g.count = actualCounts.get(gId)!;
+                }
+            }
+        }
+
+        return {
+            ...props,
+            ...(Array.isArray(groups) ? { groups } : {}),
+            ...(rows ? (Array.isArray(props.rows) ? { rows } : { list: rows }) : {})
+        };
+    } catch {
+        return props;
     }
-};
-
-// ─── Plugin ───────────────────────────────────────────────────────────────────
+}
 
 export default definePlugin({
     name: "FakePerm",
-    description: "Visually simulates moderation options in the right-click menu. No real action.",
-    authors: [{ name: ".zp", id: 1020801845490356245n }],
-    dependencies: ["ContextMenuAPI"],
+    description: "Unlocks native Discord administration and moderation UI locally with real-time visual voice, nickname & role management simulations (Mute, Deafen, Stream, Disconnect, Move, Nickname, Add/Remove Roles, Member List Hoist).",
+    authors: [{ name: "Guncord", id: 0n }],
     requiresRestart: false,
+
+    enableRolePillRemove(props: any) {
+        if (!isEnabled || !props) return;
+        try {
+            props.canRemove = true;
+            props.readOnly = false;
+            if (!props.onRemove) {
+                const guildId = props.guildId ?? props.guild?.id;
+                const userId = props.user?.id ?? props.member?.userId ?? props.userId;
+                const roleId = props.role?.id;
+                if (guildId && userId && roleId) {
+                    props.onRemove = () => {
+                        RestAPI.del({
+                            url: `/guilds/${guildId}/members/${userId}/roles/${roleId}`
+                        });
+                    };
+                }
+            }
+        } catch { }
+    },
+
+    flux: {
+        VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: any[]; }) {
+            if (!isEnabled || !Array.isArray(voiceStates)) return;
+
+            let cleared = false;
+            for (const state of voiceStates) {
+                // If it's our own fake dispatch, do not clear
+                if (state?._isFakeDispatch) continue;
+
+                const userId = state?.userId;
+                if (userId) {
+                    if (fakeMutes.has(userId)) { fakeMutes.delete(userId); cleared = true; }
+                    if (fakeDeafs.has(userId)) { fakeDeafs.delete(userId); cleared = true; }
+                    if (fakeChannelIds.has(userId)) { fakeChannelIds.delete(userId); cleared = true; }
+                }
+            }
+
+            if (cleared) {
+                try { VoiceStateStore?.emitChange?.(); } catch { }
+            }
+        }
+    },
 
     patches: [
         {
@@ -534,50 +324,549 @@ export default definePlugin({
                 match: /\i(?=\?null)/,
                 replace: "false"
             }
+        },
+        // Force canRemove and onRemove handler on all role pills in profile popouts & modals
+        {
+            find: "#{intl::zr0Y5R::raw}",
+            predicate: () => isEnabled,
+            replacement: [
+                {
+                    match: /(\.colorString\?\?\i;)/,
+                    replace: "$1$self.enableRolePillRemove(arguments[0]);"
+                }
+            ]
         }
     ],
 
-    // ─── Runtime PermissionStore override ────────────────────────────────────
-    // Monkey-patch PermissionStore methods at runtime when the plugin starts
-    // so Discord's UI thinks the user has every permission (ADMINISTRATOR level).
-    // This is pure client-side visual — the server always enforces real perms.
+    // ─── Runtime PermissionStore & GuildMemberStore overrides ────────────────
     _origCan: null as ((...a: any[]) => any) | null,
     _origGetChannelPerms: null as ((...a: any[]) => any) | null,
     _origGetGuildPerms: null as ((...a: any[]) => any) | null,
+    _origGetGuildPermProps: null as ((...a: any[]) => any) | null,
     _origCanManageUser: null as ((...a: any[]) => any) | null,
+    _origGetVoiceState: null as ((...a: any[]) => any) | null,
+    _origGetVoiceStatesForChannel: null as ((...a: any[]) => any) | null,
+    _origGetMember: null as ((...a: any[]) => any) | null,
+    _origGetNick: null as ((...a: any[]) => any) | null,
+    _origGetChannelMemberProps: null as ((...a: any[]) => any) | null,
+    _origGetChannelMemberRows: null as ((...a: any[]) => any) | null,
+    _origPatch: null as ((...a: any[]) => any) | null,
+    _origPut: null as ((...a: any[]) => any) | null,
+    _origDel: null as ((...a: any[]) => any) | null,
+    _origMethodsMap: new Map<string, Function>(),
 
     _patchPermissionStore() {
-        if (!PermissionStore) return;
+        const methodNames = [
+            "can",
+            "canManageUser",
+            "canManageRole",
+            "canManageUserRole",
+            "canManageRoleInGuild",
+            "canRemoveRole",
+            "isRoleHigher",
+            "isRoleHigherThan",
+            "getHighestRolePosition"
+        ];
 
-        // can(permission, channel) → always true
-        if (!this._origCan && typeof PermissionStore.can === "function") {
-            this._origCan = PermissionStore.can.bind(PermissionStore);
-            PermissionStore.can = (...args: any[]) => isEnabled ? true : this._origCan!(...args);
+        const targets = [
+            PermissionStore,
+            RolePermissionUtils1,
+            RolePermissionUtils2,
+            RolePermissionUtils3,
+            RolePermissionUtils4
+        ].filter(Boolean);
+
+        for (let idx = 0; idx < targets.length; idx++) {
+            const target = targets[idx];
+            for (const name of methodNames) {
+                if (typeof target[name] === "function") {
+                    const key = `T${idx}_${name}`;
+                    if (!this._origMethodsMap.has(key)) {
+                        const orig = target[name].bind(target);
+                        this._origMethodsMap.set(key, orig);
+                        target[name] = (...args: any[]) => isEnabled ? true : orig(...args);
+                    }
+                }
+            }
         }
-        // getChannelPermissions(channel) → all perms
-        if (!this._origGetChannelPerms && typeof PermissionStore.getChannelPermissions === "function") {
-            this._origGetChannelPerms = PermissionStore.getChannelPermissions.bind(PermissionStore);
-            PermissionStore.getChannelPermissions = (...args: any[]) =>
-                isEnabled ? getAllPermissions() : this._origGetChannelPerms!(...args);
-        }
-        // getGuildPermissions({ id }) → all perms
-        if (!this._origGetGuildPerms && typeof PermissionStore.getGuildPermissions === "function") {
-            this._origGetGuildPerms = PermissionStore.getGuildPermissions.bind(PermissionStore);
-            PermissionStore.getGuildPermissions = (...args: any[]) =>
-                isEnabled ? getAllPermissions() : this._origGetGuildPerms!(...args);
-        }
-        // canManageUser(permission, author, guild) → always true
-        if (!this._origCanManageUser && typeof PermissionStore.canManageUser === "function") {
-            this._origCanManageUser = PermissionStore.canManageUser.bind(PermissionStore);
-            PermissionStore.canManageUser = (...args: any[]) => isEnabled ? true : this._origCanManageUser!(...args);
+
+        if (PermissionStore) {
+            if (!this._origGetChannelPerms && typeof PermissionStore.getChannelPermissions === "function") {
+                this._origGetChannelPerms = PermissionStore.getChannelPermissions.bind(PermissionStore);
+                PermissionStore.getChannelPermissions = (...args: any[]) =>
+                    isEnabled ? getAllPermissions() : this._origGetChannelPerms!(...args);
+            }
+            if (!this._origGetGuildPerms && typeof PermissionStore.getGuildPermissions === "function") {
+                this._origGetGuildPerms = PermissionStore.getGuildPermissions.bind(PermissionStore);
+                PermissionStore.getGuildPermissions = (...args: any[]) =>
+                    isEnabled ? getAllPermissions() : this._origGetGuildPerms!(...args);
+            }
+            if (!this._origGetGuildPermProps && typeof PermissionStore.getGuildPermissionProps === "function") {
+                this._origGetGuildPermProps = PermissionStore.getGuildPermissionProps.bind(PermissionStore);
+                PermissionStore.getGuildPermissionProps = (guild: any) => {
+                    const real = this._origGetGuildPermProps!(guild);
+                    if (!isEnabled) return real;
+
+                    const allTrueProps: Record<string, boolean> = {};
+                    if (real && typeof real === "object") {
+                        for (const k of Object.keys(real)) {
+                            allTrueProps[k] = true;
+                        }
+                    }
+                    allTrueProps.canManageRoles = true;
+                    allTrueProps.canManageGuild = true;
+                    allTrueProps.canAdministrator = true;
+                    return allTrueProps;
+                };
+            }
         }
     },
 
     _unpatchPermissionStore() {
-        if (this._origCan) { PermissionStore.can = this._origCan; this._origCan = null; }
-        if (this._origGetChannelPerms) { PermissionStore.getChannelPermissions = this._origGetChannelPerms; this._origGetChannelPerms = null; }
-        if (this._origGetGuildPerms) { PermissionStore.getGuildPermissions = this._origGetGuildPerms; this._origGetGuildPerms = null; }
-        if (this._origCanManageUser) { PermissionStore.canManageUser = this._origCanManageUser; this._origCanManageUser = null; }
+        const methodNames = [
+            "can",
+            "canManageUser",
+            "canManageRole",
+            "canManageUserRole",
+            "canManageRoleInGuild",
+            "canRemoveRole",
+            "isRoleHigher",
+            "isRoleHigherThan",
+            "getHighestRolePosition"
+        ];
+
+        const targets = [
+            PermissionStore,
+            RolePermissionUtils1,
+            RolePermissionUtils2,
+            RolePermissionUtils3,
+            RolePermissionUtils4
+        ].filter(Boolean);
+
+        for (let idx = 0; idx < targets.length; idx++) {
+            const target = targets[idx];
+            for (const name of methodNames) {
+                const key = `T${idx}_${name}`;
+                const orig = this._origMethodsMap.get(key);
+                if (orig) {
+                    target[name] = orig;
+                }
+            }
+        }
+        this._origMethodsMap.clear();
+
+        if (this._origGetChannelPerms && PermissionStore) {
+            PermissionStore.getChannelPermissions = this._origGetChannelPerms;
+            this._origGetChannelPerms = null;
+        }
+        if (this._origGetGuildPerms && PermissionStore) {
+            PermissionStore.getGuildPermissions = this._origGetGuildPerms;
+            this._origGetGuildPerms = null;
+        }
+        if (this._origGetGuildPermProps && PermissionStore) {
+            PermissionStore.getGuildPermissionProps = this._origGetGuildPermProps;
+            this._origGetGuildPermProps = null;
+        }
+    },
+
+    // ─── GuildMemberStore Interception for Fake Nicknames & Roles ────────────
+    _patchMemberStore() {
+        if (GuildMemberStore) {
+            if (!this._origGetMember && typeof GuildMemberStore.getMember === "function") {
+                this._origGetMember = GuildMemberStore.getMember.bind(GuildMemberStore);
+                GuildMemberStore.getMember = (guildId: string, userId: string) => {
+                    const real = this._origGetMember!(guildId, userId);
+                    if (!isEnabled || !guildId || !userId || !real) return real;
+
+                    const key = `${guildId}:${userId}`;
+                    const fkNick = fakeNicks.get(key);
+                    const fkRoles = fakeRoles.get(key);
+
+                    if (fkNick === undefined && fkRoles === undefined) return real;
+
+                    // If fkNick === "", resetting nickname means restoring base display name (nick: null)
+                    const effectiveNick = fkNick === "" ? null : (fkNick ?? real.nick);
+                    const effectiveRoles = fkRoles !== undefined ? Array.from(fkRoles) : real.roles;
+                    const roleProps = fkRoles !== undefined ? computeMemberRoleProperties(guildId, effectiveRoles) : {};
+
+                    return {
+                        ...real,
+                        nick: effectiveNick,
+                        roles: effectiveRoles,
+                        ...roleProps
+                    };
+                };
+            }
+
+            if (!this._origGetNick && typeof GuildMemberStore.getNick === "function") {
+                this._origGetNick = GuildMemberStore.getNick.bind(GuildMemberStore);
+                GuildMemberStore.getNick = (guildId: string, userId: string) => {
+                    if (isEnabled && guildId && userId) {
+                        const fkNick = fakeNicks.get(`${guildId}:${userId}`);
+                        if (fkNick !== undefined) {
+                            return fkNick === "" ? null : fkNick;
+                        }
+                    }
+                    return this._origGetNick!(guildId, userId);
+                };
+            }
+        }
+
+        // Intercept ChannelMemberStore for live sidebar group placement
+        if (ChannelMemberStore) {
+            if (!this._origGetChannelMemberProps && typeof ChannelMemberStore.getProps === "function") {
+                this._origGetChannelMemberProps = ChannelMemberStore.getProps.bind(ChannelMemberStore);
+                ChannelMemberStore.getProps = (guildId: string, channelId: string) => {
+                    const props = this._origGetChannelMemberProps!(guildId, channelId);
+                    if (!isEnabled || !guildId || !props) return props;
+                    return patchMemberListProps(guildId, props);
+                };
+            }
+            if (!this._origGetChannelMemberRows && typeof ChannelMemberStore.getRows === "function") {
+                this._origGetChannelMemberRows = ChannelMemberStore.getRows.bind(ChannelMemberStore);
+                ChannelMemberStore.getRows = (guildId: string, channelId: string) => {
+                    if (isEnabled && guildId && typeof ChannelMemberStore.getProps === "function") {
+                        const props = ChannelMemberStore.getProps(guildId, channelId);
+                        if (props?.rows) return props.rows;
+                    }
+                    return this._origGetChannelMemberRows!(guildId, channelId);
+                };
+            }
+        }
+    },
+
+    _unpatchMemberStore() {
+        if (this._origGetMember && GuildMemberStore) {
+            GuildMemberStore.getMember = this._origGetMember;
+            this._origGetMember = null;
+        }
+        if (this._origGetNick && GuildMemberStore) {
+            GuildMemberStore.getNick = this._origGetNick;
+            this._origGetNick = null;
+        }
+        if (this._origGetChannelMemberProps && ChannelMemberStore) {
+            ChannelMemberStore.getProps = this._origGetChannelMemberProps;
+            this._origGetChannelMemberProps = null;
+        }
+        if (this._origGetChannelMemberRows && ChannelMemberStore) {
+            ChannelMemberStore.getRows = this._origGetChannelMemberRows;
+            this._origGetChannelMemberRows = null;
+        }
+    },
+
+    // ─── VoiceState & RestAPI Interception for Mute/Deafen/Disconnect/Move/Nick/Roles ─
+    _patchVoiceStore() {
+        if (VoiceStateStore) {
+            if (!this._origGetVoiceState && typeof VoiceStateStore.getVoiceStateForUser === "function") {
+                this._origGetVoiceState = VoiceStateStore.getVoiceStateForUser.bind(VoiceStateStore);
+                VoiceStateStore.getVoiceStateForUser = (userId: string) => {
+                    const real = this._origGetVoiceState!(userId);
+                    if (!isEnabled || !userId) return real;
+
+                    const fakeChan = fakeChannelIds.get(userId);
+                    if (fakeChan === null) return undefined; // Explicit Disconnect
+
+                    if (!real) return real;
+
+                    const isMuted = fakeMutes.get(userId);
+                    const isDeaf = fakeDeafs.get(userId);
+                    const targetChan = fakeChan !== undefined ? fakeChan : real.channelId;
+
+                    if (isMuted === undefined && isDeaf === undefined && fakeChan === undefined) {
+                        return real;
+                    }
+
+                    return {
+                        ...real, // Preserves selfStream, selfVideo, etc.
+                        channelId: targetChan,
+                        ...(isMuted !== undefined ? { mute: isMuted, suppress: isMuted } : {}),
+                        ...(isDeaf !== undefined ? { deaf: isDeaf } : {})
+                    };
+                };
+            }
+
+            if (!this._origGetVoiceStatesForChannel && typeof VoiceStateStore.getVoiceStatesForChannel === "function") {
+                this._origGetVoiceStatesForChannel = VoiceStateStore.getVoiceStatesForChannel.bind(VoiceStateStore);
+                VoiceStateStore.getVoiceStatesForChannel = (channelId: string) => {
+                    const realMap = this._origGetVoiceStatesForChannel!(channelId) ?? {};
+                    if (!isEnabled || !channelId) return realMap;
+
+                    const newMap: Record<string, any> = { ...realMap };
+
+                    // 1. Remove users disconnected or moved away from this channel
+                    for (const [userId, targetChan] of fakeChannelIds.entries()) {
+                        if (targetChan !== channelId && newMap[userId]) {
+                            delete newMap[userId];
+                        }
+                    }
+
+                    // 2. Add users moved TO this channel
+                    for (const [userId, targetChan] of fakeChannelIds.entries()) {
+                        if (targetChan === channelId && !newMap[userId]) {
+                            const st = VoiceStateStore.getVoiceStateForUser(userId);
+                            if (st) newMap[userId] = st;
+                        }
+                    }
+
+                    // 3. Update properties of remaining users in this channel
+                    for (const uId of Object.keys(newMap)) {
+                        const st = VoiceStateStore.getVoiceStateForUser(uId);
+                        if (st) newMap[uId] = st;
+                    }
+
+                    return newMap;
+                };
+            }
+        }
+
+        // Intercept RestAPI.patch for member moderation actions (Mute, Deafen, Disconnect, Move, Nickname, Full Roles List)
+        if (RestAPI && !this._origPatch && typeof RestAPI.patch === "function") {
+            this._origPatch = RestAPI.patch.bind(RestAPI);
+            RestAPI.patch = (args: any) => {
+                if (!isEnabled || !args?.url) return this._origPatch!(args);
+
+                const match = args.url.match(/\/guilds\/(\d+)\/members\/(\d+)/);
+                if (match) {
+                    const guildId = match[1];
+                    const userId = match[2];
+                    const body = args.body || {};
+
+                    let voiceChanged = false;
+                    let memberChanged = false;
+
+                    if (typeof body.mute === "boolean") {
+                        if (body.mute === false) {
+                            fakeMutes.delete(userId);
+                            fakeDeafs.delete(userId);
+                        } else {
+                            fakeMutes.set(userId, true);
+                        }
+                        voiceChanged = true;
+                    }
+                    if (typeof body.deaf === "boolean") {
+                        if (body.deaf === false) {
+                            fakeDeafs.delete(userId);
+                            fakeMutes.delete(userId);
+                        } else {
+                            fakeDeafs.set(userId, true);
+                            fakeMutes.set(userId, true);
+                        }
+                        voiceChanged = true;
+                    }
+
+                    if ("nick" in body) {
+                        fakeNicks.set(`${guildId}:${userId}`, body.nick ?? "");
+                        memberChanged = true;
+                    }
+                    if (Array.isArray(body.roles)) {
+                        fakeRoles.set(`${guildId}:${userId}`, new Set(body.roles.map(String)));
+                        memberChanged = true;
+                    }
+
+                    // Only treat channel_id as a voice change if it's NOT part of a member profile change (like Change Nickname form submission)
+                    if ("channel_id" in body && !("nick" in body) && !("roles" in body)) {
+                        fakeChannelIds.set(userId, body.channel_id ?? null);
+                        voiceChanged = true;
+                    }
+
+                    if (memberChanged) {
+                        const realMember = this._origGetMember ? this._origGetMember(guildId, userId) : GuildMemberStore?.getMember?.(guildId, userId);
+                        const fkNick = fakeNicks.get(`${guildId}:${userId}`);
+                        const effectiveNick = fkNick === "" ? null : (fkNick ?? realMember?.nick ?? null);
+                        const fkRoles = fakeRoles.get(`${guildId}:${userId}`);
+                        const effectiveRoles = fkRoles ? Array.from(fkRoles) : (realMember?.roles ?? []);
+                        const roleProps = computeMemberRoleProperties(guildId, effectiveRoles);
+
+                        try { GuildMemberStore?.emitChange?.(); } catch { }
+                        try { ChannelMemberStore?.emitChange?.(); } catch { }
+                        try {
+                            FluxDispatcher?.dispatch({
+                                type: "GUILD_MEMBER_UPDATE",
+                                ...realMember,
+                                guildId,
+                                user: realMember?.user ?? { id: userId },
+                                nick: effectiveNick,
+                                roles: effectiveRoles,
+                                ...roleProps
+                            });
+                        } catch { }
+                    }
+
+                    if (voiceChanged) {
+                        const rawState = this._origGetVoiceState ? this._origGetVoiceState(userId) : null;
+                        const currentVoiceState = rawState ?? VoiceStateStore?.getVoiceStateForUser?.(userId);
+
+                        let targetChanId: string | null | undefined;
+                        if (fakeChannelIds.has(userId)) {
+                            targetChanId = fakeChannelIds.get(userId);
+                        } else {
+                            targetChanId = currentVoiceState?.channelId;
+                        }
+
+                        if (targetChanId === null && fakeChannelIds.get(userId) !== null) {
+                            targetChanId = currentVoiceState?.channelId;
+                        }
+
+                        const isMuted = fakeMutes.get(userId);
+                        const isDeaf = fakeDeafs.get(userId);
+
+                        try { VoiceStateStore?.emitChange?.(); } catch { }
+
+                        if (targetChanId !== undefined) {
+                            try {
+                                FluxDispatcher?.dispatch({
+                                    type: "VOICE_STATE_UPDATES",
+                                    voiceStates: [
+                                        {
+                                            _isFakeDispatch: true,
+                                            guildId,
+                                            userId,
+                                            channelId: targetChanId,
+                                            mute: isMuted !== undefined ? isMuted : (currentVoiceState?.mute ?? false),
+                                            deaf: isDeaf !== undefined ? isDeaf : (currentVoiceState?.deaf ?? false),
+                                            suppress: isMuted !== undefined ? isMuted : (currentVoiceState?.suppress ?? false),
+                                            selfStream: currentVoiceState?.selfStream,
+                                            selfVideo: currentVoiceState?.selfVideo
+                                        }
+                                    ]
+                                });
+                            } catch { }
+                        }
+                    }
+
+                    if (voiceChanged || memberChanged) {
+                        return Promise.resolve({ ok: true, status: 200, body: {} });
+                    }
+                }
+
+                return this._origPatch!(args);
+            };
+        }
+
+        // Intercept RestAPI.put for adding a role: PUT /guilds/{guildId}/members/{userId}/roles/{roleId}
+        if (RestAPI && !this._origPut && typeof RestAPI.put === "function") {
+            this._origPut = RestAPI.put.bind(RestAPI);
+            RestAPI.put = (args: any) => {
+                if (!isEnabled || !args?.url) return this._origPut!(args);
+
+                const match = args.url.match(/\/guilds\/(\d+)\/members\/(\d+)\/roles\/(\d+)/);
+                if (match) {
+                    const guildId = match[1];
+                    const userId = match[2];
+                    const roleId = String(match[3]);
+                    const key = `${guildId}:${userId}`;
+
+                    const existingSet = fakeRoles.get(key);
+                    const realMember = this._origGetMember ? this._origGetMember(guildId, userId) : GuildMemberStore?.getMember?.(guildId, userId);
+                    const initialRoles = existingSet
+                        ? Array.from(existingSet)
+                        : (realMember?.roles ?? []).map(String);
+
+                    const currentRoles = new Set<string>(initialRoles);
+                    currentRoles.add(roleId);
+                    fakeRoles.set(key, currentRoles);
+
+                    const rolesArray = Array.from(currentRoles);
+                    const roleProps = computeMemberRoleProperties(guildId, rolesArray);
+
+                    try { GuildMemberStore?.emitChange?.(); } catch { }
+                    try { ChannelMemberStore?.emitChange?.(); } catch { }
+                    try {
+                        FluxDispatcher?.dispatch({
+                            type: "GUILD_MEMBER_UPDATE",
+                            ...realMember,
+                            guildId,
+                            user: realMember?.user ?? { id: userId },
+                            roles: rolesArray,
+                            ...roleProps
+                        });
+                    } catch { }
+
+                    return Promise.resolve({ ok: true, status: 204, body: {} });
+                }
+
+                return this._origPut!(args);
+            };
+        }
+
+        // Intercept RestAPI.del / delete for removing a role: DELETE /guilds/{guildId}/members/{userId}/roles/{roleId}
+        const delFn = RestAPI?.del ?? RestAPI?.delete;
+        if (RestAPI && !this._origDel && typeof delFn === "function") {
+            this._origDel = delFn.bind(RestAPI);
+            const patchedDel = (args: any) => {
+                if (!isEnabled || !args?.url) return this._origDel!(args);
+
+                const match = args.url.match(/\/guilds\/(\d+)\/members\/(\d+)\/roles\/(\d+)/);
+                if (match) {
+                    const guildId = match[1];
+                    const userId = match[2];
+                    const targetRoleId = String(match[3]);
+                    const key = `${guildId}:${userId}`;
+
+                    const existingSet = fakeRoles.get(key);
+                    const realMember = this._origGetMember ? this._origGetMember(guildId, userId) : GuildMemberStore?.getMember?.(guildId, userId);
+                    const initialRoles = existingSet
+                        ? Array.from(existingSet)
+                        : (realMember?.roles ?? []).map(String);
+
+                    const currentRoles = new Set<string>();
+                    for (const rId of initialRoles) {
+                        if (String(rId) !== targetRoleId) {
+                            currentRoles.add(String(rId));
+                        }
+                    }
+
+                    fakeRoles.set(key, currentRoles);
+
+                    const rolesArray = Array.from(currentRoles);
+                    const roleProps = computeMemberRoleProperties(guildId, rolesArray);
+
+                    try { GuildMemberStore?.emitChange?.(); } catch { }
+                    try { ChannelMemberStore?.emitChange?.(); } catch { }
+                    try {
+                        FluxDispatcher?.dispatch({
+                            type: "GUILD_MEMBER_UPDATE",
+                            ...realMember,
+                            guildId,
+                            user: realMember?.user ?? { id: userId },
+                            roles: rolesArray,
+                            ...roleProps
+                        });
+                    } catch { }
+
+                    return Promise.resolve({ ok: true, status: 204, body: {} });
+                }
+
+                return this._origDel!(args);
+            };
+
+            if (RestAPI.del) RestAPI.del = patchedDel;
+            if (RestAPI.delete) RestAPI.delete = patchedDel;
+        }
+    },
+
+    _unpatchVoiceStore() {
+        if (this._origGetVoiceState && VoiceStateStore) {
+            VoiceStateStore.getVoiceStateForUser = this._origGetVoiceState;
+            this._origGetVoiceState = null;
+        }
+        if (this._origGetVoiceStatesForChannel && VoiceStateStore) {
+            VoiceStateStore.getVoiceStatesForChannel = this._origGetVoiceStatesForChannel;
+            this._origGetVoiceStatesForChannel = null;
+        }
+        if (this._origPatch && RestAPI) {
+            RestAPI.patch = this._origPatch;
+            this._origPatch = null;
+        }
+        if (this._origPut && RestAPI) {
+            RestAPI.put = this._origPut;
+            this._origPut = null;
+        }
+        if (this._origDel && RestAPI) {
+            if (RestAPI.del) RestAPI.del = this._origDel;
+            if (RestAPI.delete) RestAPI.delete = this._origDel;
+            this._origDel = null;
+        }
     },
 
     getHighestRole({ member }: { member: any; }, roles: any[]): any | undefined {
@@ -595,54 +884,22 @@ export default definePlugin({
             default: false,
             onChange(v: boolean) {
                 isEnabled = Boolean(v);
+                injectFakePermStyle(isEnabled);
                 if (!isEnabled) {
-                    // Full cleanup when disabling
-                    document.querySelectorAll("[id^='fp-ibadge-']").forEach(el => el.remove());
-                    document.querySelectorAll("[data-fp-hidden='true']").forEach(el => {
-                        (el as HTMLElement).style.display = "";
-                        (el as HTMLElement).removeAttribute("data-fp-hidden");
-                    });
-                    mutedUsers.clear();
-                    deafenedUsers.clear();
+                    fakeMutes.clear();
+                    fakeDeafs.clear();
+                    fakeChannelIds.clear();
                     fakeNicks.clear();
-                    disconnectedUsers.clear();
-                    kickedUsers.clear();
-                    bannedUsers.clear();
-                    deletedMessages.clear();
-                    notifyBadgeChange();
+                    fakeRoles.clear();
+                    try { VoiceStateStore?.emitChange?.(); } catch { }
+                    try { GuildMemberStore?.emitChange?.(); } catch { }
+                    try { ChannelMemberStore?.emitChange?.(); } catch { }
                 }
-                toast(isEnabled ? "FakePerm enabled ✓ (Admin UI active)" : "FakePerm disabled ✓");
             }
         }
     },
 
-    _domObserver: null as MutationObserver | null,
-
-    applyDomOverrides() {
-        if (!isEnabled) return;
-        for (const [userId, fakeNick] of fakeNicks) {
-            document.querySelectorAll(`[data-user-id="${userId}"]`).forEach(el => {
-                const nickEl = el.querySelector("[class*='nick'], [class*='Nick'], [class*='username'], [class*='Username']") as HTMLElement | null;
-                if (nickEl && nickEl.dataset.fpOriginal === undefined) nickEl.dataset.fpOriginal = nickEl.textContent ?? "";
-                if (nickEl && nickEl.dataset.fpNick !== fakeNick) { nickEl.dataset.fpNick = fakeNick; nickEl.textContent = fakeNick; }
-            });
-        }
-        for (const userId of disconnectedUsers) {
-            document.querySelectorAll(`[class*='voiceUser'] [data-user-id="${userId}"], [class*='VoiceUser'] [data-user-id="${userId}"]`).forEach(el => {
-                const voiceEl = el.closest("li, [class*='voiceUser'], [class*='VoiceUser']") as HTMLElement | null;
-                if (voiceEl && voiceEl.getAttribute("data-fp-hidden") !== "true") fpHide(voiceEl);
-            });
-        }
-        for (const userId of kickedUsers) {
-            document.querySelectorAll(`[data-user-id="${userId}"]`).forEach(el => {
-                const memberEl = el.closest("li, [class*='member'], [class*='Member']") as HTMLElement | null;
-                if (memberEl && memberEl.getAttribute("data-fp-hidden") !== "true") fpHide(memberEl);
-            });
-        }
-    },
-
-    async start() {
-        // Read isEnabled from Equicord Settings
+    start() {
         try {
             const S = (Vencord as any)?.Settings?.plugins?.FakePerm;
             isEnabled = S?.enabled === true;
@@ -650,44 +907,25 @@ export default definePlugin({
             isEnabled = false;
         }
 
-        // Patches are ALWAYS registered — they check isEnabled at runtime
-        addContextMenuPatch("user-context", userContextPatch);
-        addContextMenuPatch("message", messageContextPatch);
-
-        // Monkey-patch PermissionStore for real-time permission faking
+        injectFakePermStyle(isEnabled);
         this._patchPermissionStore();
-
-        const style = document.createElement("style");
-        style.id = "fakeperm-roles-style";
-        style.textContent = "[class*='submenu']::-webkit-scrollbar{display:none!important}[class*='submenu']{scrollbar-width:none!important} .fp-footer-fix { display: flex; gap: 8px; padding: 16px; }";
-        document.head.appendChild(style);
-
-        let _domTimer: ReturnType<typeof setTimeout> | null = null;
-        this._domObserver = new MutationObserver(() => {
-            if (!isEnabled) return;
-            if (fakeNicks.size === 0 && disconnectedUsers.size === 0 && kickedUsers.size === 0) return;
-            if (_domTimer) return;
-            _domTimer = setTimeout(() => { _domTimer = null; if (isEnabled) this.applyDomOverrides(); }, 1000);
-        });
-        this._domObserver.observe(document.body, { childList: true, subtree: true });
+        this._patchMemberStore();
+        this._patchVoiceStore();
     },
 
     stop() {
-        this._domObserver?.disconnect();
-        this._domObserver = null;
-        removeContextMenuPatch("user-context", userContextPatch);
-        removeContextMenuPatch("message", messageContextPatch);
         isEnabled = false;
-        // Restore original PermissionStore methods
+        injectFakePermStyle(false);
+        fakeMutes.clear();
+        fakeDeafs.clear();
+        fakeChannelIds.clear();
+        fakeNicks.clear();
+        fakeRoles.clear();
         this._unpatchPermissionStore();
-        document.getElementById("fakeperm-roles-style")?.remove();
-        document.querySelectorAll("[id^='fp-ibadge-']").forEach(el => el.remove());
-        document.querySelectorAll("[data-fp-hidden='true']").forEach(el => {
-            (el as HTMLElement).style.display = "";
-            (el as HTMLElement).removeAttribute("data-fp-hidden");
-        });
-        mutedUsers.clear(); deafenedUsers.clear(); fakeNicks.clear();
-        disconnectedUsers.clear(); kickedUsers.clear(); bannedUsers.clear(); deletedMessages.clear();
-        notifyBadgeChange();
+        this._unpatchMemberStore();
+        this._unpatchVoiceStore();
+        try { VoiceStateStore?.emitChange?.(); } catch { }
+        try { GuildMemberStore?.emitChange?.(); } catch { }
+        try { ChannelMemberStore?.emitChange?.(); } catch { }
     },
 });

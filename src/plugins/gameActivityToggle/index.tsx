@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,17 +18,14 @@
 
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
+import { UserAreaRenderProps } from "@api/UserArea";
 import { getUserSettingLazy } from "@api/UserSettings";
-import ErrorBoundary from "@components/ErrorBoundary";
-import VencordToolboxPlugin from "@plugins/vencordToolbox";
+import equicordToolbox from "@equicordplugins/equicordToolbox";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { FluxStore } from "@vencord/discord-types";
 import { findByPropsLazy, findComponentByCodeLazy, findStoreLazy } from "@webpack";
 import { Menu, Popout, useRef, useState, useStateFromStores } from "@webpack/common";
-
-import managedStyle from "./style.css?managed";
-
 interface ConnectedAccount {
     id: string;
     type: string;
@@ -57,15 +54,15 @@ const settings = definePluginSettings({
         description: "Where to show the game activity toggle button",
         options: [
             { label: "Next to Mute/Deafen", value: "PANEL", default: true },
-            { label: "Vencord Toolbox", value: "TOOLBOX" }
+            { label: "Equicord Toolbox", value: "TOOLBOX" }
         ],
         get hidden() {
-            return !isPluginEnabled(VencordToolboxPlugin.name);
+            return !isPluginEnabled(equicordToolbox.name);
         }
     }
 });
 
-function Icon() {
+function Icon({ className }: { className?: string; }) {
     const { oldIcon } = settings.use(["oldIcon"]);
     const showCurrentGame = ShowCurrentGame.useSetting();
 
@@ -78,7 +75,7 @@ function Icon() {
         : "M23.27 4.54 19.46.73 .73 19.46 4.54 23.27 23.27 4.54Z";
 
     return (
-        <svg width="20" height="20" viewBox="0 0 24 24">
+        <svg className={className} width="20" height="20" viewBox="0 0 24 24">
             <path
                 fill={!showCurrentGame && !oldIcon ? "var(--status-danger)" : "currentColor"}
                 mask={!showCurrentGame ? "url(#gameActivityMask)" : void 0}
@@ -95,7 +92,7 @@ function Icon() {
     );
 }
 
-function GameActivityToggleButton(props: { nameplate?: any; }) {
+function GameActivityToggleButton(props: UserAreaRenderProps) {
     const { location } = settings.use(["location"]);
     const showCurrentGame = ShowCurrentGame.useSetting();
 
@@ -106,7 +103,7 @@ function GameActivityToggleButton(props: { nameplate?: any; }) {
 
     const buttonRef = useRef<HTMLButtonElement | null>(null);
 
-    if (location !== "PANEL" && isPluginEnabled(VencordToolboxPlugin.name)) return null;
+    if (location !== "PANEL" && isPluginEnabled(equicordToolbox.name)) return null;
 
     const buttonProps = {
         tooltipText: showCurrentGame ? "Disable Game Activity" : "Enable Game Activity",
@@ -159,20 +156,13 @@ export default definePlugin({
     description: "Adds a button next to the mic and deafen button to toggle game activity. Right click it to toggle Spotify activity.",
     tags: ["Activity", "Shortcuts"],
     authors: [Devs.Nuckyz, Devs.RuukuLada],
-    dependencies: ["UserSettingsAPI"],
+    dependencies: ["UserSettingsAPI", "UserAreaAPI"],
     settings,
 
-    managedStyle,
-
-    patches: [
-        {
-            find: "#{intl::USER_PROFILE_ACCOUNT_POPOUT_BUTTON_A11Y_LABEL}",
-            replacement: {
-                match: /children:\[(?=.{0,25}?accountContainerRef)/,
-                replace: "children:[$self.GameActivityToggleButton(arguments[0]),"
-            }
-        }
-    ],
+    userAreaButton: {
+        icon: Icon,
+        render: GameActivityToggleButton
+    },
 
     toolboxActions() {
         const { location } = settings.use(["location"]);
@@ -189,6 +179,4 @@ export default definePlugin({
             />
         );
     },
-
-    GameActivityToggleButton: ErrorBoundary.wrap(GameActivityToggleButton, { noop: true }),
 });

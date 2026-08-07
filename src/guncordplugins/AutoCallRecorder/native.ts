@@ -1,13 +1,28 @@
 /*
  * Guncord, a Discord client mod
- * Copyright (c) 2026 contributors
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { app, dialog, IpcMainInvokeEvent } from "electron";
 import { createWriteStream, WriteStream } from "node:fs";
-import { copyFile, mkdir, rename, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
+import fixWebmDuration from "fix-webm-duration";
+
+// Polyfill FileReader side-effect for Node.js main process environment
+if (typeof globalThis.FileReader === "undefined") {
+    (globalThis as any).FileReader = class {
+        onloadend: any = null;
+        result: any = null;
+        readAsArrayBuffer(blob: Blob) {
+            blob.arrayBuffer().then(buf => {
+                this.result = buf;
+                if (this.onloadend) this.onloadend();
+            }).catch(() => {});
+        }
+    };
+}
 
 let activeStream: WriteStream | null = null;
 let activeTempPath: string | null = null;
@@ -72,9 +87,15 @@ export async function appendRecordingChunk(_event: IpcMainInvokeEvent, chunk: Ui
 }
 
 /**
- * Closes stream and moves recording file to target destination folder.
+ * Closes stream, patches EBML duration metadata with fixWebmDuration so the file is seekable,
+ * then moves the recording to the target destination folder.
  */
-export async function finalizeStreamRecording(_event: IpcMainInvokeEvent, folderPath: string | null, filename: string): Promise<boolean> {
+export async function finalizeStreamRecording(
+    _event: IpcMainInvokeEvent,
+    folderPath: string | null,
+    filename: string,
+    durationMs = 0
+): Promise<boolean> {
     try {
         if (activeStream) {
             await new Promise<void>(resolve => {
@@ -87,6 +108,19 @@ export async function finalizeStreamRecording(_event: IpcMainInvokeEvent, folder
         if (!activeTempPath) return false;
         const sourcePath = activeTempPath;
         activeTempPath = null;
+
+        // Patche la durée EBML avec fixWebmDuration AVANT de déplacer le fichier
+        if (durationMs > 0 && /\.(webm|mkv)$/i.test(filename)) {
+            try {
+                const rawBuf = await readFile(sourcePath);
+                const blob = new Blob([rawBuf], { type: "video/webm" });
+                const fixedBlob = await fixWebmDuration(blob, durationMs);
+                const arrayBuffer = await fixedBlob.arrayBuffer();
+                await writeFile(sourcePath, Buffer.from(arrayBuffer));
+            } catch (err) {
+                console.warn("[AutoCallRecorder] fixWebmDuration failed:", err);
+            }
+        }
 
         const defaultFolder = app.getPath("downloads");
         const targetFolder = folderPath && folderPath.trim() ? folderPath.trim() : defaultFolder;

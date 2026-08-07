@@ -1,10 +1,10 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { app, type NativeImage, nativeImage } from "electron";
+import { app, BrowserWindow, type NativeImage, nativeImage } from "electron";
 import { join } from "path";
 import { BADGE_DIR } from "shared/paths";
 
@@ -43,30 +43,36 @@ export function destroyAppBadge() {
  * -1 = show unread indicator
  * 0 = clear
  */
-export function setBadgeCount(count: number) {
-    if (!isInVoiceCall) {
+export function setBadgeCount(count: number, targetWin: BrowserWindow = mainWin) {
+    if (!targetWin || targetWin.isDestroyed()) return;
+
+    if (targetWin === mainWin && !isInVoiceCall) {
         AppEvents.emit("setTrayVariant", count !== 0 ? "trayUnread" : "tray");
     }
 
     switch (process.platform) {
         case "linux":
-            // if (count === -1) count = 0;
-            updateUnityLauncherCount(count);
+            if (targetWin === mainWin) updateUnityLauncherCount(count);
             break;
         case "darwin":
-            if (count === 0) {
-                app.dock!.setBadge("");
-                break;
+            if (targetWin === mainWin) {
+                if (count === 0) {
+                    app.dock!.setBadge("");
+                    break;
+                }
+                app.dock!.setBadge(count === -1 ? "•" : count.toString());
             }
-            app.dock!.setBadge(count === -1 ? "•" : count.toString());
             break;
         case "win32": {
             const [index, description] = getBadgeIndexAndDescription(count);
-            if (lastIndex === index) break;
+            if (targetWin === mainWin) {
+                if (lastIndex === index) break;
+                lastIndex = index;
+            }
 
-            lastIndex = index;
-
-            mainWin.setOverlayIcon(index === null ? null : loadBadge(index), description);
+            try {
+                targetWin.setOverlayIcon(index === null ? null : loadBadge(index), description);
+            } catch { }
             break;
         }
     }

@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -54,4 +54,3 @@ function loadSettings<T extends object = any>(file: string, name: string) {
 export const Settings = loadSettings<TSettings>(SETTINGS_FILE, "Guncord settings");
 export const VencordSettings = loadSettings<any>(VENCORD_SETTINGS_FILE, "Vencord settings");
 export const State = loadSettings<TState>(STATE_FILE, "Guncord state");
-

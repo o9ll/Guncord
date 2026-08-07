@@ -378,6 +378,85 @@ const PROFILE_EFFECTS = [
     { id: "1245088254647205991", label: "Twinkle Trails" },
 ];
 
+function VerifiedBadge() {
+    return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, verticalAlign: "middle" }}>
+            <path
+                d="M12 2L14.39 4.39L17.5 3.5L18.39 6.61L21.5 7.5L20.61 10.61L23 13L20.61 15.39L21.5 18.5L18.39 19.39L17.5 22.5L14.39 21.61L12 24L9.61 21.61L6.5 22.5L5.61 19.39L2.5 18.5L3.39 15.39L1 13L3.39 10.61L2.5 7.5L5.61 6.61L6.5 3.5L9.61 4.39L12 2Z"
+                fill="#ffffff"
+            />
+            <path
+                d="M10 16.2L6.5 12.7L7.91 11.29L10 13.38L16.09 7.29L17.5 8.7L10 16.2Z"
+                fill="#111214"
+            />
+        </svg>
+    );
+}
+
+interface FakeConnection {
+    id: string;
+    platform: string;
+    name: string;
+    url?: string;
+}
+
+const FAKE_PLATFORMS = [
+    { id: "domain", label: "Domain / Site Web", icon: "/assets/b4376756bcbbf1ef.svg", placeholder: "guncord", defaultUrl: (name: string) => name.startsWith("http") ? name : `https://${name}` },
+    { id: "twitter", label: "X (Twitter)", icon: "/assets/a61999ae9bfb9658.svg", placeholder: "guncord", defaultUrl: (name: string) => `https://x.com/${name.replace(/^@/, "")}` },
+    { id: "github", label: "GitHub", icon: "/assets/a35ff3e86ffa1eb2.svg", placeholder: "guncord", defaultUrl: (name: string) => `https://github.com/${name}` },
+    { id: "youtube", label: "YouTube", icon: "/assets/0fa530ba9c04ac32.svg", placeholder: "guncord", defaultUrl: (name: string) => `https://youtube.com/@${name.replace(/^@/, "")}` },
+    { id: "twitch", label: "Twitch", icon: "/assets/4fda00c96319c8ae.svg", placeholder: "guncord", defaultUrl: (name: string) => `https://twitch.tv/${name}` },
+    { id: "spotify", label: "Spotify", icon: "/assets/d5719388ffc613da.svg", placeholder: "guncord", defaultUrl: (name: string) => `https://open.spotify.com/user/${name}` },
+    { id: "tiktok", label: "TikTok", icon: "/assets/b4376756bcbbf1ef.svg", placeholder: "guncord", defaultUrl: (name: string) => name.startsWith("http") ? name : name.includes("tiktok.com") ? `https://${name.replace(/^https?:\/\//, "")}` : `https://tiktok.com/@${name.replace(/^@/, "")}` },
+    { id: "reddit", label: "Reddit", icon: "/assets/adfd927dcc2049a5.svg", placeholder: "guncord", defaultUrl: (name: string) => `https://reddit.com/user/${name}` },
+    { id: "steam", label: "Steam", icon: "/assets/1f7ec18f3695d4cf.svg", placeholder: "guncord", defaultUrl: (name: string) => `https://steamcommunity.com/id/${name}` },
+    { id: "leagueoflegends", label: "Riot Games", icon: "https://cdn.discordapp.com/app-icons/1443033465766281327/b69039088ad141a9c036f7f4f247f6ba.png?size=128", placeholder: "Guncord#EUW" },
+    { id: "bluesky", label: "Bluesky", icon: "/assets/2709f058378a099d.svg", placeholder: "guncord.bsky.social", defaultUrl: (name: string) => `https://bsky.app/profile/${name}` },
+    { id: "paypal", label: "PayPal", icon: "/assets/dcb64a4ff8f61b2c.svg", placeholder: "guncord", defaultUrl: (name: string) => `https://paypal.me/${name}` },
+    { id: "ebay", label: "eBay", icon: "/assets/b28a7a265581b6e3.svg", placeholder: "guncord" },
+    { id: "crunchyroll", label: "Crunchyroll", icon: "/assets/94ef3e8b7fa85a2e.svg", placeholder: "guncord" },
+    { id: "playstation", label: "PlayStation Network", icon: "/assets/eed203a7ec517e23.svg", placeholder: "Guncord_ID" },
+    { id: "xbox", label: "Xbox", icon: "/assets/c4f09fda61827e19.svg", placeholder: "Guncord" },
+    { id: "amazon-music", label: "Amazon Music", icon: "/assets/e3c4aacc1a54395d.svg", placeholder: "guncord" },
+    { id: "battlenet", label: "Battle.net", icon: "/assets/163c8cb9220efc74.svg", placeholder: "Guncord#1234" },
+    { id: "bungie", label: "Bungie.net", icon: "/assets/099cd81cf3b4cc98.svg", placeholder: "Guncord#1234" },
+    { id: "epicgames", label: "Epic Games", icon: "/assets/199eceff4fca1a0c.svg", placeholder: "Guncord" },
+    { id: "facebook", label: "Facebook", icon: "/assets/17be29f77bee4405.svg", placeholder: "guncord", defaultUrl: (name: string) => `https://facebook.com/${name}` },
+    { id: "roblox", label: "Roblox", icon: "/assets/a4d8e9b0404a2d00.svg", placeholder: "Guncord" }
+];
+
+function formatFakeConnections(fakeConns: FakeConnection[]) {
+    if (!Array.isArray(fakeConns) || fakeConns.length === 0) return [];
+    return fakeConns.map(c => {
+        const plat = FAKE_PLATFORMS.find(p => p.id === c.platform) || FAKE_PLATFORMS[0];
+        let finalUrl = c.url;
+        if (!finalUrl && plat.defaultUrl && c.name) {
+            try { finalUrl = plat.defaultUrl(c.name); } catch { }
+        }
+        if (!finalUrl && c.platform === "domain" && c.name) {
+            finalUrl = c.name.startsWith("http") ? c.name : `https://${c.name}/`;
+        }
+
+        return {
+            type: c.platform,
+            id: c.name || "connection",
+            name: c.name,
+            verified: true,
+            visibility: 1,
+            showActivity: false,
+            show_activity: false,
+            friendSync: false,
+            friend_sync: false,
+            metadataVisibility: 0,
+            metadata_visibility: 0,
+            twoWayLink: false,
+            two_way_link: false,
+            metadata: {},
+            ...(finalUrl ? { url: finalUrl } : {})
+        };
+    });
+}
+
 interface CustomProfileData {
     username?: string;
     globalName?: string;
@@ -400,6 +479,7 @@ interface CustomProfileData {
     decorationAsset?: string;
     profileEffectId?: string;
     copiedUserId?: string;
+    fakeConnections?: FakeConnection[];
 }
 
 const LS_KEY_DATA = "GuncordCP_data";
@@ -1310,6 +1390,209 @@ function BadgePicker({ selected, onChange, nitroType, onNitroType, boostLevel, o
     );
 }
 
+function ConnectionsPicker({ connections, onChange }: {
+    connections: FakeConnection[];
+    onChange: (conns: FakeConnection[]) => void;
+}) {
+    const [platform, setPlatform] = React.useState(FAKE_PLATFORMS[0].id);
+    const [name, setName] = React.useState("");
+
+    const currentPlat = FAKE_PLATFORMS.find(p => p.id === platform) || FAKE_PLATFORMS[0];
+
+    function handleAdd() {
+        if (!name.trim()) return;
+        let finalUrl = "";
+        if (currentPlat.defaultUrl) {
+            try { finalUrl = currentPlat.defaultUrl(name.trim()); } catch { }
+        } else if (platform === "domain") {
+            finalUrl = name.trim().startsWith("http") ? name.trim() : `https://${name.trim()}/`;
+        }
+
+        const newConn: FakeConnection = {
+            id: Date.now().toString(),
+            platform,
+            name: name.trim(),
+            ...(finalUrl ? { url: finalUrl } : {}),
+        };
+        onChange([...connections, newConn]);
+        setName("");
+    }
+
+    function handleRemove(id: string) {
+        onChange(connections.filter(c => c.id !== id));
+    }
+
+    const previewUrl = currentPlat.defaultUrl && name.trim() ? currentPlat.defaultUrl(name.trim()) : (platform === "domain" && name.trim() ? (name.trim().startsWith("http") ? name.trim() : `https://${name.trim()}/`) : "");
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* Header info */}
+            <div style={{
+                padding: "14px 16px",
+                background: "rgba(88, 101, 242, 0.08)",
+                border: "1px solid rgba(88, 101, 242, 0.2)",
+                borderRadius: 12,
+                fontSize: 13,
+                color: "#dbdee1",
+                lineHeight: 1.5
+            }}>
+                <strong>{t("Profile Connections")}</strong>
+                <br />
+                {t("Add social links or custom domains (e.g. X @tag, GitHub, Spotify, TikTok). These connections will appear directly on your Discord profile.")}
+            </div>
+
+            {/* List of active connections */}
+            <div>
+                <SectionLabel>{t("Configured Connections")} ({connections.length})</SectionLabel>
+                {connections.length === 0 ? (
+                    <div style={{
+                        padding: "20px",
+                        textAlign: "center",
+                        background: "#2b2d31",
+                        borderRadius: 10,
+                        border: "1px solid rgba(255,255,255,0.05)",
+                        color: "var(--text-muted)",
+                        fontSize: 13
+                    }}>
+                        {t("No connections added yet. Fill out the form below to add one.")}
+                    </div>
+                ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {connections.map(c => {
+                            const pObj = FAKE_PLATFORMS.find(p => p.id === c.platform) || FAKE_PLATFORMS[0];
+                            return (
+                                <div key={c.id} style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    padding: "10px 14px",
+                                    background: "#2b2d31",
+                                    borderRadius: 10,
+                                    border: "1px solid rgba(255,255,255,0.06)"
+                                }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                        <div style={{
+                                            width: 32,
+                                            height: 32,
+                                            borderRadius: 8,
+                                            background: "#1e1f22",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center"
+                                        }}>
+                                            <img src={pObj.icon} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} />
+                                        </div>
+                                        <div>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 14, color: "#fff" }}>
+                                                <span>{c.name}</span>
+                                                <VerifiedBadge />
+                                                <span style={{ fontSize: 11, color: "#949ba4", fontWeight: 400 }}>({pObj.label})</span>
+                                            </div>
+                                            {c.url && (
+                                                <a href={c.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#00a8fc", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                                    {c.url} ↗
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <button className="cp-clear-btn" onClick={() => handleRemove(c.id)} title={t("Remove")}>
+                                        <CloseIcon />
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            <div className="cp-divider" />
+
+            {/* Form section */}
+            <div>
+                <SectionLabel>{t("Add New Connection")}</SectionLabel>
+
+                {/* Grid selection for fast platform picking — expanded height so all options fit nicely */}
+                <div style={{ marginBottom: 16 }}>
+                    <SectionLabel style={{ marginTop: 0, fontSize: 11 }}>{t("Select Platform")}</SectionLabel>
+                    <div className="cp-custom-scroll" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(115px, 1fr))", gap: 8, paddingRight: 4 }}>
+                        {FAKE_PLATFORMS.map(p => (
+                            <div
+                                key={p.id}
+                                onClick={() => setPlatform(p.id)}
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    padding: "9px 12px",
+                                    borderRadius: 8,
+                                    background: platform === p.id ? "rgba(88, 101, 242, 0.2)" : "#2b2d31",
+                                    border: platform === p.id ? "1px solid #5865f2" : "1px solid transparent",
+                                    cursor: "pointer",
+                                    transition: "all 0.15s ease"
+                                }}
+                            >
+                                <img src={p.icon} alt="" style={{ width: 18, height: 18, objectFit: "contain", flexShrink: 0 }} />
+                                <span style={{ fontSize: 12, fontWeight: platform === p.id ? 700 : 500, color: platform === p.id ? "#fff" : "#dbdee1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {p.label.split(" ")[0]}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Form fields */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <Field
+                        label={platform === "domain" ? t("Domain / Website Name") : t("Account Name / Username")}
+                        value={name}
+                        placeholder={currentPlat.placeholder || "guncord"}
+                        onChange={setName}
+                    />
+
+                    {/* Live Preview Card */}
+                    {name.trim() && (
+                        <div style={{ marginTop: 8 }}>
+                            <SectionLabel style={{ fontSize: 11 }}>{t("Live Profile Preview")}</SectionLabel>
+                            <div style={{
+                                padding: "10px 14px",
+                                background: "#111214",
+                                borderRadius: 8,
+                                border: "1px solid #2b2d31",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between"
+                            }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    <img src={currentPlat.icon} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} />
+                                    <div>
+                                        <div style={{ color: "#fff", fontWeight: 600, fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
+                                            {name}
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+                                        </div>
+                                        {previewUrl && <div style={{ fontSize: 11, color: "#949ba4" }}>{previewUrl}</div>}
+                                    </div>
+                                </div>
+                                <span style={{ fontSize: 11, color: "#fff", fontWeight: 600, background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255,255,255,0.15)", padding: "3px 8px", borderRadius: 6, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                                    <VerifiedBadge /> {t("Verified")}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    <button
+                        className="cp-btn cp-btn-primary"
+                        onClick={handleAdd}
+                        disabled={!name.trim()}
+                        style={{ marginTop: 10, alignSelf: "flex-start", opacity: name.trim() ? 1 : 0.5 }}
+                    >
+                        + {t("Add Connection")}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function forceAccountPanelRerender() {
     try {
         if (UserStore && UserStore.emitChange) UserStore.emitChange();
@@ -1640,6 +1923,7 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
                         <div className={`cp-tab ${activeTab === 'general' ? 'cp-tab--active' : ''}`} onClick={() => setActiveTab('general')}>{t("General")}</div>
                         <div className={`cp-tab ${activeTab === 'aesthetics' ? 'cp-tab--active' : ''}`} onClick={() => setActiveTab('aesthetics')}>{t("Aesthetics")}</div>
                         <div className={`cp-tab ${activeTab === 'badges' ? 'cp-tab--active' : ''}`} onClick={() => setActiveTab('badges')}>{t("Badges & Effects")}</div>
+                        <div className={`cp-tab ${activeTab === 'connections' ? 'cp-tab--active' : ''}`} onClick={() => setActiveTab('connections')}>{t("Connections")}</div>
                     </div>
                     <div className="cp-settings-content">
                         {activeTab === 'general' && (
@@ -1764,6 +2048,12 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
                                     </div>
                                 </div>
                             </>
+                        )}
+                        {activeTab === 'connections' && (
+                            <ConnectionsPicker
+                                connections={data.fakeConnections ?? []}
+                                onChange={conns => set("fakeConnections", conns)}
+                            />
                         )}
                     </div>
                 </div>
@@ -2000,8 +2290,9 @@ export default definePlugin({
         const hasCustomDeco = !!storedData.decorationAsset;
         const hasCustomBadgeFlags = storedData.badgeFlags != null;
         const hasCustomNitro = !!storedData.nitro;
+        const hasCustomConnections = Array.isArray(storedData.fakeConnections) && storedData.fakeConnections.length > 0;
 
-        if (!hasCustomUsername && !hasCustomGlobalName && !hasCustomEmail && !hasCustomPhone && !hasCustomBio && !hasCustomPronouns && !hasCustomCreatedAt && !hasCustomDeco && !hasCustomBadgeFlags && !hasCustomNitro) {
+        if (!hasCustomUsername && !hasCustomGlobalName && !hasCustomEmail && !hasCustomPhone && !hasCustomBio && !hasCustomPronouns && !hasCustomCreatedAt && !hasCustomDeco && !hasCustomBadgeFlags && !hasCustomNitro && !hasCustomConnections) {
             return user;
         }
 
@@ -2394,6 +2685,13 @@ export default definePlugin({
                 if (!merged.premiumType) merged.premiumType = profile.premiumType || 2;
             }
 
+            if (data.fakeConnections && data.fakeConnections.length > 0) {
+                const fakeAccs = formatFakeConnections(data.fakeConnections);
+                const existing = profile.connectedAccounts || profile.connected_accounts || [];
+                merged.connectedAccounts = [...existing, ...fakeAccs];
+                merged.connected_accounts = [...existing, ...fakeAccs];
+            }
+
             const result = cleanMerge(profile, merged);
             if (userId) {
                 this._otherProfilesCache.set(userId, { input: profile, output: result, timestamp });
@@ -2420,8 +2718,9 @@ export default definePlugin({
         const hasBanner = !!storedData.banner;
         const hasEffect = !!storedData.profileEffectId;
         const hasCustomBadges = Array.isArray(storedData.customBadgeIds) && storedData.customBadgeIds.length > 0;
+        const hasConnections = Array.isArray(storedData.fakeConnections) && storedData.fakeConnections.length > 0;
 
-        if (!hasDeco && !hasNitro && !hasBadgeFlags && !hasBio && !hasPronouns && !hasAccentColor && !hasBanner && !hasEffect && !hasCustomBadges) {
+        if (!hasDeco && !hasNitro && !hasBadgeFlags && !hasBio && !hasPronouns && !hasAccentColor && !hasBanner && !hasEffect && !hasCustomBadges && !hasConnections) {
             return profile;
         }
 
@@ -2597,6 +2896,13 @@ export default definePlugin({
                 if (!merged.premiumType) merged.premiumType = profile.premiumType || 2;
             }
 
+            if (storedData.fakeConnections && storedData.fakeConnections.length > 0) {
+                const fakeAccs = formatFakeConnections(storedData.fakeConnections);
+                const existing = profile.connectedAccounts || profile.connected_accounts || [];
+                merged.connectedAccounts = [...existing, ...fakeAccs];
+                merged.connected_accounts = [...existing, ...fakeAccs];
+            }
+
             const result = cleanMerge(profile, merged);
             this._cachedProfileInput = profile;
             this._cachedProfile = result;
@@ -2622,8 +2928,9 @@ export default definePlugin({
         const hasAccentColor = storedData.accentColor != null;
         const hasBanner = !!storedData.banner;
         const hasEffect = !!storedData.profileEffectId;
+        const hasConnections = Array.isArray(storedData.fakeConnections) && storedData.fakeConnections.length > 0;
 
-        if (!hasDeco && !hasNitro && !hasBio && !hasPronouns && !hasAccentColor && !hasBanner && !hasEffect) {
+        if (!hasDeco && !hasNitro && !hasBio && !hasPronouns && !hasAccentColor && !hasBanner && !hasEffect && !hasConnections) {
             return profile;
         }
 
@@ -2668,6 +2975,13 @@ export default definePlugin({
                 merged.profileEffectId = storedData.profileEffectId;
                 merged.profileEffect = { expireAt: null, skuId: storedData.profileEffectId };
                 if (!merged.premiumType) merged.premiumType = profile.premiumType || 2;
+            }
+
+            if (storedData.fakeConnections && storedData.fakeConnections.length > 0) {
+                const fakeAccs = formatFakeConnections(storedData.fakeConnections);
+                const existing = profile.connectedAccounts || profile.connected_accounts || [];
+                merged.connectedAccounts = [...existing, ...fakeAccs];
+                merged.connected_accounts = [...existing, ...fakeAccs];
             }
 
             // NOTE: badges are intentionally NOT injected here.
@@ -3063,6 +3377,24 @@ export default definePlugin({
                     }
                 };
                 UPS._cp_profile_hook = true;
+            }
+        } catch { }
+
+        // INTERCEPTION ON ConnectedAccountsStore (for profile edit settings + user profile connections display)
+        try {
+            const WP = (Vencord as any).Webpack;
+            const CAS = WP?.findByProps?.("getAccounts", "getLocalAccounts");
+            if (CAS && !CAS._cp_accounts_hook) {
+                const origGetAccounts = CAS.getAccounts.bind(CAS);
+                CAS.getAccounts = () => {
+                    const accounts = origGetAccounts() || [];
+                    if (isEnabled && storedData.fakeConnections && storedData.fakeConnections.length > 0) {
+                        const fakeAccs = formatFakeConnections(storedData.fakeConnections);
+                        return [...accounts, ...fakeAccs];
+                    }
+                    return accounts;
+                };
+                CAS._cp_accounts_hook = true;
             }
         } catch { }
 

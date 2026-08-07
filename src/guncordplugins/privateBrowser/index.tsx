@@ -1,3 +1,9 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import definePlugin, { PluginNative } from "@utils/types";
 import { addServerListElement, removeServerListElement, ServerListRenderPosition } from "@api/ServerList";
 import { React } from "@webpack/common";

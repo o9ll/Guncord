@@ -324,7 +324,7 @@ const ctxPatch: NavContextMenuPatchCallback = (children, { user }) => {
 // ── Plugin ─────────────────────────────────────────────────────────────────
 export default definePlugin({
     name: "FakeSwitcher",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Right-click → add a user to the switcher. Click in the switcher → your profile takes their appearance locally.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["HeaderBarAPI"],

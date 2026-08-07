@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,28 +20,24 @@ import { type BrowserWindow, shell } from "electron";
 
 export function makeLinksOpenExternally(win: BrowserWindow) {
     win.webContents.setWindowOpenHandler(({ url }) => {
-        switch (url) {
-            case "about:blank":
-                return { action: "allow" };
-            case "https://discord.com/popout":
-            case "https://ptb.discord.com/popout":
-            case "https://canary.discord.com/popout":
-                return { action: "deny" };
-        }
+        if (url === "about:blank") return { action: "allow" };
 
         try {
-            var { protocol } = new URL(url);
+            const parsed = new URL(url);
+            if ((parsed.pathname === "/popout" || parsed.pathname.startsWith("/popout")) && (parsed.hostname === "discord.com" || parsed.hostname.endsWith(".discord.com"))) {
+                return { action: "deny" };
+            }
+
+            switch (parsed.protocol) {
+                case "http:":
+                case "https:":
+                case "mailto:":
+                case "steam:":
+                case "spotify:":
+                    shell.openExternal(url);
+            }
         } catch {
             return { action: "deny" };
-        }
-
-        switch (protocol) {
-            case "http:":
-            case "https:":
-            case "mailto:":
-            case "steam:":
-            case "spotify:":
-                shell.openExternal(url);
         }
 
         return { action: "deny" };

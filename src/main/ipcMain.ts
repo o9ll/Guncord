@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -1405,6 +1405,7 @@ if (IS_DISCORD_DESKTOP) {
     });
 }
 
+try { ipcMain.removeHandler(IpcEvents.RELAUNCH_APP); } catch {}
 ipcMain.handle(IpcEvents.RELAUNCH_APP, async (event) => {
     if (!validateSender(event)) throw new Error("Unauthorized IPC invocation");
 

@@ -1,13 +1,13 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import "./styles.css";
 
 import { isPluginEnabled } from "@api/PluginManager";
-import { definePluginSettings } from "@api/Settings";
+import { definePluginSettings, migratePluginSettings } from "@api/Settings";
 import { Divider } from "@components/Divider";
 import { Heading } from "@components/Heading";
 import { Devs, EquicordDevs } from "@utils/constants";
@@ -231,6 +231,7 @@ function load() {
     }
 }
 
+migratePluginSettings("CursorBuddy", "Oneko", "oneko");
 export default definePlugin({
     name: "CursorBuddy",
     description: "Adds a sprite that follows your cursor.",

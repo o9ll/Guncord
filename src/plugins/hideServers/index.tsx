@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -126,7 +126,7 @@ export default definePlugin({
             ]
         },
         {
-            find: "#{intl::QUICKSWITCHER_PROTIP}",
+            find: "#{intl::MfbDzS::raw}",
             replacement: {
                 match: /(?<=renderResults\(\){.{0,100})let{query/,
                 replace: "this.props.results = $self.filteredGuildResults(this.props.results);$&",

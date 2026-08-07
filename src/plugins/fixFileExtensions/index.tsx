@@ -1,11 +1,11 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { isPluginEnabled } from "@api/PluginManager";
-import anonymiseFileNames, { tarExtMatcher } from "@guncordplugins/antiMoveDeco/antiGroup/anonymiseFileNames";
+import anonymiseFileNames, { tarExtMatcher } from "@plugins/anonymiseFileNames";
 import { Devs } from "@utils/constants";
 import definePlugin, { ReporterTestable } from "@utils/types";
 import { CloudUpload } from "@vencord/discord-types";
@@ -55,4 +55,3 @@ export default definePlugin({
         upload.filename = fileName + newExt;
     },
 });
-

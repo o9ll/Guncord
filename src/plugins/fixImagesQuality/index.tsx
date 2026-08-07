@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -40,7 +40,7 @@ export default definePlugin({
 
     settingsAboutComponent() {
         return (
-            <Card variant="normal">
+            <Card variant="primary">
                 <Flex flexDirection="column" gap="4px">
                     <Paragraph size="md" weight="semibold">The default behaviour is the following:</Paragraph>
                     <Paragraph>

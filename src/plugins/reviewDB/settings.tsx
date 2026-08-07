@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,12 +37,12 @@ export const settings = definePluginSettings({
     notifyReviews: {
         type: OptionType.BOOLEAN,
         description: "Notify about new reviews on startup",
-        default: false,
+        default: true,
     },
     showWarning: {
         type: OptionType.BOOLEAN,
         description: "Display warning to be respectful at the top of the reviews list",
-        default: false,
+        default: true,
     },
     hideTimestamps: {
         type: OptionType.BOOLEAN,
@@ -52,7 +52,7 @@ export const settings = definePluginSettings({
     hideBlockedUsers: {
         type: OptionType.BOOLEAN,
         description: "Hide reviews from blocked users",
-        default: false,
+        default: true,
     },
     buttons: {
         type: OptionType.COMPONENT,

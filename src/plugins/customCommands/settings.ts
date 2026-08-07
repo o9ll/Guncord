@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -14,6 +14,7 @@ import { SettingsTagList } from "./SettingsTagList";
 export const settings = definePluginSettings({
     tagsList: {
         type: OptionType.CUSTOM,
+        description: "",
         default: {} as Record<string, Tag>,
     },
     tagComponent: {

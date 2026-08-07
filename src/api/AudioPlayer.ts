@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2025 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -184,11 +184,11 @@ export function createAudioPlayer(
     options: AudioPlayerOptions = {}
 ): AudioPlayerInterface {
     const internalPlayer: AudioPlayerInternal = new AudioPlayerConstructor(
+        options,
         audio,
         null,
         null,
-        "default",
-        options
+        "default"
     );
 
     return new AudioPlayerWrapper(internalPlayer);

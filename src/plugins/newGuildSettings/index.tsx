@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,8 +25,8 @@ import { CogWheel } from "@components/Icons";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Guild } from "@vencord/discord-types";
-import { findByCodeLazy, findByPropsLazy, mapMangledModuleLazy } from "@webpack";
-import { Menu, UserStore } from "@webpack/common";
+import { findByCodeLazy, findByPropsLazy, findStoreLazy, mapMangledModuleLazy } from "@webpack";
+import { ChannelStore, Menu, UserStore } from "@webpack/common";
 
 const { updateGuildNotificationSettings } = findByPropsLazy("updateGuildNotificationSettings");
 const { toggleShowAllChannels } = mapMangledModuleLazy(".onboardExistingMember(", {
@@ -36,6 +36,8 @@ const { toggleShowAllChannels } = mapMangledModuleLazy(".onboardExistingMember("
     }
 });
 const isOptInEnabledForGuild = findByCodeLazy(".COMMUNITY)||", ".isOptInEnabled(");
+const CollapsedVoiceChannelStore = findStoreLazy("CollapsedVoiceChannelStore");
+const collapsedChannels = findByPropsLazy("toggleCollapseGuild");
 
 const settings = definePluginSettings({
     guild: {
@@ -77,6 +79,16 @@ const settings = definePluginSettings({
         description: "Show all channels automatically",
         type: OptionType.BOOLEAN,
         default: true
+    },
+    mobilePush: {
+        description: "Mute Mobile Push Notifications automatically",
+        type: OptionType.BOOLEAN,
+        default: true
+    },
+    voiceChannels: {
+        description: "Hide names in Voice channels automatically",
+        type: OptionType.BOOLEAN,
+        default: false
     }
 });
 
@@ -94,24 +106,45 @@ const makeContextMenuPatch: (shouldAddIcon: boolean) => NavContextMenuPatchCallb
     );
 };
 
+function applyVoiceNameHidingToGuild(guildId: string) {
+    if (!settings.store.voiceChannels) return;
+
+    try {
+        ChannelStore.getChannelIds(guildId).filter(channelId => {
+            const channel = ChannelStore.getChannel(channelId);
+            return channel.isGuildVocal() && !CollapsedVoiceChannelStore.isCollapsed(channelId);
+        }).forEach(id => collapsedChannels.update(id));
+    } catch (error) {
+        console.warn("[NewGuildSettings] Error applying voice name hiding:", error);
+    }
+}
+
 function applyDefaultSettings(guildId: string | null) {
     if (guildId === "@me" || guildId === "null" || guildId == null) return;
+
     updateGuildNotificationSettings(guildId,
         {
             muted: settings.store.guild,
+            mobile_push: !settings.store.mobilePush,
             suppress_everyone: settings.store.everyone,
             suppress_roles: settings.store.role,
             mute_scheduled_events: settings.store.events,
             notify_highlights: settings.store.highlights ? 1 : 0
         });
+
     if (settings.store.messages !== 3) {
         updateGuildNotificationSettings(guildId,
             {
                 message_notifications: settings.store.messages,
             });
     }
+
     if (settings.store.showAllChannels && isOptInEnabledForGuild(guildId)) {
         toggleShowAllChannels(guildId);
+    }
+
+    if (settings.store.voiceChannels) {
+        applyVoiceNameHidingToGuild(guildId);
     }
 }
 
@@ -121,6 +154,7 @@ export default definePlugin({
     tags: ["Servers", "Customisation"],
     searchTerms: ["MuteNewGuild", "mute", "server"],
     authors: [Devs.Glitch, Devs.Nuckyz, Devs.carince, Devs.Mopi, Devs.GabiRP],
+    isModified: true,
     contextMenus: {
         "guild-context": makeContextMenuPatch(false),
         "guild-header-popout": makeContextMenuPatch(true)
@@ -129,7 +163,7 @@ export default definePlugin({
         {
             find: ",acceptInvite(",
             replacement: {
-                match: /INVITE_ACCEPT_SUCCESS.+?,(\i)=null!=.+?;/,
+                match: /INVITE_ACCEPT_SUCCESS.+?,(\i)=\i\?\.guild_id.+?;/,
                 replace: (m, guildId) => `${m}$self.applyDefaultSettings(${guildId});`
             }
         },

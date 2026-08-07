@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -43,7 +43,7 @@ function LyricsProviderSettings() {
 
     return (
         <>
-            <SettingsSection name="Lyrics Provider" description="Where lyrics are fetched from.">
+            <SettingsSection id="lyrics-provider" name="Lyrics Provider" description="Where lyrics are fetched from.">
                 <Select
                     options={[
                         { value: Provider.Lrclib, label: "LRCLIB", default: true },
@@ -58,6 +58,7 @@ function LyricsProviderSettings() {
 
             {store.lyricsProvider === Provider.Spotify && (
                 <SettingsSection
+                    id="spotify-lyrics-provider"
                     name="Spotify Lyrics API Base URL"
                     description="Custom instance base URL (for example: http://localhost:8080)."
                 >

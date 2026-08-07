@@ -1,12 +1,12 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 import { classNameFactory } from "@utils/css";
-import { proxyLazyWebpack, waitFor } from "@webpack";
+import { waitFor } from "@webpack";
 import { React } from "@webpack/common";
 
 import { FFmpegState } from "./types";
@@ -41,7 +41,10 @@ export class Mutex {
     }
 }
 
-export const FFmpegStateContext = proxyLazyWebpack(() => React.createContext<FFmpegState | undefined>(undefined));
+export let FFmpegStateContext: React.Context<FFmpegState | undefined> | undefined;
+waitFor("createContext", () => {
+    FFmpegStateContext = React.createContext<FFmpegState | undefined>(undefined);
+});
 
 export async function loadFFmpeg(ffmpeg: FFmpeg, setLoaded: () => void) {
     console.log("Loading FFmpeg...");

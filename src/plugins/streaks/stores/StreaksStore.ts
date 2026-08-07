@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -19,7 +19,7 @@ export interface RemoteStreak {
     last_streak_date: string | null;
     user_a_today: boolean;
     user_b_today: boolean;
-    today_date: string;
+    today_date: string | null;
 }
 
 export interface StreaksState {

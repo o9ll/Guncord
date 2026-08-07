@@ -14,7 +14,7 @@ import type { RenderModalProps } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
 import { Alerts, Button, Menu, Modal, openModal, React, showToast, Text, Toasts, UserStore, useEffect, useRef, useState } from "@webpack/common";
 
-// Компонент кнопки в панели
+// Button component in a panel
 const PanelButton = findComponentByCodeLazy(".GREEN,positionKeyStemOverride:");
 
 const DATASTORE_KEY = "CustomStream_ImageData";
@@ -24,7 +24,7 @@ const DATASTORE_KEY_PROFILES = "CustomStream_Profiles";
 const DATASTORE_KEY_ACTIVE_PROFILE = "CustomStream_ActiveProfile";
 const MAX_IMAGES = 50;
 const MAX_IMAGES_PER_PROFILE = 50;
-const MAX_PROFILES = 5;  // Maximum number of profiles allowed
+const MAX_PROFILES = 5; // Maximum number of profiles allowed
 const DEFAULT_PROFILE_ID = "default";
 
 // Структура профиля
@@ -36,20 +36,20 @@ interface Profile {
     currentIndex: number;
 }
 
-// Кэш для профилей
+// Cache for profiles
 let profiles: Map<string, Profile> = new Map();
 let activeProfileId: string = DEFAULT_PROFILE_ID;
 
-// Кэш для изображений в памяти (для обратной совместимости)
+// In-memory image cache (for backward compatibility)
 let cachedImages: Blob[] = [];
 let cachedDataUris: string[] = [];
 let currentSlideIndex = 0;
-let lastSlideChangeTime = 0; // Время последней смены слайда (timestamp)
-let isStreamActive = false; // Активен ли стрим сейчас
-let manualSlideChange = false; // Флаг ручной смены картинки через модалку
-let actualStreamImageUri: string | null = null; // Реальная картинка которая СЕЙЧАС на стриме (обновляется только Discord'ом)
+let lastSlideChangeTime = 0; // Last slide change time (timestamp)
+let isStreamActive = false; // Is the stream active now
+let manualSlideChange = false; // Flag for manual image change via modal
+let actualStreamImageUri: string | null = null; // The actual image that is NOW on the stream (updated only by Discord)
 
-// Получить активный профиль
+// Get an active profile
 function getActiveProfile(): Profile {
     let profile = profiles.get(activeProfileId);
     if (!profile) {
@@ -65,7 +65,7 @@ function getActiveProfile(): Profile {
     return profile;
 }
 
-// Синхронизировать кэш с активным профилем
+// Synchronize cache with active profile
 function syncCacheWithActiveProfile() {
     const profile = getActiveProfile();
     cachedImages = profile.images;
@@ -73,7 +73,7 @@ function syncCacheWithActiveProfile() {
     currentSlideIndex = profile.currentIndex;
 }
 
-// Слушатели для обновления UI
+// Listeners for UI update
 const imageChangeListeners = new Set<() => void>();
 
 function notifyImageChange() {
@@ -103,7 +103,7 @@ const settings = definePluginSettings({
     }
 });
 
-// Структура данных для хранения
+// Data structure for storage
 interface StoredImageData {
     type: string;
     data: number[];
@@ -125,7 +125,7 @@ interface StoredProfilesData {
     activeProfileId: string;
 }
 
-// Функции для работы с профилями
+// Functions for working with profiles
 async function saveProfilesToDataStore(): Promise<void> {
     const storedProfiles: StoredProfile[] = [];
 
@@ -183,7 +183,7 @@ async function loadProfilesFromDataStore(): Promise<void> {
             }
             activeProfileId = data.activeProfileId || DEFAULT_PROFILE_ID;
         } else {
-            // Миграция со старого формата
+            // Migration from the old format
             const oldData: SlideshowData | undefined = await DataStore.get(DATASTORE_KEY_SLIDESHOW);
             if (oldData?.images?.length) {
                 const blobs: Blob[] = [];
@@ -206,13 +206,13 @@ async function loadProfilesFromDataStore(): Promise<void> {
                 });
                 activeProfileId = DEFAULT_PROFILE_ID;
 
-                // Сохраняем в новом формате и удаляем старые данные
+                // Save in a new format and delete old data
                 await saveProfilesToDataStore();
                 await DataStore.del(DATASTORE_KEY_SLIDESHOW);
                 await DataStore.del(DATASTORE_KEY_INDEX);
                 await DataStore.del(DATASTORE_KEY);
             } else {
-                // Создаём дефолтный профиль
+                // Create a default profile
                 profiles.set(DEFAULT_PROFILE_ID, {
                     id: DEFAULT_PROFILE_ID,
                     name: "Default",
@@ -258,8 +258,8 @@ function createProfile(name: string): Profile | null {
 function deleteProfile(profileId: string): boolean {
     const profile = profiles.get(profileId);
     if (!profile) return false;
-    if (profile.images.length > 0) return false; // Нельзя удалить профиль с фото
-    if (profileId === DEFAULT_PROFILE_ID) return false; // Нельзя удалить дефолтный
+    if (profile.images.length > 0) return false; // You can't delete a profile with a photo.
+    if (profileId === DEFAULT_PROFILE_ID) return false; // Cannot delete default
 
     profiles.delete(profileId);
     if (activeProfileId === profileId) {
@@ -288,7 +288,7 @@ function getProfileList(): Profile[] {
     return Array.from(profiles.values());
 }
 
-// Функции для работы с DataStore (обновлённые для работы с профилями)
+// Functions for working with DataStore (updated for working with profiles)
 async function saveSlideIndex(index: number): Promise<void> {
     const profile = getActiveProfile();
     profile.currentIndex = index;
@@ -315,8 +315,7 @@ async function saveImagesToDataStore(blobs: Blob[]): Promise<void> {
     await saveProfilesToDataStore();
 }
 
-// loadImagesFromDataStore удалена - теперь используется getActiveProfile().images напрямую
-
+// loadImagesFromDataStore has been removed - now use getActiveProfile().images directly
 async function deleteAllImages(): Promise<void> {
     const profile = getActiveProfile();
     profile.images = [];
@@ -347,11 +346,11 @@ async function moveImage(fromIndex: number, toIndex: number): Promise<void> {
     if (fromIndex < 0 || fromIndex >= profile.images.length) return;
     if (toIndex < 0 || toIndex >= profile.images.length) return;
 
-    // Простой swap 
+    // Simple swap
     [profile.images[fromIndex], profile.images[toIndex]] = [profile.images[toIndex], profile.images[fromIndex]];
     [profile.dataUris[fromIndex], profile.dataUris[toIndex]] = [profile.dataUris[toIndex], profile.dataUris[fromIndex]];
 
-    // Корректируем currentIndex если он был на одной из перемещаемых позиций
+    // We adjust the currentIndex if it was at one of the moving positions
     if (profile.currentIndex === fromIndex) {
         profile.currentIndex = toIndex;
     } else if (profile.currentIndex === toIndex) {
@@ -379,13 +378,13 @@ function blobToDataUrl(blob: Blob): Promise<string> {
     });
 }
 
-// Удалена неиспользуемая функция prepareCachedDataUris
+// Removed unused prepareCachedDataUris function
 
 function getImageCount(): number {
     return cachedImages.length;
 }
 
-// Конвертация изображения в JPEG и масштабирование до 1280x720
+// Convert image to JPEG and scale to 1280x720
 async function processImage(blob: Blob): Promise<Blob> {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -397,17 +396,17 @@ async function processImage(blob: Blob): Promise<Blob> {
             const targetWidth = 1280;
             const targetHeight = 720;
 
-            // Создаём canvas для конвертации и масштабирования
+            // Create a canvas for conversion and scaling
             const canvas = document.createElement("canvas");
             canvas.width = targetWidth;
             canvas.height = targetHeight;
             const ctx = canvas.getContext("2d")!;
 
-            // Заливаем чёрным фоном (на случай прозрачности)
+            // Fill with a black background (in case of transparency)
             ctx.fillStyle = "#000000";
             ctx.fillRect(0, 0, targetWidth, targetHeight);
 
-            // Вычисляем размеры для сохранения пропорций (cover)
+            // Calculate the dimensions to maintain proportions (cover)
             const scale = Math.max(targetWidth / img.width, targetHeight / img.height);
             const scaledWidth = img.width * scale;
             const scaledHeight = img.height * scale;
@@ -416,8 +415,8 @@ async function processImage(blob: Blob): Promise<Blob> {
 
             ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
 
-            // Discord использует JPEG для превью стримов
-            // Качество 0.7 для уменьшения размера (Discord ограничивает ~100KB)
+            // Discord uses JPEG for stream previews
+            // Quality 0.7 to reduce size (Discord limits ~100KB)
             canvas.toBlob((newBlob) => {
                 if (newBlob) {
                     resolve(newBlob);
@@ -437,7 +436,7 @@ async function processImage(blob: Blob): Promise<Blob> {
 }
 
 function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
-    // Сохраняем исходные значения для отката
+    // Preserve the original values ​​for rollback
     const initialSettingsRef = useRef({
         enabled: settings.store.replaceEnabled,
         slideshowEnabled: settings.store.slideshowEnabled,
@@ -448,7 +447,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
     const savedRef = useRef(false);
 
     const [images, setImages] = useState<string[]>([]);
-    const [imageSizes, setImageSizes] = useState<number[]>([]); // Размеры в байтах
+    const [imageSizes, setImageSizes] = useState<number[]>([]); // Sizes in bytes
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
     const [pendingIndex, setPendingIndex] = useState(currentSlideIndex);
@@ -460,9 +459,9 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
     const [timerSeconds, setTimerSeconds] = useState(0);
     const [streamActive, setStreamActive] = useState(isStreamActive);
-    const [previewImage, setPreviewImage] = useState<string | null>(null); // Для полноэкранного просмотра
+    const [previewImage, setPreviewImage] = useState<string | null>(null); // For full screen viewing
 
-    // Состояния для профилей
+    // States for profiles
     const [profileList, setProfileList] = useState<Profile[]>(getProfileList());
     const [currentProfileId, setCurrentProfileId] = useState(activeProfileId);
     const [isCreatingProfile, setIsCreatingProfile] = useState(false);
@@ -470,17 +469,17 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
     const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
     const [editingProfileName, setEditingProfileName] = useState("");
 
-    // Откат при закрытии без сохранения (ESC, клик вне окна, крестик)
+    // Rollback when closing without saving (ESC, click outside the window, cross)
     useEffect(() => {
         return () => {
             if (!savedRef.current) {
-                // Откатываем настройки при закрытии без сохранения
+                // Roll back settings when closing without saving
                 const init = initialSettingsRef.current;
                 settings.store.replaceEnabled = init.enabled;
                 settings.store.slideshowEnabled = init.slideshowEnabled;
                 settings.store.slideshowRandom = init.slideshowRandom;
                 currentSlideIndex = init.slideIndex;
-                // Откатываем активный профиль
+                // Rolling back the active profile
                 setActiveProfile(init.activeProfileId);
             }
         };
@@ -495,7 +494,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
             try {
                 const uri = await blobToDataUrl(blob);
                 uris.push(uri);
-                sizes.push(blob.size); // Сохраняем размер в байтах
+                sizes.push(blob.size); // Store the size in bytes
             } catch (e) {
                 console.error("[CustomStream] Error:", e);
             }
@@ -510,10 +509,10 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         loadImages();
     }, [currentProfileId]);
 
-    // Таймер для обновления времени в модалке
+    // Timer for updating time in a modal
     useEffect(() => {
         const timerInterval = setInterval(() => {
-            // Автосброс: если прошло более 7 минут без вызова getCustomThumbnail - стрим остановлен
+            // Auto reset: If more than 7 minutes have passed without calling get Custom Thumbnail, the stream is stopped.
             if (isStreamActive && lastSlideChangeTime > 0 && (Date.now() - lastSlideChangeTime) > 420000) {
                 isStreamActive = false;
             }
@@ -525,7 +524,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         return () => clearInterval(timerInterval);
     }, []);
 
-    // Переключение профиля
+    // Switching profiles
     const handleProfileSwitch = async (profileId: string) => {
         setActiveProfile(profileId);
         setCurrentProfileId(profileId);
@@ -535,7 +534,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         }
     };
 
-    // Создание нового профиля
+    // Creating a new profile
     const handleCreateProfile = async () => {
         if (!newProfileName.trim()) {
             setError("Enter profile name");
@@ -562,7 +561,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         showToast(`Profile "${profile.name}" created`, Toasts.Type.SUCCESS);
     };
 
-    // Удаление профиля
+    // Deleting a profile
     const handleDeleteProfile = async (profileId: string) => {
         const profile = profiles.get(profileId);
         if (!profile) return;
@@ -595,7 +594,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         });
     };
 
-    // Переименование профиля
+    // Renaming a profile
     const handleRenameProfile = async (profileId: string) => {
         if (!editingProfileName.trim()) {
             setEditingProfileId(null);
@@ -612,7 +611,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         showToast("Profile renamed", Toasts.Type.SUCCESS);
     };
 
-    // Обработка перетаскиваемых файлов
+    // Handling dragged files
     const handleDroppedFiles = async (files: FileList | File[]) => {
         const profile = profiles.get(currentProfileId) || getActiveProfile();
         const remaining = MAX_IMAGES_PER_PROFILE - profile.images.length;
@@ -657,7 +656,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        // Показываем полоску только если это файлы извне, а не перетаскивание фото внутри
+        // We show the strip only if these are external files, and not if you drag and drop photos inside
         if (draggedIndex === null && e.dataTransfer.types.includes("Files")) {
             setIsDragging(true);
         }
@@ -666,7 +665,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
     const handleDragLeave = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        // Проверяем что действительно покинули область
+        // We check that we have actually left the area.
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX;
         const y = e.clientY;
@@ -695,7 +694,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
             const files = e.target.files;
             if (!files?.length) return;
 
-            // Проверяем лимит для текущего профиля
+            // Checking the limit for the current profile
             const profile = profiles.get(currentProfileId) || getActiveProfile();
             const remaining = MAX_IMAGES_PER_PROFILE - profile.images.length;
             if (remaining <= 0) {
@@ -747,7 +746,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
             setPendingIndex(0);
         }
         await loadImages();
-        setProfileList(getProfileList()); // Обновляем список профилей для отображения количества
+        setProfileList(getProfileList()); // We are updating the list of profiles to display the number
         showToast("Deleted", Toasts.Type.MESSAGE);
     };
 
@@ -765,7 +764,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                 await deleteAllImages();
                 setImages([]);
                 setPendingIndex(0);
-                setProfileList(getProfileList()); // Обновляем список профилей
+                setProfileList(getProfileList()); // Updating the list of profiles
                 showToast("All deleted", Toasts.Type.MESSAGE);
             }
         });
@@ -788,31 +787,31 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
     };
 
     const handleSave = async () => {
-        // Применяем все изменения
+        // Apply all changes
         settings.store.replaceEnabled = pluginEnabled;
         settings.store.slideshowEnabled = slideshowOn;
         settings.store.slideshowRandom = randomOn;
 
-        // Проверяем была ли ручная смена картинки
+        // We check whether the image was changed manually
         if (pendingIndex !== currentSlideIndex) {
-            manualSlideChange = true; // Помечаем что была ручная смена
-            // НЕ сбрасываем таймер при ручной смене!
+            manualSlideChange = true; // We mark that there was a manual change
+            // DO NOT reset the timer when changing manually!
         }
 
         currentSlideIndex = pendingIndex;
-        await saveSlideIndex(pendingIndex); // Сохраняем индекс в DataStore
-        savedRef.current = true; // Помечаем что сохранили
-        notifyImageChange(); // Обновляем иконку в панели
+        await saveSlideIndex(pendingIndex); // Saving the index to the DataStore
+        savedRef.current = true; // Mark what you saved
+        notifyImageChange(); // Updating the icon in the panel
         showToast("Settings saved!", Toasts.Type.SUCCESS);
         rootProps.onClose();
     };
 
     const handleCancel = () => {
-        // saved остаётся false, откат произойдёт в useEffect при размонтировании
+        // saved remains false, the rollback will occur in useEffect upon unmounting
         rootProps.onClose();
     };
 
-    // Drag & drop для изменения порядка
+    // Drag & drop to change order
     const handleImageDragStart = (e: React.DragEvent, index: number) => {
         e.stopPropagation();
         setDraggedIndex(index);
@@ -838,7 +837,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         e.stopPropagation();
 
         if (draggedIndex !== null && draggedIndex !== toIndex) {
-            // Корректируем pendingIndex при перемещении
+            // Adjusting pendingIndex when moving
             let newPendingIndex = pendingIndex;
             if (pendingIndex === draggedIndex) {
                 newPendingIndex = toIndex;
@@ -863,7 +862,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         setDragOverIndex(null);
     };
 
-    // Вычисляем следующий индекс
+    // We calculate the next index
     const getNextIndex = () => {
         if (images.length <= 1 || !slideshowOn) return -1;
         if (randomOn) return -1;
@@ -896,7 +895,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                 }
             ]}
         >
-            {/* Полноэкранный просмотр изображения */}
+            {/* Full screen image view */}
             {previewImage && (
                 <div
                     onClick={() => setPreviewImage(null)}
@@ -959,7 +958,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                 onDrop={handleDrop}
             >
 
-                    {/* Оверлей для drag & drop файлов - только верх до галереи */}
+                    {/* Overlay for drag & drop files - only the top to the gallery */}
                     {isDragging && draggedIndex === null && (
                         <div
                             onDragOver={handleDragOver}
@@ -992,7 +991,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                         </div>
                     )}
 
-                    {/* Главный переключатель */}
+                    {/* Main switch */}
                     <div
                         onClick={togglePlugin}
                         style={{
@@ -1018,7 +1017,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                         {pluginEnabled ? "REPLACEMENT ENABLED" : "REPLACEMENT DISABLED (default Discord)"}
                     </div>
 
-                    {/* === ПРОФИЛИ / ВКЛАДКИ === */}
+                    {/* === PROFILES / INSTALLATIONS === */}
                     <div style={{
                         marginBottom: "16px",
                         backgroundColor: "var(--background-secondary)",
@@ -1026,7 +1025,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                         padding: "16px",
                         border: "1px solid var(--background-modifier-accent)"
                     }}>
-                        {/* Заголовок с кнопкой создания */}
+                        {/* Header with create button */}
                         <div style={{
                             display: "flex",
                             alignItems: "center",
@@ -1083,7 +1082,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                             )}
                         </div>
 
-                        {/* Форма создания профиля */}
+                        {/* Profile creation form */}
                         {isCreatingProfile && (
                             <div style={{
                                 display: "flex",
@@ -1154,7 +1153,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                             </div>
                         )}
 
-                        {/* Список вкладок профилей */}
+                        {/* List of profile tabs */}
                         <div style={{
                             display: "flex",
                             flexWrap: "wrap",
@@ -1174,20 +1173,20 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             gap: "6px",
                                             padding: "8px 12px",
                                             borderRadius: "8px",
-                                            backgroundColor: isActive 
+                                            backgroundColor: isActive
                                                 ? "#5865F2"
                                                 : "var(--background-secondary-alt)",
-                                            background: isActive 
-                                                ? "linear-gradient(135deg, #5865F2 0%, #4752c4 100%)" 
+                                            background: isActive
+                                                ? "linear-gradient(135deg, #5865F2 0%, #4752c4 100%)"
                                                 : "var(--background-secondary-alt)",
                                             color: "#ffffff",
                                             cursor: "pointer",
                                             transition: "all 0.2s ease",
-                                            border: isActive 
-                                                ? "2px solid #5865F2" 
+                                            border: isActive
+                                                ? "2px solid #5865F2"
                                                 : "1px solid var(--background-modifier-accent)",
-                                            boxShadow: isActive 
-                                                ? "0 3px 10px rgba(88, 101, 242, 0.4)" 
+                                            boxShadow: isActive
+                                                ? "0 3px 10px rgba(88, 101, 242, 0.4)"
                                                 : "0 1px 4px rgba(0,0,0,0.1)",
                                             minWidth: "100px"
                                         }}
@@ -1233,19 +1232,19 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             />
                                         ) : (
                                             <>
-                                                {/* Иконка галочки для активного */}
+                                                {/* Check mark icon for active */}
                                                 {isActive && (
-                                                    <span style={{ 
+                                                    <span style={{
                                                         fontSize: "12px",
                                                         fontWeight: "bold"
                                                     }}>✓</span>
                                                 )}
-                                                {/* Иконка папки для неактивных */}
+                                                {/* Folder icon for inactive */}
                                                 {!isActive && (
                                                     <span style={{ fontSize: "12px" }}>📁</span>
                                                 )}
-                                                <span style={{ 
-                                                    fontWeight: "600", 
+                                                <span style={{
+                                                    fontWeight: "600",
                                                     fontSize: "12px",
                                                     letterSpacing: "0.2px",
                                                     color: "#ffffff"
@@ -1255,8 +1254,8 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                                 <span style={{
                                                     fontSize: "10px",
                                                     fontWeight: "700",
-                                                    backgroundColor: isActive 
-                                                        ? "rgba(255,255,255,0.25)" 
+                                                    backgroundColor: isActive
+                                                        ? "rgba(255,255,255,0.25)"
                                                         : "var(--brand-experiment)",
                                                     color: "#ffffff",
                                                     padding: "2px 6px",
@@ -1269,11 +1268,11 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             </>
                                         )}
 
-                                        {/* Кнопки действий для вкладки */}
+                                        {/* Action buttons for the tab */}
                                         {isActive && !isEditing && (
-                                            <div style={{ 
-                                                display: "flex", 
-                                                gap: "6px", 
+                                            <div style={{
+                                                display: "flex",
+                                                gap: "6px",
                                                 marginLeft: "6px",
                                                 paddingLeft: "8px",
                                                 borderLeft: "1px solid rgba(255,255,255,0.3)"
@@ -1338,7 +1337,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                             })}
                         </div>
 
-                        {/* Подсказка */}
+                        {/* Cash register */}
                         <div style={{
                             marginTop: "14px",
                             paddingTop: "12px",
@@ -1354,7 +1353,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                         </div>
                     </div>
 
-                    {/* Режимы слайд-шоу */}
+                    {/* Slideshow modes */}
                     <div style={{
                         display: "flex",
                         gap: "10px",
@@ -1399,7 +1398,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                         </div>
                     </div>
 
-                    {/* Инфо */}
+                    {/* Info */}
                     {settings.store.showInfoBadges && (
                         <div style={{
                             padding: "14px 18px",
@@ -1523,7 +1522,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                         </div>
                     )}
 
-                    {/* Кнопки */}
+                    {/* Buttons */}
                     <div style={{ display: "flex", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
                         <Button
                             onClick={() => handleFileSelect(false)}
@@ -1624,7 +1623,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             }
                                         }}
                                     >
-                                        {/* Контейнер с соотношением 16:9 */}
+                                        {/* Container with ratio 16:9 */}
                                         <div style={{
                                             position: "relative",
                                             width: "100%",
@@ -1646,7 +1645,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             />
                                         </div>
 
-                                        {/* Статус бейдж */}
+                                        {/* Status badge */}
                                         <div style={{
                                             position: "absolute",
                                             top: "8px",
@@ -1671,7 +1670,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             #{index + 1}
                                         </div>
 
-                                        {/* Кнопки действий */}
+                                        {/* Action buttons */}
                                         <div style={{
                                             position: "absolute",
                                             top: "8px",
@@ -1679,7 +1678,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             display: "flex",
                                             gap: "6px"
                                         }}>
-                                            {/* Полноэкранный просмотр */}
+                                            {/* Full screen viewing */}
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -1706,7 +1705,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             >
                                                 🔍
                                             </button>
-                                            {/* Скачать */}
+                                            {/* Download */}
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -1736,7 +1735,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             >
                                                 ⬇
                                             </button>
-                                            {/* Удалить */}
+                                            {/* Delete */}
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -1765,7 +1764,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             </button>
                                         </div>
 
-                                        {/* Индикатор выбора внизу */}
+                                        {/* Selection indicator at the bottom */}
                                         {isCurrent && (
                                             <div style={{
                                                 position: "absolute",
@@ -1778,7 +1777,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             }} />
                                         )}
 
-                                        {/* Размер файла в правом нижнем углу */}
+                                        {/* File size in the lower right corner */}
                                         {imageSizes[index] && (
                                             <div style={{
                                                 position: "absolute",
@@ -1818,7 +1817,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                         </div>
                     )}
 
-                    {/* Подсказка про хранение */}
+                    {/* Storage Tip */}
                     <div style={{
                         marginTop: "16px",
                         padding: "10px 14px",
@@ -1842,7 +1841,7 @@ function openImagePicker() {
     openModal(props => <ImagePickerModal rootProps={props} />);
 }
 
-// Иконка для кнопки панели с бейджем количества
+// Icon for the panel button with quantity badge
 function StreamPreviewIcon({ imageCount, isEnabled, isSlideshowEnabled, isRandom, currentImageUri, streamActive }: {
     imageCount: number;
     isEnabled: boolean;
@@ -1854,12 +1853,12 @@ function StreamPreviewIcon({ imageCount, isEnabled, isSlideshowEnabled, isRandom
     return (
         <div style={{ position: "relative" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                {/* Рамка монитора - всегда currentColor */}
+                {/* Monitor frame - always currentColor */}
                 <path
                     fill="currentColor"
                     d="M21 3H3C1.9 3 1 3.9 1 5V17C1 18.1 1.9 19 3 19H8V21H16V19H21C22.1 19 23 18.1 23 17V5C23 3.9 22.1 3 21 3ZM21 17H3V5H21V17Z"
                 />
-                {/* Внутренняя часть - зелёные горы если плагин активен, серые если выключен */}
+                {/* The inner part is green mountains if the plugin is active, gray if it is disabled. */}
                 <path
                     fill={isEnabled ? "var(--status-positive)" : "currentColor"}
                     d="M12 7C10.34 7 9 8.34 9 10C9 11.66 10.34 13 12 13C13.66 13 15 11.66 15 10C15 8.34 13.66 7 12 7Z"
@@ -1870,7 +1869,7 @@ function StreamPreviewIcon({ imageCount, isEnabled, isSlideshowEnabled, isRandom
                 />
             </svg>
 
-            {/* Бейдж с количеством - показываем если больше 1 и включён слайдшоу */}
+            {/* Badge with quantity - show if more than 1 and slideshow is enabled */}
             {imageCount > 1 && isSlideshowEnabled && isEnabled && (
                 <div style={{
                     position: "absolute",
@@ -1892,7 +1891,7 @@ function StreamPreviewIcon({ imageCount, isEnabled, isSlideshowEnabled, isRandom
                 </div>
             )}
 
-            {/* Знак случайности 🎲 - показываем если случайный режим */}
+            {/* Randomness sign 🎲 - shown if random mode */}
             {imageCount > 1 && isSlideshowEnabled && isRandom && isEnabled && (
                 <div style={{
                     position: "absolute",
@@ -1908,7 +1907,7 @@ function StreamPreviewIcon({ imageCount, isEnabled, isSlideshowEnabled, isRandom
     );
 }
 
-// Форматирование времени в удобный вид
+// Formatting time in a convenient format
 function formatTime(seconds: number): string {
     if (seconds < 60) return `${seconds} sec`;
     const mins = Math.floor(seconds / 60);
@@ -1917,14 +1916,14 @@ function formatTime(seconds: number): string {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-// Форматирование размера файла
+// File size formatting
 function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Кнопка в панели аккаунта 
+// Button in the account panel
 function StreamPreviewPanelButton(props: { nameplate?: any; }) {
     const [imageCount, setImageCount] = useState(0);
     const [isEnabled, setIsEnabled] = useState(settings.store.replaceEnabled);
@@ -1943,16 +1942,16 @@ function StreamPreviewPanelButton(props: { nameplate?: any; }) {
             setIsRandom(settings.store.slideshowRandom);
             setCurrentIndex(currentSlideIndex);
             setStreamActive(isStreamActive);
-            // Обновляем превью РЕАЛЬНОЙ картинки на стриме 
+            // We're updating the REAL image preview on the stream.
             setCurrentImageUri(actualStreamImageUri);
         };
 
         updateState();
         imageChangeListeners.add(updateState);
 
-        // Таймер для обновления времени каждую секунду
+        // Timer to update time every second
         const timerInterval = setInterval(() => {
-            // Автосброс: если прошло более 7 минут без вызова getCustomThumbnail - стрим остановлен
+            // Auto reset: If more than 7 minutes have passed without calling get Custom Thumbnail, the stream is stopped.
             if (isStreamActive && lastSlideChangeTime > 0 && (Date.now() - lastSlideChangeTime) > 420000) {
                 isStreamActive = false;
             }
@@ -1972,10 +1971,10 @@ function StreamPreviewPanelButton(props: { nameplate?: any; }) {
         if (imageCount === 0) return "Select stream preview";
         if (!isEnabled) return `Stream preview (disabled, ${imageCount} images)`;
 
-        // Интервал ~5 минут (Discord контролирует)
+        // Interval ~5 minutes (Discord controls)
         const intervalSeconds = 5 * 60;
 
-        // Таймер для любого количества фото (включая 1)
+        // Timer for any number of photos (including 1)
         const timeInfo = lastSlideChangeTime > 0 && streamActive
             ? `\n⏱️ ${formatTime(secondsAgo)} ago (~${formatTime(Math.max(0, intervalSeconds - secondsAgo))} until update)`
             : streamActive ? "" : "\n⚫ Stream not active";
@@ -1992,11 +1991,11 @@ function StreamPreviewPanelButton(props: { nameplate?: any; }) {
         return `Stream preview (${imageCount} images)${timeInfo}`;
     };
 
-    // Кастомный тултип с превью картинки
+    // Custom tooltip with preview image
     const renderTooltip = () => {
         const tooltipText = getTooltip();
 
-        // Показываем превью только если: есть картинка, плагин включен, есть фото И стрим активен
+        // We show a preview only if: there is an image, the plugin is enabled, there is a photo AND the stream is active
         if (currentImageUri && isEnabled && imageCount > 0 && streamActive) {
             return (
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "center" }}>
@@ -2051,7 +2050,7 @@ function StreamPreviewPanelButton(props: { nameplate?: any; }) {
     );
 }
 
-// Патч контекстного меню стрима
+// Stream context menu patch
 interface StreamContextProps {
     stream: {
         ownerId: string;
@@ -2061,15 +2060,15 @@ interface StreamContextProps {
 }
 
 const streamContextMenuPatch: NavContextMenuPatchCallback = (children: any[], { stream }: StreamContextProps) => {
-    // Проверяем, что это наш стрим
+    // Let's check that this is our stream.
     const currentUser = UserStore.getCurrentUser();
     if (!currentUser || stream.ownerId !== currentUser.id) return;
 
-    // Находим группу с "Полный экран" и "Открыть в отдельном окне"
+    // Find the group with "Full screen" and "Open in a separate window"
     const group = findGroupChildrenByChildId(["fullscreen", "popout"], children);
 
     if (group) {
-        // Добавляем наш пункт после существующих
+        // We add our item after the existing ones
         group.push(
             <Menu.MenuItem
                 id="custom-stream-preview"
@@ -2079,7 +2078,7 @@ const streamContextMenuPatch: NavContextMenuPatchCallback = (children: any[], { 
             />
         );
     } else {
-        // Если группа не найдена, добавляем в конец
+        // If the group is not found, add it to the end
         children.push(
             <Menu.MenuSeparator />,
             <Menu.MenuItem
@@ -2092,55 +2091,55 @@ const streamContextMenuPatch: NavContextMenuPatchCallback = (children: any[], { 
     }
 };
 
-// Функция для получения кастомного превью (вызывается из webpack patch)
-// При слайд-шоу каждый вызов (~5 мин) возвращает следующую картинку
+// A function for getting a custom preview (called from a webpack patch)
+// During a slideshow, each call (~5 min) returns the next image
 function getCustomThumbnail(originalThumbnail: string): string {
-    // Помечаем что стрим активен
+    // We mark that the stream is active
     isStreamActive = true;
 
     if (!settings.store.replaceEnabled || cachedDataUris.length === 0) {
-        actualStreamImageUri = null; // Нет кастомной картинки
+        actualStreamImageUri = null; // No custom image
         notifyImageChange();
         return originalThumbnail;
     }
 
-    // Если одна картинка или слайд-шоу выключено — показываем выбранную
+    // If one picture or slide show is turned off, show the selected one
     if (cachedDataUris.length === 1 || !settings.store.slideshowEnabled) {
-        // Проверяем что индекс валиден
+        // We check that the index is valid
         const idx = currentSlideIndex < cachedDataUris.length ? currentSlideIndex : 0;
-        lastSlideChangeTime = Date.now(); // Обновляем время для таймера
-        actualStreamImageUri = cachedDataUris[idx]; // Обновляем реальную картинку на стриме
+        lastSlideChangeTime = Date.now(); // Updating the time for the timer
+        actualStreamImageUri = cachedDataUris[idx]; // We're updating the live stream image.
         notifyImageChange();
         return cachedDataUris[idx];
     }
 
-    // Если была ручная смена — показываем выбранную картинку один раз
+    // If there was a manual change, we show the selected image once
     if (manualSlideChange) {
-        manualSlideChange = false; // Сбрасываем флаг
-        lastSlideChangeTime = Date.now(); // Обновляем время для таймера
-        actualStreamImageUri = cachedDataUris[currentSlideIndex]; // Обновляем реальную картинку на стриме
+        manualSlideChange = false; // Drop the flag
+        lastSlideChangeTime = Date.now(); // Updating the time for the timer
+        actualStreamImageUri = cachedDataUris[currentSlideIndex]; // We're updating the live stream image.
         notifyImageChange();
         return cachedDataUris[currentSlideIndex];
     }
 
-    // Слайд-шоу: выбираем следующую картинку
+    // Slideshow: Select the next image
     let nextIndex: number;
 
     if (settings.store.slideshowRandom) {
-        // Случайный выбор (но не та же самая)
+        // Random selection (but not the same)
         do {
             nextIndex = Math.floor(Math.random() * cachedDataUris.length);
         } while (nextIndex === currentSlideIndex && cachedDataUris.length > 1);
     } else {
-        // Последовательный выбор
+        // Sequential selection
         nextIndex = (currentSlideIndex + 1) % cachedDataUris.length;
     }
 
     currentSlideIndex = nextIndex;
-    lastSlideChangeTime = Date.now(); // Запоминаем время смены
-    actualStreamImageUri = cachedDataUris[currentSlideIndex]; // Обновляем реальную картинку на стриме
-    saveSlideIndex(nextIndex); // Сохраняем новый индекс
-    notifyImageChange(); // Обновляем UI
+    lastSlideChangeTime = Date.now(); // Remember the shift time
+    actualStreamImageUri = cachedDataUris[currentSlideIndex]; // We're updating the live stream image.
+    saveSlideIndex(nextIndex); // Saving the new index
+    notifyImageChange(); // Updating the UI
     return cachedDataUris[currentSlideIndex];
 }
 
@@ -2151,19 +2150,19 @@ export default definePlugin({
 
     settings,
 
-    // Патчи для перехвата функции обновления превью
+    // Patches for intercepting the preview update function
     patches: [
         {
-            // Патч для добавления кнопки в панель (рядом с микрофоном/наушниками)
+            // Patch to add a button to the panel (next to the microphone/headphones)
             find: "#{intl::USER_PROFILE_ACCOUNT_POPOUT_BUTTON_A11Y_LABEL}",
             replacement: {
-                // Матчим начало массива children после чего угодно, главное чтобы был accountContainerRef дальше
+                // Match the beginning of the children array after anything, the main thing is that there is an accountContainerRef next
                 match: /(children:\[)(.{0,150}?)(accountContainerRef)/,
                 replace: "$1$self.StreamPreviewPanelButton(arguments[0]),$2$3"
             }
         },
         {
-            // Перехватываем отправку превью в ApplicationStreamPreviewUploadManager
+            // Intercepting preview uploads to ApplicationStreamPreviewUploadManager
             find: "\"ApplicationStreamPreviewUploadManager\"",
             all: true,
             replacement: [
@@ -2173,7 +2172,7 @@ export default definePlugin({
                     replace: "body:{thumbnail:$self.getCustomThumbnail($1)}"
                 },
                 {
-                    // Паттерн 2: {thumbnail:x} без body
+                    // Pattern 2: {thumbnail:x} without body
                     match: /\{thumbnail:(\i)\}/,
                     replace: "{thumbnail:$self.getCustomThumbnail($1)}"
                 }
@@ -2185,10 +2184,10 @@ export default definePlugin({
         "Select stream preview": openImagePicker
     },
 
-    // Кнопка в панели аккаунта
+    // Button in the account panel
     StreamPreviewPanelButton: ErrorBoundary.wrap(StreamPreviewPanelButton, { noop: true }),
 
-    // Функция для замены thumbnail (вызывается из webpack patch)
+    // Function for replacing thumbnail (called from webpack patch)
     getCustomThumbnail,
 
     contextMenus: {
@@ -2196,13 +2195,13 @@ export default definePlugin({
     },
 
     async start() {
-        // Загружаем профили при старте (включая миграцию со старого формата)
+        // Loading profiles at startup (including migration from the old format)
         await loadProfilesFromDataStore();
 
-        // Синхронизируем кэш с активным профилем
+        // Synchronize the cache with the active profile
         syncCacheWithActiveProfile();
 
-        // Уведомляем UI об обновлении (для иконки в панели)
+        // Notify the UI about the update (for the icon in the panel)
         notifyImageChange();
 
         const profile = getActiveProfile();
@@ -2210,7 +2209,7 @@ export default definePlugin({
     },
 
     stop() {
-        // Очищаем кэш при выключении
+        // Clearing the cache when shutting down
         cachedImages = [];
         cachedDataUris = [];
         currentSlideIndex = 0;

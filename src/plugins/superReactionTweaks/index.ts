@@ -1,13 +1,13 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2023 Vendicated, ant0n, FieryFlames and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { UserStore } from "@webpack/common";
+import { OverridePremiumTypeStore } from "@webpack/common";
 
 export const settings = definePluginSettings({
     superReactByDefault: {
@@ -67,6 +67,6 @@ export default definePlugin({
     },
 
     get shouldSuperReactByDefault() {
-        return settings.store.superReactByDefault && UserStore.getCurrentUser().premiumType != null;
+        return settings.store.superReactByDefault && (OverridePremiumTypeStore.getState().premiumTypeActual != null);
     }
 });

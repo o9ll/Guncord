@@ -1,9 +1,6 @@
 /*
- * ConsoleWatcher — A developer tool for monitoring and collecting console events for maintenance.
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * Based on Equicord, which is licensed under GPL-3.0-or-later and subject to the same license.
- *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 

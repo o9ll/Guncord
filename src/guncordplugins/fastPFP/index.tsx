@@ -1,3 +1,9 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import definePlugin from "@utils/types";
 import { Menu, RestAPI, Toasts } from "@webpack/common";
@@ -19,18 +25,18 @@ const copyImage = async (url: string) => {
             urlObj.searchParams.set("size", "4096");
             fetchUrl = urlObj.toString();
         }
-        
+
         let response;
         try {
             response = await fetch(fetchUrl);
         } catch (e) {
             response = null;
         }
-        
+
         if (!response || !response.ok) {
             response = await fetch(url);
         }
-        
+
         const buffer = await response.arrayBuffer();
         const win = window as any;
         if (win.DiscordNative?.clipboard?.copyImage) {
@@ -58,14 +64,14 @@ const saveImage = async (originalUrl: string) => {
         } catch (e) {
             urlObj = new URL(originalUrl, window.location.origin);
         }
-        
+
         let pathname = urlObj.pathname;
         let isAnimated = pathname.includes(".gif") || pathname.includes("a_") || pathname.includes(".webm");
-        
+
         let tryExts = isAnimated ? [".gif", ".png"] : [".png", ".gif"];
         let response;
         let finalExt = tryExts[0];
-        
+
         if (!pathname.includes("/attachments/")) {
             pathname = pathname.replace(/\.(webp|webm|mp4|gif|png|jpg|jpeg)$/i, "");
             for (const ext of tryExts) {
@@ -83,16 +89,16 @@ const saveImage = async (originalUrl: string) => {
                 }
             }
         }
-        
+
         if (!response || !response.ok) {
             response = await fetch(originalUrl);
             finalExt = "." + (originalUrl.split("?")[0].split(".").pop() || "png");
         }
-        
+
         const buffer = await response.arrayBuffer();
         let filename = pathname.split('/').pop() || "image";
         filename += finalExt;
-        
+
         const win = window as any;
         if (win.DiscordNative?.fileManager?.saveWithDialog) {
             win.DiscordNative.fileManager.saveWithDialog(new Uint8Array(buffer), filename);

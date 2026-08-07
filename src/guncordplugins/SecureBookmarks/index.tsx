@@ -1,10 +1,10 @@
-import { t } from "../autoTranslateGuncord";
 /*
  * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { t } from "../autoTranslateGuncord";
 import "./styles.css";
 
 import { addHeaderBarButton, HeaderBarButton, removeHeaderBarButton } from "@api/HeaderBar";

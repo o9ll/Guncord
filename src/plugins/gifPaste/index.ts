@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { isPluginEnabled } from "@api/PluginManager";
+import betterGifPicker from "@plugins/betterGifPicker";
 import { Devs } from "@utils/constants";
 import { insertTextIntoChatInputBox } from "@utils/discord";
 import definePlugin from "@utils/types";
@@ -38,7 +40,10 @@ export default definePlugin({
     handleSelect(gif?: { url: string; }) {
         if (gif) {
             insertTextIntoChatInputBox(gif.url + " ");
-            ExpressionPickerStore.closeExpressionPicker();
+
+            if (!(isPluginEnabled(betterGifPicker.name) && betterGifPicker.settings.store.keepOpen)) {
+                ExpressionPickerStore.closeExpressionPicker();
+            }
         }
     }
 });

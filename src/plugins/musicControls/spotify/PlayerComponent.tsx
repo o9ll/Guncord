@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ import { debounce } from "@shared/debounce";
 import { classNameFactory } from "@utils/css";
 import { copyWithToast, openImageModal } from "@utils/discord";
 import { classes } from "@utils/misc";
+import { formatDuration } from "@utils/text";
 import { ContextMenuApi, FluxDispatcher, Menu, React, useEffect, useState, useStateFromStores } from "@webpack/common";
 
 import { settings } from "../settings";
@@ -33,13 +34,6 @@ import { SeekBar } from "./SeekBar";
 import { SpotifyStore, Track } from "./SpotifyStore";
 
 const cl = classNameFactory("vc-spotify-");
-
-function msToHuman(ms: number) {
-    const minutes = ms / 1000 / 60;
-    const m = Math.floor(minutes);
-    const s = Math.floor((minutes - m) * 60);
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-}
 
 function Svg(path: string, label: string) {
     return () => (
@@ -193,7 +187,7 @@ function SpotifySeekBar() {
                 className={cl("progress-time") + " " + cl("time-left")}
                 aria-label="Progress"
             >
-                {msToHuman(position)}
+                {formatDuration(position)}
             </Span>
             <SeekBar
                 initialValue={position}
@@ -201,7 +195,7 @@ function SpotifySeekBar() {
                 maxValue={duration}
                 onValueChange={onChange}
                 asValueChanges={onChange}
-                onValueRender={msToHuman}
+                onValueRender={formatDuration}
             />
             <Span
                 size="xs"
@@ -209,7 +203,7 @@ function SpotifySeekBar() {
                 className={cl("progress-time") + " " + cl("time-right")}
                 aria-label="Total Duration"
             >
-                {msToHuman(duration)}
+                {formatDuration(duration)}
             </Span>
         </div>
     );

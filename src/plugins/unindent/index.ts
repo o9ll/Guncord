@@ -1,6 +1,6 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@ import definePlugin from "@utils/types";
 export default definePlugin({
     name: "Unindent",
     description: "Trims leading indentation from codeblocks",
+    dependencies: ["MessageEventsAPI"],
     tags: ["Chat", "Utility"],
     authors: [Devs.Ven],
 

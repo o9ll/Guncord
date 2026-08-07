@@ -1,6 +1,6 @@
 /*
  * Guncord, a Discord client mod
- * Copyright (c) 2024 contributors
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -182,7 +182,7 @@ const LastSeenSection = ErrorBoundary.wrap(
 
 export default definePlugin({
     name: "LastSeen",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Shows when a user was last seen online, in their profile.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     settings,

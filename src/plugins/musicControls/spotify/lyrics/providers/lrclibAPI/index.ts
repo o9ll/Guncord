@@ -1,11 +1,11 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { LyricsData, Provider } from "@plugins/musicControls/spotify/lyrics/providers/types";
-import { Track } from "@plugins/musicControls/spotify/SpotifyStore";
+import { LyricsData, Provider } from "@equicordplugins/musicControls/spotify/lyrics/providers/types";
+import { Track } from "@equicordplugins/musicControls/spotify/SpotifyStore";
 
 const baseUrlLrclib = "https://lrclib.net/api/get";
 
@@ -29,8 +29,8 @@ function lyricTimeToSeconds(time: string) {
 export async function getLyricsLrclib(track: Track): Promise<LyricsData | null> {
     const info = {
         track_name: track.name,
-        artist_name: track.artists[0]?.name ?? "",
-        album_name: track.album?.name ?? "",
+        artist_name: track.artists[0].name,
+        album_name: track.album.name,
         duration: String(track.duration / 1000)
     };
 
@@ -42,39 +42,10 @@ export async function getLyricsLrclib(track: Track): Promise<LyricsData | null> 
         }
     });
 
-    let data: LrcLibResponse | null = null;
-    if (response.ok) {
-        data = await response.json() as LrcLibResponse;
-    }
+    if (!response.ok) return null;
 
-    if (!data || !data.syncedLyrics) {
-        // Fallback to search endpoint if exact match failed
-        const searchParams = new URLSearchParams({
-            track_name: track.name,
-            artist_name: track.artists[0]?.name ?? ""
-        });
-        const searchUrl = `https://lrclib.net/api/search?${searchParams.toString()}`;
-        try {
-            const searchResponse = await fetch(searchUrl, {
-                headers: {
-                    "User-Agent": "SpotifyLyrics for Equicord (https://github.com/Masterjoona/vc-spotifylyrics)"
-                }
-            });
-            if (searchResponse.ok) {
-                const results = await searchResponse.json() as LrcLibResponse[];
-                if (Array.isArray(results) && results.length > 0) {
-                    const match = results.find(r => r.syncedLyrics);
-                    if (match) {
-                        data = match;
-                    }
-                }
-            }
-        } catch (e) {
-            // ignore search fetch errors
-        }
-    }
-
-    if (!data || !data.syncedLyrics) return null;
+    const data = await response.json() as LrcLibResponse;
+    if (!data.syncedLyrics) return null;
 
     const lyrics = data.syncedLyrics;
     const lines = lyrics.split("\n").filter(line => line.trim() !== "");

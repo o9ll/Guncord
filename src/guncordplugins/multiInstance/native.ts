@@ -198,6 +198,97 @@ function registerWindowControlIpc(win: BrowserWindow): () => void {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Intercepts Discord badge/notification IPCs for a multi-instance.
+//
+// Native Discord emits DISCORD_SET_BADGE_COUNT (and other badge channels) via
+// ipcRenderer → ipcMain globally. Discord's global handler calls
+// injectedGetWindow(), which always returns the main window. As a result,
+// the red badge (ping) is displayed on the main Discord icon, never on
+// the multi-instance window icon.
+//
+// We override these channels on the local webContents of each instance (via
+// webContents.ipc.on) to intercept messages before they reach
+// the global handler, and we apply flashFrame + setOverlayIcon directly
+// on the correct BrowserWindow.
+// ─────────────────────────────────────────────────────────────────────────────
+import { setBadgeCount } from "../../guncord/main/appBadge";
+// IPC channels known for managing Discord badges/notifications
+const BADGE_IPC_CHANNELS = [
+    "DISCORD_SET_BADGE_COUNT",
+    "SET_BADGE_COUNT",
+    "DISCORD_APP_BADGE",
+    "APP_BADGE",
+    "BADGE_COUNT",
+    "DISCORD_BADGE_COUNT",
+    "VCD_SET_BADGE_COUNT"
+];
+const NOTIFICATION_IPC_CHANNELS = [
+    "DISCORD_NOTIFICATION",
+    "SEND_NOTIFICATION",
+    "DISPATCH_NOTIFICATION",
+    "FLASH_FRAME"
+];
+function registerNotificationIpc(win: BrowserWindow): () => void {
+    if (win.isDestroyed()) return () => {};
+    const wc = win.webContents as any;
+    const cleanups: Array<() => void> = [];
+    // ── Badge count handler ──────────────────────────────────────────────────
+    const handleBadge = (_event: any, count?: number) => {
+        if (win.isDestroyed()) return;
+        try {
+            const n = typeof count === "number" ? count : 0;
+            setBadgeCount(n, win);
+            if (process.platform === "win32") {
+                win.flashFrame(n > 0);
+            }
+        } catch { }
+    };
+    // ── Notification handler ─────────────────────────────────────────────────
+    const handleNotification = (_event: any) => {
+        if (win.isDestroyed()) return;
+        try {
+            if (process.platform === "win32") {
+                win.flashFrame(true);
+            }
+        } catch { }
+    };
+    // Use webContents.ipc.on (this sender takes precedence over ipcMain)
+    try {
+        for (const channel of BADGE_IPC_CHANNELS) {
+            wc.ipc.on(channel, handleBadge);
+            cleanups.push(() => { try { wc.ipc.removeListener(channel, handleBadge); } catch { } });
+        }
+        for (const channel of NOTIFICATION_IPC_CHANNELS) {
+            wc.ipc.on(channel, handleNotification);
+            cleanups.push(() => { try { wc.ipc.removeListener(channel, handleNotification); } catch { } });
+        }
+    } catch {
+        // Fallback Electron <20: ipcMain with filter by sender
+        const guardedBadge = (event: Electron.IpcMainEvent, count?: number) => {
+            const senderWin = BrowserWindow.fromWebContents(event.sender);
+            if (senderWin !== win) return;
+            handleBadge(event, count);
+            // Prevents propagation to Discord's global handler
+            event.returnValue = undefined;
+        };
+        const guardedNotif = (event: Electron.IpcMainEvent) => {
+            const senderWin = BrowserWindow.fromWebContents(event.sender);
+            if (senderWin !== win) return;
+            handleNotification(event);
+        };
+        for (const channel of BADGE_IPC_CHANNELS) {
+            ipcMain.on(channel, guardedBadge);
+            cleanups.push(() => ipcMain.removeListener(channel, guardedBadge));
+        }
+        for (const channel of NOTIFICATION_IPC_CHANNELS) {
+            ipcMain.on(channel, guardedNotif);
+            cleanups.push(() => ipcMain.removeListener(channel, guardedNotif));
+        }
+    }
+    return () => { for (const fn of cleanups) fn(); };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Create token preload script
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -437,9 +528,12 @@ export async function openInstanceWindow(
         // Must be done BEFORE Discord loads its JS (dom-ready)
         const wc = win.webContents;
         const cleanupIpc = registerWindowControlIpc(win);
+        // Redirects badge/notification IPCs to THIS window (not the main window)
+        const cleanupNotifIpc = registerNotificationIpc(win);
 
         win.once("closed", () => {
             cleanupIpc();
+            cleanupNotifIpc();
             openWindows.delete(userId);
             // Clean session service workers to permanently cut notifications
             ses.clearStorageData({ storages: ["serviceworkers"] }).catch(() => {});
@@ -621,9 +715,12 @@ export async function openInstanceWindowGrouped(
         // Register window control IPC handlers for this grouped instance
         const wc = win.webContents;
         const cleanupIpc = registerWindowControlIpc(win);
+        // Redirects badge/notification IPCs to THIS window (not the main window)
+        const cleanupNotifIpc = registerNotificationIpc(win);
 
         win.once("closed", () => {
             cleanupIpc();
+            cleanupNotifIpc();
             openGroupedWindows.delete(userId);
             ses.clearStorageData({ storages: ["serviceworkers"] }).catch(() => {});
             try { unlinkSync(preloadPath); } catch {}

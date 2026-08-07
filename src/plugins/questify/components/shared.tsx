@@ -1,6 +1,6 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -266,7 +266,7 @@ interface SettingsSwitchLayoutProps extends SwitchWithLabelProps {
     tooltip?: { position: "top" | "bottom", text: string; };
 }
 
-const SwitchWithLabel = findComponentByCodeLazy('"data-toggleable-component":"switch"') as React.ComponentType<SwitchWithLabelProps>;
+const SwitchWithLabel = findComponentByCodeLazy('auxiliaryContentPosition:"under-label"') as React.ComponentType<SwitchWithLabelProps>;
 
 export type SettingsSubtleSwitchProps = Omit<SettingsSwitchLayoutProps, "description">;
 

@@ -128,7 +128,7 @@ function scheduleFlush() {
         for (const fn of updateListeners) {
             try { fn(); } catch { }
         }
-        
+
         // Debounce actual localStorage save to 5 seconds to avoid freezing
         if (saveTimer === null) {
             saveTimer = setTimeout(() => {

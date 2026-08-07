@@ -1,13 +1,13 @@
-﻿/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import "./style.css";
 
 import { DecoratorProps } from "@api/MemberListDecorators";
-import { iconsModule } from "@plugins/_core/concatenatedModules";
+import { iconsModule } from "@equicordplugins/_core/concatenatedModules";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin from "@utils/types";
@@ -94,8 +94,8 @@ export default definePlugin({
 
             const today = moment().format("YYYY-MM-DD");
             const cached = useStreaksStore.getState().streaks[recipientId];
-            const myFlag = cached && cached.today_date === today && (cached.user_a_id === me ? cached.user_a_today : cached.user_b_today);
-            const theirFlag = cached && cached.today_date === today && (cached.user_a_id === me ? cached.user_b_today : cached.user_a_today);
+            const myFlag = cached && cached.today_date != null && cached.today_date === today && (cached.user_a_id === me ? cached.user_a_today : cached.user_b_today);
+            const theirFlag = cached && cached.today_date != null && cached.today_date === today && (cached.user_a_id === me ? cached.user_b_today : cached.user_a_today);
 
             if (message.author.id === me) {
                 if (!myFlag) {
