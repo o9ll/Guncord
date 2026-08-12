@@ -1,0 +1,355 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.gun-diag {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 4px;
+}
+
+.gun-diag-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: -6px;
+}
+
+.gun-diag-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.gun-diag-searchwrap {
+    flex: 1;
+    min-width: 160px;
+}
+
+.gun-diag-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gun-diag-heap {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--background-secondary);
+}
+
+.gun-diag-tablewrap {
+    max-height: 440px;
+    overflow: auto;
+    border-radius: 10px;
+    border: 1px solid var(--background-modifier-accent);
+    background: linear-gradient(180deg, rgb(255 255 255 / 3%), rgb(255 255 255 / 0%));
+    backdrop-filter: blur(6px);
+}
+
+.gun-diag-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.gun-diag-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--background-secondary-alt, var(--background-secondary));
+    color: var(--header-secondary);
+    text-align: start;
+    padding: 9px 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.gun-diag-table th.num,
+.gun-diag-table td.num {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.gun-diag-table td.num {
+    font-family: monospace;
+    color: var(--text-normal);
+}
+
+.gun-diag-row {
+    border-top: 1px solid var(--background-modifier-accent);
+    transition: background 0.12s ease;
+}
+
+.gun-diag-row td {
+    padding: 8px 12px;
+    color: var(--text-normal);
+}
+
+.gun-diag-row:hover {
+    background: var(--background-modifier-hover);
+}
+
+.gun-diag-row.lvl-low {
+    background: linear-gradient(90deg, rgb(59 165 92 / 7%), transparent);
+}
+
+.gun-diag-row.lvl-medium {
+    background: linear-gradient(90deg, rgb(250 168 26 / 8%), transparent);
+}
+
+.gun-diag-row.lvl-high {
+    background: linear-gradient(90deg, rgb(237 66 69 / 10%), transparent);
+}
+
+.gun-diag-badge {
+    font-family: monospace;
+    font-weight: 700;
+    font-size: 12px;
+    padding: 2px 9px;
+    border-radius: 11px;
+}
+
+.gun-diag-badge.low {
+    background: rgb(59 165 92 / 20%);
+    color: #3ba55c;
+}
+
+.gun-diag-badge.medium {
+    background: rgb(250 168 26 / 20%);
+    color: #faa81a;
+}
+
+.gun-diag-badge.high {
+    background: rgb(237 66 69 / 20%);
+    color: var(--text-danger, #ed4245);
+}
+
+.gun-diag-empty {
+    text-align: center;
+    padding: 28px;
+    color: var(--text-muted);
+}
+
+.gun-diag-foot {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: end;
+}
+
+/* ── Runtime profiling panel ───────────────────────────────────────────────── */
+.gun-diag-runtime {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid var(--background-modifier-accent);
+    background: linear-gradient(180deg, rgb(88 101 242 / 8%), rgb(255 255 255 / 0%));
+}
+
+.gun-diag-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+}
+
+.gun-diag-metric {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.gun-diag-metric-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-muted);
+}
+
+.gun-diag-metric-value {
+    font-family: monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-normal);
+    font-variant-numeric: tabular-nums;
+}
+
+.gun-diag-leak {
+    font-size: 13px;
+    font-weight: 600;
+    color: #ed4245;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgb(237 66 69 / 12%);
+}
+
+.gun-diag-fn-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--header-secondary);
+    margin-top: 2px;
+}
+
+.gun-diag-sparkrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.gun-diag-spark {
+    color: var(--brand-experiment, #5865f2);
+}
+
+.gun-diag-sparkminmax {
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.gun-diag-pending {
+    display: inline-block;
+    min-width: 18px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: rgb(250 168 26 / 18%);
+    font-weight: 700;
+    color: #faa81a;
+}
+
+/* The header-bar icon while a profile is recording. The icon strokes with
+   currentColor, so colouring the element is enough. */
+.gun-diag-recording {
+    color: var(--status-danger, #ed4245);
+    animation: gun-diag-recpulse 1.6s ease-in-out infinite;
+}
+
+@keyframes gun-diag-recpulse {
+    0%, 100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+/* Keeps the pill + its delta on one line. Without this the delta wraps under
+   the number, because the badge's padding eats the narrow cell's width. */
+.gun-diag-weight {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.gun-diag-delta {
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Load is a cost, so down is the good direction — the sign alone didn't say that. */
+.gun-diag-delta.better {
+    color: #3ba55c;
+}
+
+.gun-diag-delta.worse {
+    color: #faa81a;
+}
+
+.gun-diag-impact {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 10px;
+    background: var(--background-secondary);
+}
+
+.gun-diag-impact-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gun-diag-select {
+    flex: 1;
+    appearance: none;
+    padding: 8px 10px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 8px;
+    background: var(--background-tertiary);
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--text-normal);
+    cursor: pointer;
+}
+
+.gun-diag-impact-note {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    unicode-bidi: plaintext;
+}
+
+.gun-diag-impact-result {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gun-diag-verdict {
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    background: var(--background-tertiary);
+    color: var(--text-normal);
+}
+
+.gun-diag-verdict.v-high {
+    background: rgb(237 66 69 / 14%);
+    color: #ed4245;
+}
+
+.gun-diag-verdict.v-moderate {
+    background: rgb(250 168 26 / 14%);
+    color: #faa81a;
+}
+
+.gun-diag-verdict.v-negligible {
+    background: rgb(59 165 92 / 14%);
+    color: #3ba55c;
+}
+
+.gun-diag-recs {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 10px;
+    background: var(--background-secondary);
+}
+
+.gun-diag-rec {
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--text-normal);
+    unicode-bidi: plaintext;
+}

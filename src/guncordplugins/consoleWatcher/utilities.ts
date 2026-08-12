@@ -121,7 +121,6 @@ export function detectSource(args: string[]): { source: ConsoleSource; pluginNam
     return { source: "unknown" };
 }
 
-
 let attributionNames: { name: string; re: RegExp; }[] = [];
 
 function escapeRe(s: string): string {

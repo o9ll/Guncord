@@ -236,7 +236,7 @@ function patchMemberListProps(guildId: string, props: any) {
 export default definePlugin({
     name: "FakePerm",
     description: "Unlocks native Discord administration and moderation UI locally with real-time visual voice, nickname & role management simulations (Mute, Deafen, Stream, Disconnect, Move, Nickname, Add/Remove Roles, Member List Hoist).",
-    authors: [{ name: "Guncord", id: 0n }],
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
     requiresRestart: false,
 
     enableRolePillRemove(props: any) {

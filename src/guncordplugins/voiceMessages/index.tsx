@@ -59,12 +59,12 @@ export const settings = definePluginSettings({
     noiseSuppression: {
         type: OptionType.BOOLEAN,
         description: "Noise Suppression",
-        default: true,
+        default: false,
     },
     echoCancellation: {
         type: OptionType.BOOLEAN,
         description: "Echo Cancellation",
-        default: true,
+        default: false,
     },
 });
 

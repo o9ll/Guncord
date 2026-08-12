@@ -1,0 +1,11 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { findStoreLazy } from "@webpack";
+
+import * as t from "./types/stores";
+
+export const RTCConnectionStore: t.RTCConnectionStore = findStoreLazy("RTCConnectionStore");

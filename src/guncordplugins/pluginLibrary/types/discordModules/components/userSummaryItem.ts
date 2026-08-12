@@ -1,0 +1,23 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { User } from "@vencord/discord-types";
+import type { ComponentType } from "react";
+
+export interface UserSummaryItemProps {
+    guildId?: string;
+    className?: string;
+    users?: User[];
+    renderUser?: (...props: any[]) => any;
+    renderMoreUsers?: (...props: any[]) => any;
+    max?: number;
+    showUserPopout?: boolean;
+    renderIcon?: boolean;
+    showDefaultAvatarsForNullUsers?: boolean;
+    size?: number;
+}
+
+export type UserSummaryItem = ComponentType<UserSummaryItemProps>;

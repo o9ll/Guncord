@@ -16,7 +16,6 @@ import { getGroqKey,groqChat } from "../guncordAI/groqManager";
 import { t } from "../autoTranslateGuncord";
 
 // ── Settings ───────────────────────────────────────────────────────────────────
-
 const settings = definePluginSettings({
     isActive: {
         type: OptionType.BOOLEAN,
@@ -48,7 +47,6 @@ const settings = definePluginSettings({
 });
 
 // ── Correction via groqManager ────────────────────────────────────────────────
-
 const LANG_PROMPTS: Record<string, string> = {
     fr: "Tu es un correcteur orthographique. Corrige UNIQUEMENT les fautes d'orthographe et de grammaire. Retourne le texte corrigé sans explication ni guillemets. INTERDIT: ajouter des mots, changer le sens, reformuler. Si le texte est correct, retourne-le identique.",
     en: "You are a spell-checker. Fix ONLY spelling and grammar mistakes. Return the corrected text without explanation or quotes. FORBIDDEN: adding words, changing meaning, rephrasing. If already correct, return as-is.",
@@ -108,7 +106,6 @@ async function correctText(text: string): Promise<string> {
 }
 
 // ── Chat Bar Button ────────────────────────────────────────────────────────────
-
 function AutoCorrectIcon({ enabled }: { enabled: boolean; }) {
     return (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -165,10 +162,9 @@ const AutoCorrectChatBarButton: ChatBarButtonFactory = ({ type }) => {
 };
 
 // ── Plugin ─────────────────────────────────────────────────────────────────────
-
 export default definePlugin({
     name: "AutoCorrect",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Automatically corrects spelling and grammar before sending. Requires a free Groq API key configured in GuncordAI.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     settings,

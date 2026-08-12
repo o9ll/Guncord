@@ -1,0 +1,13 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.yt-downloader-link {
+    text-decoration: none !important;
+}
+
+.yt-downloader-link:hover {
+    text-decoration: none !important;
+}

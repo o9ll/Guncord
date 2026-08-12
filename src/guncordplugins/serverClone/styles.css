@@ -1,0 +1,127 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-server-cloner-title {
+    color: var(--header-primary);
+    font-weight: 600;
+}
+
+.vc-server-cloner-danger {
+    color: var(--status-danger);
+}
+
+.vc-server-cloner-success {
+    color: var(--text-positive);
+}
+
+.vc-server-cloner-confirmation {
+    padding: 16px 0;
+    color: var(--text-normal);
+}
+
+.vc-server-cloner-confirmation-warning {
+    margin-top: 12px;
+}
+
+.vc-server-cloner-subtext {
+    color: var(--text-muted);
+}
+
+.vc-server-cloner-content {
+    display: flex;
+    min-height: 450px;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px 0;
+}
+
+.vc-server-cloner-label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--header-secondary);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.vc-server-cloner-target-status {
+    margin-top: 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.vc-server-cloner-mode-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.vc-server-cloner-note,
+.vc-server-cloner-estimate {
+    padding: 10px 12px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 8px;
+    background: var(--background-secondary);
+    color: var(--text-normal);
+}
+
+.vc-server-cloner-option-title,
+.vc-server-cloner-option-description {
+    display: block;
+}
+
+.vc-server-cloner-option-title {
+    color: var(--header-primary);
+    font-weight: 500;
+}
+
+.vc-server-cloner-option-description {
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-server-cloner-boost-warning {
+    padding: 12px;
+    border: 1px solid var(--status-warning-background);
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.vc-server-cloner-boost-title {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-warning);
+}
+
+.vc-server-cloner-boost-list {
+    color: var(--text-normal);
+    line-height: 1.6;
+}
+
+.vc-server-cloner-boost-detail {
+    margin-top: 8px;
+    color: var(--text-warning);
+    font-size: 12px;
+    font-style: italic;
+}
+
+.vc-server-cloner-version {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.vc-server-cloner-version-title {
+    color: var(--header-primary);
+    font-weight: 600;
+}
+
+.vc-server-cloner-version-status {
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: 12px;
+}

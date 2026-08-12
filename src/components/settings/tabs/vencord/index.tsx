@@ -44,7 +44,7 @@ const DEV_TEAM_IDS = [
         description: "Manager of app, site visuals, communication & ads"
     },
     {
-        id: "1020801845490356245",
+        id: "1138447342119440404",
         role: "Admin",
         description: "Manager of infrastructure, API, bot & network hosting"
     }
@@ -537,4 +537,3 @@ function EquicordSettings() {
 }
 
 export default wrapTab(EquicordSettings, "Guncord Settings");
-

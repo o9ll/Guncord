@@ -1,0 +1,13 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+export const Styles = {
+    infoCard: {
+        padding: "1em",
+        width: "100%",
+        boxSizing: "border-box"
+    },
+} as const satisfies Record<string, React.CSSProperties>;

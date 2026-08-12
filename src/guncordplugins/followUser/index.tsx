@@ -161,7 +161,7 @@ function onVoiceStateUpdates(data: any) {
                 if (myCh !== newCh) {
                     if (isUserStreaming()) {
                         Toasts.show({
-                            message: `Suivi suspendu : impossible de rejoindre ${followedName} pendant que vous streamez`,
+                            message: `Tracking suspended : unable to join ${followedName} while you're streaming`,
                             type: Toasts.Type.FAILURE,
                             id: Toasts.genId()
                         });
@@ -203,7 +203,7 @@ export async function follow(userId: string) {
     const user = UserStore?.getUser?.(userId);
     const name = user?.globalName ?? user?.username ?? userId;
 
-    // Si on followait deja quelqu'un d'autre, unfollow silencieux
+    // If you were already following someone else, unfollow silently
     if (followedId && followedId !== userId) {
         stopFlux();
         clearInactivityTimer();
@@ -249,14 +249,14 @@ function joinFollowed() {
         return;
     }
     if (isUserStreaming()) {
-        Toasts.show({ message: `Impossible de rejoindre pendant que vous streamez`, type: Toasts.Type.FAILURE, id: Toasts.genId() });
+        Toasts.show({ message: `Unable to join while you're streaming`, type: Toasts.Type.FAILURE, id: Toasts.genId() });
         return;
     }
     joinChannel(followedChannel);
     resetInactivityTimer();
 }
 
-// ── Icone coeur ───────────────────────────────────────────────────────────────
+// ── Heart icon ───────────────────────────────────────────────────────────────
 function HeartIcon({ filled = false }: { filled?: boolean; }) {
     return (
         <svg width="18" height="18" viewBox="0 0 24 24">
@@ -270,8 +270,8 @@ function HeartIcon({ filled = false }: { filled?: boolean; }) {
 }
 
 // ── Bouton HeaderBar ──────────────────────────────────────────────────────────
-// Clic gauche = rejoindre son vocal
-// Clic droit  = unfollow
+// Left click = join voice chat
+// Right-click = unfollow
 function FollowHeaderButton() {
     const fid = useFollowId();
     if (!fid) return null;
@@ -279,10 +279,10 @@ function FollowHeaderButton() {
     const handleClick = (e: React.MouseEvent) => {
         e.preventDefault();
         if (e.button === 2) {
-            // Clic droit
+            // Right-click
             unfollow();
         } else {
-            // Clic gauche
+            // Left click
             joinFollowed();
         }
     };
@@ -290,7 +290,7 @@ function FollowHeaderButton() {
     return (
         <HeaderBarButton
             icon={() => <HeartIcon filled={true} />}
-            tooltip={t("{name} — Clic: join voice | Right click: unfollow").replace("{name}", followedName)}
+            tooltip={t("{name} — Click: join voice | Right click: unfollow").replace("{name}", followedName)}
             onClick={handleClick}
             onContextMenu={handleClick}
         />

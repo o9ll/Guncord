@@ -36,7 +36,7 @@ export async function githubGet(endpoint: string) {
 
 export async function downloadVencordAsar() {
     await downloadFile(
-        "https://github.com/o9ll/Guncord/releases/latest/download/Guncord.asar",
+        "https://github.com/o9ll/Guncord/releases/latest/download/desktop.asar",
         VENCORD_DIR,
         {},
         { retryOnNetworkError: true }

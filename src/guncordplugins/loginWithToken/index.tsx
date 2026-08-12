@@ -9,7 +9,7 @@ import definePlugin from "@utils/types";
 import { findByProps } from "@webpack";
 import { Forms, React, useState } from "@webpack/common";
 
-// Identique à TokenImporter — même logique de connexion
+// Identical to TokenImporter — same connection logic
 function switchToAccount(token: string) {
     try { window.localStorage.setItem("token", `"${token}"`); location.reload(); } catch {
         const iframe = document.createElement("iframe"); iframe.style.display = "none"; document.body.appendChild(iframe);
@@ -126,7 +126,7 @@ function tryInject() {
     for (let i = 0; i < 15 && container; i++) {
         const forgotLink = container.querySelector("a[href*='forgot'], button[class*='forgot'], [class*='forgotPassword']");
         if (forgotLink) {
-            // Insère après le lien mot de passe oublié
+            // Insert after the "forgotten password" link
             const mount = document.createElement("div");
             mount.id = MOUNT_ID;
             mount.style.cssText = "margin-top:8px;text-align:center";
@@ -152,7 +152,7 @@ function tryInject() {
         container = container?.parentElement ?? null;
     }
 
-    // Fallback : ajouter à la fin du formulaire
+    // Fallback: Add to the end of the form
     const form = emailInput.closest("form") as HTMLElement | null;
     if (!form) return;
     const mount = document.createElement("div");
@@ -184,7 +184,7 @@ function stopObserver() {
 export default definePlugin({
     name: "LoginWithToken",
     description: "Adds a 'Login with Token' button on the Discord login page.",
-    authors: [{ name: "naxiwow", id: 875342291001278504n }],
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
     start() { startObserver(); },
     stop() { stopObserver(); },
 });

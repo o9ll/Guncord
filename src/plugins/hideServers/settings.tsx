@@ -16,7 +16,7 @@ export default definePluginSettings({
     showIndicator: {
         type: OptionType.BOOLEAN,
         description: "Show menu to unhide servers at the bottom of the list",
-        default: true,
+        default: false,
         onChange: val => {
             if (val) {
                 addIndicator();

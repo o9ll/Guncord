@@ -1,0 +1,18 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-memberlist-export-button {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--interactive-normal);
+}
+
+.vc-memberlist-export-button:hover {
+    color: var(--interactive-hover);
+}

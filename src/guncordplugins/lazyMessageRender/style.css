@@ -1,0 +1,18 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+[--messageListItem]:hover,
+[--messageListItem]:focus-within {
+    position: relative;
+    z-index: 2;
+}
+
+[--messageListItem]:hover + [--messageListItem],
+[--messageListItem]:focus-within + [--messageListItem],
+[--messageListItem]:has(+ [--messageListItem]:hover),
+[--messageListItem]:has(+ [--messageListItem]:focus-within) {
+    z-index: 1;
+}

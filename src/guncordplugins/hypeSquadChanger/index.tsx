@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { React, ReactDOM, showToast, Toasts, UserStore } from "@webpack/common";
 
@@ -314,9 +313,9 @@ function stopDomObserver() {
 
 export default definePlugin({
     name: "HypeSquadChanger",
+    enabledByDefault: false,
     description: "Allows changing your HypeSquad house (Bravery, Brilliance, Balance) or leaving HypeSquad directly from Discord user profile settings panel or plugin settings.",
-    enabledByDefault: true,
-    authors: [Devs.Ven],
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
     settingsAboutComponent: HypeSquadSelectComponent,
     start() {
         isPluginStarted = true;

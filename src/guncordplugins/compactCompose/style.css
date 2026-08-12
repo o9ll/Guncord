@@ -1,0 +1,27 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+[class*="channelTextArea"] {
+    margin-top: 0 !important;
+    margin-bottom: 6px !important;
+}
+
+[class*="channelTextArea"] [class*="scrollableContainer"] {
+    min-height: 40px;
+}
+
+[class*="channelTextArea"] [class*="buttons"],
+[class*="channelTextArea"] button[class*="attachButton"] {
+    opacity: 0.35;
+    transition: opacity 0.15s ease;
+}
+
+[class*="channelTextArea"]:hover [class*="buttons"],
+[class*="channelTextArea"]:focus-within [class*="buttons"],
+[class*="channelTextArea"]:hover button[class*="attachButton"],
+[class*="channelTextArea"]:focus-within button[class*="attachButton"] {
+    opacity: 1;
+}

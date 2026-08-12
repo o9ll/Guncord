@@ -32,12 +32,12 @@ export const settings = definePluginSettings({
         options: [
             {
                 label: "Username",
-                value: "username"
+                value: "username",
+                default: true
             },
             {
                 label: "Display Name",
-                value: "displayname",
-                default: true
+                value: "displayname"
             },
             {
                 label: "Dont Sort",

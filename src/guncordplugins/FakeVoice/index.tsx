@@ -158,10 +158,9 @@ function FakeDeafenUserButton({ iconForeground, hideTooltips, nameplate }: UserA
 
 export default definePlugin({
     name: "FakeVoice",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Appear muted or deaf while listening. By mushzi.",
-    authors: [{ name: "mushzi",
-     id: 449282863582412850n }],
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["CommandsAPI", "UserAreaAPI"],
 
     start() {

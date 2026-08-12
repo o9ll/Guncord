@@ -5,136 +5,285 @@
  */
 
 import { execSync } from "child_process";
-import * as path from "path";
+import { app } from "electron";
 import * as fs from "fs";
+import * as path from "path";
 
-// Mapping: style value → folder path segments inside mac/mac/
-const STYLE_FOLDER: Record<string, [string, string]> = {
-    modern_shadow:    ["1. Sierra and newer", "2. With Shadow"],
-    modern_no_shadow: ["1. Sierra and newer", "1. No Shadow"],
-    classic_shadow:   ["2. El Capitan and before", "2. With Shadow"],
-    classic_no_shadow:["2. El Capitan and before", "1. No Shadow"],
-};
+// Folder where cursors are copied so Windows can read them
+const CURSOR_DIR = path.join(app.getPath("userData"), "GuncordCursors");
 
-const SIZE_FOLDER: Record<string, string> = {
-    normal: "1. Normal",
-    large:  "2. Large",
-    xl:     "3. XtraLarge",
-};
-
-// Windows registry cursor key names → .cur file names in the pack
+// Mapping : registry key → .cur/.ani file
 const CURSOR_MAP: Record<string, string> = {
-    Arrow:           "Normal",
-    Hand:            "Link",
-    AppStarting:     "Link", // closest match — "working in background"
-    Wait:            "Pan", // spinning wheel closest to Pan
-    IBeam:           "Text",
-    SizeAll:         "Move",
-    SizeNESW:        "Diagonal Resize 1",
-    SizeNWSE:        "Diagonal Resize 2",
-    SizeNS:          "Vertical Resize",
-    SizeWE:          "Horizontal Resize",
-    No:              "Unavailable",
-    Help:            "Help",
-    Crosshair:       "Precision",
-    UpArrow:         "Alternate",
+    Arrow: "Normal.cur",
+    Help: "Help.cur",
+    AppStarting: "Working.ani",
+    Wait: "Busy.ani",
+    Crosshair: "Precision.cur",
+    IBeam: "Text.cur",
+    NWPen: "Handwriting.cur",
+    No: "Unavailable.cur",
+    SizeNS: "Vertical Resize.cur",
+    SizeWE: "Horizontal Resize.cur",
+    SizeNWSE: "Diagonal Resize 1.cur",
+    SizeNESW: "Diagonal Resize 2.cur",
+    SizeAll: "Move.cur",
+    UpArrow: "Alternate.cur",
+    Hand: "Link.cur",
 };
 
-function getCursorsDir(event: any): string {
-    // __dirname in main process points to the compiled output folder.
-    // The mac/ folder is at the root of the repo (beside src/, dist/, etc.)
-    // In production the app is packaged — cursors live in extraResources/mac.
-    // We try both locations.
-    const appPath = (event.sender as any).getOwnerBrowserWindow?.()?.webContents?.getURL?.() ?? "";
+// Mapping : style+size → relative path in mac/mac/
+const STYLE_PATHS: Record<string, string> = {
+    "modern_shadow_normal": "1. Sierra and newer/2. With Shadow/1. Normal",
+    "modern_shadow_large": "1. Sierra and newer/2. With Shadow/2. Large",
+    "modern_shadow_xl": "1. Sierra and newer/2. With Shadow/3. XtraLarge",
+    "modern_no_shadow_normal": "1. Sierra and newer/1. No Shadow/1. Normal",
+    "modern_no_shadow_large": "1. Sierra and newer/1. No Shadow/2. Large",
+    "modern_no_shadow_xl": "1. Sierra and newer/1. No Shadow/3. XtraLarge",
+    "classic_shadow_normal": "2. El Capitan and before/2. With Shadow/1. Normal",
+    "classic_shadow_large": "2. El Capitan and before/2. With Shadow/2. Large",
+    "classic_shadow_xl": "2. El Capitan and before/2. With Shadow/3. XtraLarge",
+    "classic_no_shadow_normal": "2. El Capitan and before/1. No Shadow/1. Normal",
+    "classic_no_shadow_large": "2. El Capitan and before/1. No Shadow/2. Large",
+    "classic_no_shadow_xl": "2. El Capitan and before/1. No Shadow/3. XtraLarge",
+};
 
-    // Try: next to app.asar / app resources
-    const resPath = path.join(process.resourcesPath ?? "", "mac", "mac");
-    if (fs.existsSync(resPath)) return resPath;
-
-    // Dev fallback: walk up from __dirname to find the repo root
-    let dir = __dirname;
-    for (let i = 0; i < 8; i++) {
-        const candidate = path.join(dir, "mac", "mac");
-        if (fs.existsSync(candidate)) return candidate;
-        dir = path.dirname(dir);
+function findMacDir(): string | null {
+    // Look for mac/ directory next to executable or in resources
+    const candidates = [
+        path.join(path.dirname(process.execPath), "mac", "mac"),
+        path.join(process.resourcesPath, "mac", "mac"),
+        path.join(process.resourcesPath, "..", "mac", "mac"),
+        // Dev mode
+        path.join(__dirname, "..", "..", "..", "..", "mac", "mac"),
+        path.join(__dirname, "..", "..", "..", "mac", "mac"),
+    ];
+    for (const c of candidates) {
+        if (fs.existsSync(c)) return c;
     }
-
-    throw new Error("Cannot locate mac cursor folder");
+    return null;
 }
 
-export async function applyCursors(event: any, style: string, size: string): Promise<{ ok: boolean; error?: string }> {
+// Save current cursors before modifying them
+let savedCursors: Record<string, string> | null = null;
+
+function backupCurrentCursors(): void {
+    if (savedCursors) return; // Already saved
+    savedCursors = {};
+
     try {
-        const styleSegs = STYLE_FOLDER[style] ?? STYLE_FOLDER.modern_shadow;
-        const sizeFolder = SIZE_FOLDER[size] ?? SIZE_FOLDER.normal;
-        const baseDir = path.join(getCursorsDir(event), ...styleSegs, sizeFolder);
-
-        if (!fs.existsSync(baseDir)) {
-            return { ok: false, error: `Cursor folder not found: ${baseDir}` };
+        for (const regKey of Object.keys(CURSOR_MAP)) {
+            try {
+                const result = execSync(
+                    `reg query "HKCU\\Control Panel\\Cursors" /v ${regKey}`,
+                    {
+                        encoding: "utf-8",
+                        windowsHide: true,
+                        stdio: ["ignore", "pipe", "ignore"]
+                    }
+                );
+                // Parse output : "    Arrow   REG_EXPAND_SZ    C:\...\aero_arrow.cur"
+                const match = result.match(/REG_(?:EXPAND_)?SZ\s+(.+)/);
+                if (match) {
+                    savedCursors[regKey] = match[1].trim();
+                } else {
+                    savedCursors[regKey] = "";
+                }
+            } catch {
+                savedCursors[regKey] = "";
+            }
         }
+        // Save to disk in case the process crashes
+        const backupPath = path.join(CURSOR_DIR, "backup.json");
+        fs.mkdirSync(CURSOR_DIR, { recursive: true });
+        fs.writeFileSync(backupPath, JSON.stringify(savedCursors, null, 2));
+    } catch (e) {
+        console.error("[CursorMacOS] Error backup:", e);
+    }
+}
 
-        // Build one PowerShell script that sets all cursors at once
-        const regLines: string[] = [];
-        for (const [regName, fileName] of Object.entries(CURSOR_MAP)) {
-            const curFile = path.join(baseDir, `${fileName}.cur`);
-            if (!fs.existsSync(curFile)) continue;
-            // Escape backslashes for PowerShell string
-            const escaped = curFile.replace(/\\/g, "\\\\");
-            regLines.push(
-                `Set-ItemProperty -Path "HKCU:\\Control Panel\\Cursors" -Name "${regName}" -Value "${escaped}"`
-            );
+function loadBackup(): Record<string, string> | null {
+    try {
+        const backupPath = path.join(CURSOR_DIR, "backup.json");
+        if (fs.existsSync(backupPath)) {
+            return JSON.parse(fs.readFileSync(backupPath, "utf-8"));
         }
+    } catch { }
+    return null;
+}
 
-        // Set cursor scheme name
-        regLines.push(`Set-ItemProperty -Path "HKCU:\\Control Panel\\Cursors" -Name "" -Value "macOS"`);
-
-        // Broadcast WM_SETTINGCHANGE so Windows refreshes cursors immediately without reboot
-        regLines.push(`
-$signature = @'
-[DllImport("user32.dll", SetLastError=true)]
-public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+function refreshSystemCursors(): void {
+    // Call SystemParametersInfo via PowerShell to force Windows to reload cursors
+    try {
+        const psCode = `
+$Code = @'
+using System;
+using System.Runtime.InteropServices;
+public class CursorHelper {
+    [DllImport("user32.dll")]
+    public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
+}
 '@
-$type = Add-Type -MemberDefinition $signature -Name "NativeMethods" -Namespace "Win32" -PassThru
-[UIntPtr]$result = [UIntPtr]::Zero
-$type::SendMessageTimeout([IntPtr]0xffff, 0x001A, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$result)
-`);
-
-        const script = regLines.join("\n");
-        execSync(`powershell -NoProfile -NonInteractive -Command "${script.replace(/"/g, '\\"')}"`, {
-            windowsHide: true,
-            timeout: 10000,
+Add-Type -TypeDefinition $Code
+[CursorHelper]::SystemParametersInfo(0x0057, 0, [IntPtr]::Zero, 3)
+`;
+        const b64 = Buffer.from(psCode, "utf16le").toString("base64");
+        execSync(`powershell -NoProfile -EncodedCommand ${b64}`, {
+            encoding: "utf-8",
+            windowsHide: true
         });
+    } catch (e) {
+        console.error("[CursorMacOS] Error refresh cursors:", e);
+    }
+}
 
+export async function applyCursors(_: any, style: string, size: string): Promise<{ ok: boolean; error?: string; }> {
+    try {
+        const macDir = findMacDir();
+        console.log("[CursorMacOS] macDir found:", macDir);
+        if (!macDir) {
+            return { ok: false, error: "mac/ directory not found. Place it next to the Guncord executable." };
+        }
+
+        const key = `${style}_${size}`;
+        const relativePath = STYLE_PATHS[key];
+        if (!relativePath) {
+            return { ok: false, error: `Unknown style/size: ${key}` };
+        }
+
+        const sourceDir = path.join(macDir, relativePath);
+        if (!fs.existsSync(sourceDir)) {
+            return { ok: false, error: `Source directory not found: ${sourceDir}` };
+        }
+
+        // 1. Current cursors backup
+        backupCurrentCursors();
+
+        // 2. Create destination folder and copy files
+        fs.mkdirSync(CURSOR_DIR, { recursive: true });
+
+        for (const [regKey, fileName] of Object.entries(CURSOR_MAP)) {
+            const src = path.join(sourceDir, fileName);
+            const dst = path.join(CURSOR_DIR, fileName);
+
+            if (fs.existsSync(src)) {
+                fs.copyFileSync(src, dst);
+
+                // 3. Modify registry
+                try {
+                    execSync(
+                        `reg add "HKCU\\Control Panel\\Cursors" /v ${regKey} /t REG_EXPAND_SZ /d "${dst}" /f`,
+                        {
+                            encoding: "utf-8",
+                            windowsHide: true,
+                            stdio: "ignore"
+                        }
+                    );
+                } catch (e) {
+                    console.error(`[CursorMacOS] Error reg for ${regKey}:`, e);
+                }
+            }
+        }
+
+        // 4. Set scheme name
+        try {
+            execSync(
+                "reg add \"HKCU\\Control Panel\\Cursors\" /ve /t REG_SZ /d \"Guncord macOS\" /f",
+                {
+                    encoding: "utf-8",
+                    windowsHide: true,
+                    stdio: "ignore"
+                }
+            );
+        } catch { }
+
+        // 5. Refresh system cursors
+        refreshSystemCursors();
+
+        console.log(`[CursorMacOS] Cursors applied: ${style}/${size}`);
         return { ok: true };
     } catch (e: any) {
+        console.error("[CursorMacOS] Error applyCursors:", e);
         return { ok: false, error: e?.message ?? String(e) };
     }
 }
 
-export async function restoreCursors(_event: any): Promise<{ ok: boolean; error?: string }> {
+export async function restoreCursors(_: any): Promise<{ ok: boolean; error?: string; }> {
     try {
-        // Clearing all cursor values makes Windows fall back to the system default
-        const regNames = Object.keys(CURSOR_MAP);
-        const clearLines = regNames.map(name =>
-            `Set-ItemProperty -Path "HKCU:\\Control Panel\\Cursors" -Name "${name}" -Value ""`
-        );
-        clearLines.push(`Set-ItemProperty -Path "HKCU:\\Control Panel\\Cursors" -Name "" -Value ""`);
-        clearLines.push(`
-$signature = @'
-[DllImport("user32.dll", SetLastError=true)]
-public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
-'@
-$type = Add-Type -MemberDefinition $signature -Name "NativeMethods2" -Namespace "Win32" -PassThru
-[UIntPtr]$result = [UIntPtr]::Zero
-$type::SendMessageTimeout([IntPtr]0xffff, 0x001A, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$result)
-`);
-        const script = clearLines.join("\n");
-        execSync(`powershell -NoProfile -NonInteractive -Command "${script.replace(/"/g, '\\"')}"`, {
-            windowsHide: true,
-            timeout: 10000,
-        });
+        // Load backup (either from memory or from disk)
+        const backup = savedCursors || loadBackup();
 
+        if (backup) {
+            for (const [regKey, value] of Object.entries(backup)) {
+                try {
+                    if (value) {
+                        execSync(
+                            `reg add "HKCU\\Control Panel\\Cursors" /v ${regKey} /t REG_EXPAND_SZ /d "${value}" /f`,
+                            {
+                                encoding: "utf-8",
+                                windowsHide: true,
+                                stdio: "ignore"
+                            }
+                        );
+                    } else {
+                        // Empty value = delete entry (return to Windows default)
+                        execSync(
+                            `reg add "HKCU\\Control Panel\\Cursors" /v ${regKey} /t REG_EXPAND_SZ /d "" /f`,
+                            {
+                                encoding: "utf-8",
+                                windowsHide: true,
+                                stdio: "ignore"
+                            }
+                        );
+                    }
+                } catch { }
+            }
+            // Set default scheme name back
+            try {
+                execSync(
+                    "reg add \"HKCU\\Control Panel\\Cursors\" /ve /t REG_SZ /d \"Windows Default\" /f",
+                    { encoding: "utf-8", windowsHide: true, stdio: "ignore" }
+                );
+            } catch { }
+        } else {
+            // No backup — we set everything to empty (Windows default cursors)
+            for (const regKey of Object.keys(CURSOR_MAP)) {
+                try {
+                    execSync(
+                        `reg add "HKCU\\Control Panel\\Cursors" /v ${regKey} /t REG_EXPAND_SZ /d "" /f`,
+                        {
+                            encoding: "utf-8",
+                            windowsHide: true,
+                            stdio: "ignore"
+                        }
+                    );
+                } catch { }
+            }
+            try {
+                execSync(
+                    "reg add \"HKCU\\Control Panel\\Cursors\" /ve /t REG_SZ /d \"Windows Default\" /f",
+                    {
+                        encoding: "utf-8",
+                        windowsHide: true,
+                        stdio: "ignore"
+                    }
+                );
+            } catch { }
+        }
+
+        // Refresh
+        refreshSystemCursors();
+
+        // Clear backup
+        savedCursors = null;
+        try {
+            const backupPath = path.join(CURSOR_DIR, "backup.json");
+            if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath);
+        } catch { }
+
+        console.log("[CursorMacOS] Default Windows cursors restored");
         return { ok: true };
     } catch (e: any) {
+        console.error("[CursorMacOS] Error restoreCursors:", e);
         return { ok: false, error: e?.message ?? String(e) };
     }
 }

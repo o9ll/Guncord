@@ -114,7 +114,7 @@ function makeContextCallback(
 
 export default definePlugin({
     name: "ViewRawVariant",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Copy/View raw content of any message, channel, or guild, but show in the right click menu.",
     tags: ["Appearance", "Customisation", "Chat", "Organisation", "Servers"],
     authors: [Devs.KingFish, Devs.Ven, Devs.rad, Devs.ImLvna, Devs.Kyuuhachi],

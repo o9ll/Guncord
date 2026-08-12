@@ -24,7 +24,6 @@ import definePlugin, { OptionType, type Plugin, StartAt } from "@utils/types";
 import { React, SettingsRouter, TabBar, TextInput, useState } from "@webpack/common";
 import { tPlugin as t } from "@api/pluginI18n";
 
-
 type SortBy = "impact" | "cpu" | "memory" | "calls" | "resources";
 type ClientDiagnosticsTab = "diagnostics" | "analysis" | "monitor" | "guide";
 type SettingKey = "sortBy" | "showDisabled" | "showApiPlugins" | "refreshMs";
@@ -1232,7 +1231,6 @@ function SurfaceBreakdown({ row }: { row: DiagnosticsRow; }) {
         return <BaseText size="sm" color="text-muted">{t("No measured surface yet.")}</BaseText>;
     }
 
-
     return (
         <div className={cl("surface-list")}>
             {surfaces.map(([surface, stat]) => (
@@ -1309,7 +1307,6 @@ function ImpactDetails({ item }: { item: ImpactAnalysisItem; }) {
         </div>
     );
 }
-
 
 function ImpactAnalysisCard({ item, selected, onSelect }: { item: ImpactAnalysisItem; selected: boolean; onSelect(): void; }) {
     const { row } = item;
@@ -1704,7 +1701,6 @@ function ClientDiagnosticsPage() {
         </div>
     );
 }
-
 
 const DiagnosticsPageWrapped = ErrorBoundary.wrap(ClientDiagnosticsPage, { noop: true });
 

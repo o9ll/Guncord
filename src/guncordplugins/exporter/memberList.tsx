@@ -1,0 +1,182 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import "./memberList.css";
+
+import ErrorBoundary from "@components/ErrorBoundary";
+import { ChannelToolbarButton } from "@api/HeaderBar";
+import { getUniqueUsername } from "@utils/discord";
+import { classNameFactory } from "@utils/css";
+import type { GuildMember, User } from "@vencord/discord-types";
+import { findStoreLazy } from "@webpack";
+import { ChannelStore, GuildMemberStore, GuildRoleStore, GuildStore, SelectedChannelStore, SelectedGuildStore, showToast, Toasts, Tooltip, UserStore } from "@webpack/common";
+
+import { settings } from "./settings";
+
+const cl = classNameFactory("vc-memberlist-export-");
+
+const ChannelMemberStore = findStoreLazy("ChannelMemberStore") as {
+    getProps(guildId?: string, channelId?: string): { groups: { count: number; id: string; }[]; };
+};
+
+function serializeUser(user: User, member?: GuildMember) {
+    return {
+        id: user.id,
+        username: user.username,
+        globalName: user.globalName ?? null,
+        displayName: getUniqueUsername(user),
+        nickname: member?.nick ?? null,
+        bot: user.bot ?? false,
+        roles: member?.roles ?? []
+    };
+}
+
+function escapeCsvValue(value: string | number | boolean | null) {
+    const stringValue = String(value ?? "");
+    return `"${stringValue.replace(/"/g, '""')}"`;
+}
+
+function toCsv(rows: Array<Record<string, string | number | boolean | null>>) {
+    if (!rows.length) return "";
+
+    const headers = Object.keys(rows[0]);
+    const lines = [headers.map(escapeCsvValue).join(",")];
+
+    for (const row of rows) {
+        lines.push(headers.map(header => escapeCsvValue(row[header] ?? null)).join(","));
+    }
+
+    return lines.join("\n");
+}
+
+export function downloadMemberList() {
+    const guildId = SelectedGuildStore.getGuildId();
+    const channelId = SelectedChannelStore.getChannelId();
+    const guild = guildId ? GuildStore.getGuild(guildId) : null;
+    const channel = channelId ? ChannelStore.getChannel(channelId) : null;
+
+    if (!guildId || !guild || !channelId || !channel) {
+        showToast("Failed to export member list: missing guild or channel context.", Toasts.Type.FAILURE);
+        return;
+    }
+
+    const groups = ChannelMemberStore.getProps(guildId, channelId)?.groups ?? [];
+    const roleIds = new Set(groups.map(group => group.id).filter(id => id && id !== "online" && id !== "offline"));
+
+    const memberIds = GuildMemberStore.getMemberIds(guildId);
+    const members = memberIds
+        .map(userId => {
+            const member = GuildMemberStore.getMember(guildId, userId);
+            const user = UserStore.getUser(userId);
+            return member && user ? { member, user } : null;
+        })
+        .filter((entry): entry is { member: GuildMember; user: User; } => entry != null);
+
+    const visibleMembers = members.filter(({ member }) => {
+        if (roleIds.size === 0) return true;
+        return member.roles.some(roleId => roleIds.has(roleId));
+    });
+
+    const roles = Array.from(roleIds)
+        .map(roleId => {
+            const role = GuildRoleStore.getRole(guildId, roleId);
+            if (!role) return null;
+
+            return {
+                id: role.id,
+                name: role.name,
+                color: role.color,
+                colorString: role.colorString ?? null,
+                position: role.position,
+                members: visibleMembers
+                    .filter(({ member }) => member.roles.includes(roleId))
+                    .map(({ member, user }) => serializeUser(user, member))
+            };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry != null);
+
+    const exportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        guild: {
+            id: guild.id,
+            name: guild.name
+        },
+        channel: {
+            id: channel.id,
+            name: channel.name,
+            type: channel.type
+        },
+        memberCount: visibleMembers.length,
+        members: visibleMembers.map(({ member, user }) => serializeUser(user, member)),
+        roles
+    };
+
+    const safeChannelName = (channel.name || channel.id).replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "") || channel.id;
+    const memberRows = visibleMembers.map(({ member, user }) => {
+        const serialized = serializeUser(user, member);
+        return {
+            id: serialized.id,
+            username: serialized.username,
+            globalName: serialized.globalName,
+            displayName: serialized.displayName,
+            nickname: serialized.nickname,
+            bot: serialized.bot,
+            roles: serialized.roles.join("|")
+        };
+    });
+
+    const isCsv = settings.store.exportFormat === "csv";
+    const fileContents = isCsv
+        ? toCsv(memberRows)
+        : JSON.stringify(exportData, null, 2);
+    const blob = new Blob([fileContents], { type: isCsv ? "text/csv;charset=utf-8" : "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    a.href = url;
+    a.download = `member-list-${safeChannelName}-${channel.id}.${isCsv ? "csv" : "json"}`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast(`Exported ${visibleMembers.length} members to ${isCsv ? "CSV" : "JSON"}.`, Toasts.Type.SUCCESS);
+}
+
+function MemberListExportButton() {
+    return (
+        <Tooltip text={"Download member list as JSON"}>
+            {({ onMouseEnter, onMouseLeave }) => (
+                <div
+                    className={cl("button")}
+                    onMouseEnter={onMouseEnter}
+                    onMouseLeave={onMouseLeave}
+                >
+                    <svg width="18" height="18" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.29a1 1 0 1 1 1.4 1.41l-4 3.99a1 1 0 0 1-1.4 0l-4-3.99a1 1 0 0 1 1.4-1.41L11 12.59V4a1 1 0 0 1 1-1Zm-7 14a1 1 0 0 1 1 1v1h12v-1a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1Z" />
+                    </svg>
+                </div>
+            )}
+        </Tooltip>
+    );
+}
+
+export function MemberListToolbarButton() {
+    const guildId = SelectedGuildStore.getGuildId();
+    const channelId = SelectedChannelStore.getChannelId();
+    const channel = channelId ? ChannelStore.getChannel(channelId) : null;
+
+    if (!guildId || !channel?.guild_id) return null;
+
+    return (
+        <ChannelToolbarButton
+            icon={ErrorBoundary.wrap(() => <MemberListExportButton />, { noop: true }) as any}
+            tooltip={
+                `Download member list as ${settings.store.exportFormat.toUpperCase()}`
+            }
+            onClick={downloadMemberList}
+        />
+    );
+}

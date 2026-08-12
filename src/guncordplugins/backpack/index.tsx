@@ -9,7 +9,6 @@ import "./styles.css";
 import { BackpackedButtons, ChatBarButton, ChatBarButtonFactory, ChatBarButtonMap, ChatBarProps, notifyBackpackChange } from "@api/ChatButtons";
 import { DataStore } from "@api/index";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { ContextMenuApi,Menu, Popout, React, Tooltip, useEffect, useRef, useState } from "@webpack/common";
 
@@ -274,7 +273,7 @@ export default definePlugin({
     name: "Backpack",
     enabledByDefault: true,
     description: "Organize chat bar buttons into a backpack. Left-click to use packed buttons, right-click to pack/unpack buttons.",
-    authors: [EquicordDevs.nobody],
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["ChatInputButtonAPI"],
 
     chatBarButton: {

@@ -157,4 +157,3 @@ export function ImportLegacySettingsButton({ settings }: { settings: any; }) {
         </div>
     );
 }
-

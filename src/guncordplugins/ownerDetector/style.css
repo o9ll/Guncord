@@ -1,0 +1,10 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-owner-yellow {
+    color: #fbbf24 !important; /* highlight detected VC owner username */
+    font-weight: bold !important; /* highlight detected VC owner username */
+}

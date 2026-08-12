@@ -746,6 +746,7 @@ const GhostUserAreaButton: UserAreaButtonFactory = ({ iconForeground, hideToolti
 
 export default definePlugin({
     name: "GhostClient",
+    enabledByDefault: false,
     description: "Discord ghost accounts — left-click to enable/disable, right-click to configure.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     userAreaButton: { icon: GhostIcon, render: GhostUserAreaButton, priority: 1 },

@@ -14,11 +14,9 @@ import plugins from "~plugins";
 import { t } from "../autoTranslateGuncord";
 
 // ── Stores ─────────────────────────────────────────────────────────────────────
-
 const UserStore = findStoreLazy("UserStore");
 
 // ── Settings ───────────────────────────────────────────────────────────────────
-
 const settings = definePluginSettings({
     active: {
         type: OptionType.BOOLEAN,
@@ -95,12 +93,10 @@ const settings = definePluginSettings({
 });
 
 // ── Internal state ──────────────────────────────────────────────────────────────
-
 const lastReplied = new Map<string, number>();
 let sequentialIndex = 0;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
 function getMessages(): string[] {
     const raw = settings.store.messages ?? "";
     return raw.split("|").map((m: string) => m.trim()).filter(Boolean);
@@ -173,7 +169,6 @@ async function sendAutoReply(message: any) {
 }
 
 // ── Icon ──────────────────────────────────────────────────────────────────────
-
 function AutoReplyIcon({ active, height = 20, width = 20, className }: {
     active?: boolean; height?: string | number; width?: string | number; className?: string;
 }) {
@@ -198,7 +193,6 @@ function AutoReplyIcon({ active, height = 20, width = 20, className }: {
 }
 
 // ── Chat Bar Button ────────────────────────────────────────────────────────────
-
 const AutoReplyButton: ChatBarButtonFactory = ({ isMainChat }) => {
     const [active, setActive] = useState(settings.store.active);
 
@@ -230,10 +224,9 @@ const AutoReplyButton: ChatBarButtonFactory = ({ isMainChat }) => {
 };
 
 // ── Plugin ─────────────────────────────────────────────────────────────────────
-
 export default definePlugin({
     name: "AutoReply",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Automatically replies to received messages. Button in the text bar (next to VoiceDictation).",
     authors: [{ name: "User",
      id: 0n }],

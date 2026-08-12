@@ -713,7 +713,6 @@ function _onCurrentUserUpdate(event: any) {
     } catch { /* never throw inside a Flux handler */ }
 }
 
-
 loadDataSync();
 
 const HIDE_STYLE_ID = "cp-hide-during-load";
@@ -1033,11 +1032,11 @@ function formatNitroBadgeDesc(d: Date | string): string {
     if (!dateObj || isNaN(dateObj.getTime())) return "Subscriber since";
     const locale = getDiscordLocale().toLowerCase();
     const isFr = locale.startsWith("fr");
-    
+
     const day = dateObj.getDate().toString().padStart(2, "0");
     const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
     const yy = dateObj.getFullYear().toString().slice(-2);
-    
+
     if (isFr) {
         return `Abonné depuis ${day}/${month}/${yy}`;
     } else {
@@ -2136,7 +2135,7 @@ function CPDMNotice({ userId }: { userId: string; }) {
 
 export default definePlugin({
     name: "CustomProfile",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Visually customize your Discord profile (username, PFP, banner, badges, bio...) — persistent, only visible to you.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["HeaderBarAPI", "ContextMenuAPI"],

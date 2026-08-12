@@ -41,7 +41,7 @@ const original: Partial<Record<HookedMethod, (...a: any[]) => void>> = {};
 let recording = false;
 let hooked = false;
 let capturing = false; // Re-entry guard — prevents infinite recursion
-let errorCount = 0;    // Live error counter — shown in the button tooltip while recording
+let errorCount = 0; // Live error counter — shown in the button tooltip while recording
 
 // ── Flux breadcrumbs — context for "what happened right before the error" ─────
 // Recording only: wrap FluxDispatcher.dispatch to store the latest event types in

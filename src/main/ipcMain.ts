@@ -27,6 +27,15 @@ mkdirSync(USERPLUGINS_DIR, { recursive: true });
 
 registerCspIpcHandlers();
 
+import * as ghostNative from "../guncordplugins/ghostClient/native";
+(async () => {
+    try {
+        await (ghostNative as any).init(null);
+    } catch (e) {
+        console.warn("[Guncord] server pre-start failed:", e);
+    }
+})();
+
 export function ensureSafePath(basePath: string, path: string) {
     const normalizedBasePath = normalize(basePath + "/");
     const newPath = join(basePath, path);

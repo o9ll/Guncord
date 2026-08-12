@@ -42,8 +42,8 @@ export const settings = definePluginSettings({
         type: OptionType.SELECT,
         description: "Which order should pinned DMs be displayed in?",
         options: [
-            { label: "Most recent message", value: PinOrder.LastMessage, default: true },
-            { label: "Custom (right click channels to reorder)", value: PinOrder.Custom }
+            { label: "Most recent message", value: PinOrder.LastMessage },
+            { label: "Custom (right click channels to reorder)", value: PinOrder.Custom, default: true }
         ]
     },
     canCollapseDmSection: {

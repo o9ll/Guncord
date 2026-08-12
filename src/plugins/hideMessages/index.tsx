@@ -93,7 +93,7 @@ const settings = definePluginSettings({
     hidePopoverButton: {
         type: OptionType.BOOLEAN,
         description: "Hide the hide button in the message popover.",
-        default: false
+        default: true
     }
 });
 

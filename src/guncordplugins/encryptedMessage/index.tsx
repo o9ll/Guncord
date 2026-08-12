@@ -802,7 +802,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "EncryptedMessage",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "AES-256 end-to-end encryption for Discord. Share the same password with other users to communicate securely.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["ChatInputButtonAPI", "MessageEventsAPI", "MessageAccessoriesAPI"],
