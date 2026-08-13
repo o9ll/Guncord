@@ -29,11 +29,14 @@ function copyIfExists(src, dst) {
 
 // ── ffmpeg ──
 const ffmpegCandidates = [
+    path.join(rootDir, "static", "ffmpeg.exe"),
+    path.join(rootDir, "static", "bin", "ffmpeg.exe"),
     path.join(rootDir, "ffmpeg.exe"),
     path.join(process.env.LOCALAPPDATA || "", "ffmpeg", "bin", "ffmpeg.exe"),
     path.join(process.env.LOCALAPPDATA || "", "Microsoft", "WinGet", "Links", "ffmpeg.exe"),
     path.join(rootDir, "..", "..", "Dossier", "Joiner", "node_modules", "ffmpeg-static", "ffmpeg.exe"),
     path.join(rootDir, "..", "..", "guncord2", "dist", "guncord", "ffmpeg.exe"),
+    "C:\\Tools\\ffmpeg.exe",
     "C:\\ffmpeg\\bin\\ffmpeg.exe",
     "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
 ];
@@ -48,7 +51,7 @@ for (const c of ffmpegCandidates) {
     }
 }
 if (!foundFfmpeg) {
-    // Fallback : essayer ffmpeg du PATH
+    // Fallback: try ffmpeg from PATH
     try {
         const { execSync: exs } = await import('child_process');
         const ffmpegPath = exs('where ffmpeg', { encoding: 'utf8' }).trim().split('\n')[0];
@@ -60,7 +63,7 @@ if (!foundFfmpeg) {
         }
     } catch { }
 }
-if (!foundFfmpeg) console.warn("[collect] ⚠️ ffmpeg.exe NOT FOUND — le ghost account ne pourra pas streamer l'audio");
+if (!foundFfmpeg) console.warn("[collect] ⚠️ ffmpeg.exe NOT FOUND — ghost account won't be able to stream audio");
 
 // ── ffmpeg.dll ──
 for (const c of ffmpegCandidates) {
@@ -74,7 +77,10 @@ for (const c of ffmpegCandidates) {
 
 // ── yt-dlp ──
 const ytdlpCandidates = [
+    path.join(rootDir, "static", "yt-dlp.exe"),
+    path.join(rootDir, "static", "bin", "yt-dlp.exe"),
     path.join(rootDir, "yt-dlp.exe"),
+    "C:\\Tools\\yt-dlp.exe",
     "C:\\yt-dlp\\yt-dlp.exe",
     path.join(process.env.USERPROFILE || "", "Desktop", "yt-dlp.exe"),
 ];
@@ -89,7 +95,10 @@ if (!foundYt) console.warn("[collect] ⚠️ yt-dlp.exe NOT FOUND");
 
 // ── node.exe ──
 const nodeCandidates = [
+    path.join(rootDir, "static", "node.exe"),
+    path.join(rootDir, "static", "bin", "node.exe"),
     process.execPath,
+    "C:\\Tools\\node.exe",
     "C:\\nvm4w\\nodejs\\node.exe",
     "C:\\Program Files\\nodejs\\node.exe",
     "C:\\Program Files (x86)\\nodejs\\node.exe",
@@ -105,38 +114,56 @@ for (const c of nodeCandidates) {
 if (!foundNode) console.warn("[collect] ⚠️ node.exe NOT FOUND");
 
 // ── modules (patched discord_voice) ──
+const structuredModules = path.join(rootDir, "static", "modules");
 const desktopModules = path.join(process.env.USERPROFILE || "", "Desktop", "modules");
 const repoModules = path.join(rootDir, "static", "modules_override");
 const backupModules = path.join(rootDir, "static", "modules_backup_working_stereo");
 
-let patchedSrc = fs.existsSync(desktopModules) && fs.readdirSync(desktopModules).length > 0 ? desktopModules
-               : fs.existsSync(repoModules) && fs.readdirSync(repoModules).length > 0 ? repoModules
-               : fs.existsSync(backupModules) && fs.readdirSync(backupModules).length > 0 ? backupModules
-               : null;
+if (fs.existsSync(structuredModules)) {
+    console.log(`[collect] Copying pre-structured modules from ${structuredModules}...`);
+    fs.cpSync(structuredModules, path.join(distDir, "modules"), { recursive: true });
+    console.log("[collect] Structured modules copied");
+} else {
+    let patchedSrc = fs.existsSync(desktopModules) && fs.readdirSync(desktopModules).length > 0 ? desktopModules
+                   : fs.existsSync(repoModules) && fs.readdirSync(repoModules).length > 0 ? repoModules
+                   : fs.existsSync(backupModules) && fs.readdirSync(backupModules).length > 0 ? backupModules
+                   : null;
 
-if (patchedSrc) {
-    console.log(`[collect] Copying patched modules from ${patchedSrc}...`);
-    for (const voiceDir of ["discord_voice", "discord_voice-1", "discord_voice1"]) {
-        const voiceDst = path.join(distDir, "modules", voiceDir, "discord_voice");
-        fs.mkdirSync(voiceDst, { recursive: true });
-        for (const f of fs.readdirSync(patchedSrc)) {
-            if (f === "CHECKSUMS.sha256") continue;
-            const src = path.join(patchedSrc, f);
-            if (fs.statSync(src).isFile()) {
-                fs.copyFileSync(src, path.join(voiceDst, f));
+    if (patchedSrc) {
+        console.log(`[collect] Copying patched modules from ${patchedSrc}...`);
+        for (const voiceDir of ["discord_voice", "discord_voice-1", "discord_voice1"]) {
+            const voiceDst = path.join(distDir, "modules", voiceDir, "discord_voice");
+            fs.mkdirSync(voiceDst, { recursive: true });
+            for (const f of fs.readdirSync(patchedSrc)) {
+                if (f === "CHECKSUMS.sha256") continue;
+                const src = path.join(patchedSrc, f);
+                if (fs.statSync(src).isFile()) {
+                    fs.copyFileSync(src, path.join(voiceDst, f));
+                }
             }
         }
+        console.log("[collect] Modules copied");
+    } else {
+        console.warn("[collect] ⚠️ Patched modules NOT FOUND");
     }
-    console.log("[collect] ✅ Modules copied");
-} else {
-    console.warn("[collect] ⚠️ Patched modules NOT FOUND — voice features may not work");
 }
 
 // ── multi-instance-icons ──
+const miiStatic = path.join(rootDir, "static", "multi-instance");
 const lolllSrc = path.join(process.env.USERPROFILE || "", "Desktop", "lolll");
 const outMIIcons = path.join(distDir, "multi-instance-icons");
 fs.mkdirSync(outMIIcons, { recursive: true });
-if (fs.existsSync(lolllSrc)) {
+if (fs.existsSync(miiStatic)) {
+    let copied = 0;
+    for (let i = 1; i <= 5; i++) {
+        const src = path.join(miiStatic, `${i}.ico`);
+        if (fs.existsSync(src)) {
+            fs.copyFileSync(src, path.join(outMIIcons, `${i}.ico`));
+            copied++;
+        }
+    }
+    console.log(`[collect] ${copied} multi-instance icons copied from static/multi-instance`);
+} else if (fs.existsSync(lolllSrc)) {
     let copied = 0;
     for (let i = 1; i <= 5; i++) {
         const src = path.join(lolllSrc, `${i}.ico`);
@@ -147,7 +174,7 @@ if (fs.existsSync(lolllSrc)) {
     }
     console.log(`[collect] ${copied} multi-instance icons copied from Desktop/lolll`);
 } else {
-    console.warn("[collect] ⚠️ Desktop/lolll NOT FOUND");
+    console.warn("[collect] ⚠️ static/multi-instance NOT FOUND");
 }
 
 // ── server : npm install complet puis copie ──
@@ -170,15 +197,17 @@ if (fs.existsSync(ghostServerSrc)) {
     if (copyIfExists(ghostServerSrc, ghostServerDst)) {
         console.log("[collect] server folder copied (with node_modules)");
 
-        // ── Copier ffmpeg.exe DANS server/ aussi ──
-        // server.js tourne avec __dirname = dist/desktop/server/
+        // ── Also copy ffmpeg.exe INTO server/ ──
+        // server.js runs with __dirname = dist/desktop/server/
         // It looks for ffmpeg at __dirname/../ffmpeg.exe (dist/desktop/ffmpeg.exe)
 
         try {
-            fs.copyFileSync(path.join(distDir, "ffmpeg.exe"), path.join(ghostServerDst, "ffmpeg.exe"));
-            console.log("[collect] ffmpeg.exe also copied to server/ (local fallback)");
+            if (ffmpegSrcPath && fs.existsSync(ffmpegSrcPath)) {
+                fs.copyFileSync(ffmpegSrcPath, path.join(ghostServerDst, "ffmpeg.exe"));
+                console.log("[collect] ffmpeg.exe also copied to server/ (local fallback)");
+            }
         } catch (e) {
-            console.warn("[collect] ⚠️ Impossible de copier ffmpeg dans server:", e.message);
+            console.warn("[collect] ⚠️ Could not copy ffmpeg to server:", e.message);
         }
     }
 } else {
