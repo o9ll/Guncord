@@ -164,7 +164,7 @@ const AutoCorrectChatBarButton: ChatBarButtonFactory = ({ type }) => {
 // ── Plugin ─────────────────────────────────────────────────────────────────────
 export default definePlugin({
     name: "AutoCorrect",
-    enabledByDefault: false,
+    enabledByDefault: true,
     description: "Automatically corrects spelling and grammar before sending. Requires a free Groq API key configured in GuncordAI.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     settings,

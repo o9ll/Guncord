@@ -4803,10 +4803,10 @@
         "No Modal Animation"
       ],
       "translationKeys": [],
-      "file": "\\src\\guncordplugins\\guncordHelper\\index.tsx"
+      "file": "\\src\\guncordplugins\\equicordHelper\\index.tsx"
     },
     {
-      "name": "GuncordToolbox",
+      "name": "EquicordToolbox",
       "descriptions": [
         "Show the plugins menu in the toolbox",
         "Adds a button next to the inbox button in the channel header that houses Guncord quick actions"
@@ -4815,7 +4815,7 @@
         "Show Plugin Menu"
       ],
       "translationKeys": [],
-      "file": "\\src\\guncordplugins\\guncordToolbox\\index.tsx"
+      "file": "\\src\\guncordplugins\\equicordToolbox\\index.tsx"
     },
     {
       "name": "EventLogs",
@@ -7788,7 +7788,7 @@
     "Enter the ID of the sound you want to play.",
     "Enter your Discord passcode",
     "Enter your new passcode",
-    "GuncordToolbox",
+    "EquicordToolbox",
     "Equissant",
     "Error : {error}",
     "Error saving logs",

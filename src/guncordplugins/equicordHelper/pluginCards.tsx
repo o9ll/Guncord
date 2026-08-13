@@ -14,20 +14,21 @@ import { AddonCard } from "@components/settings";
 import { ExcludedReasons, PluginDependencyList } from "@components/settings/tabs/plugins";
 import { PluginCard } from "@components/settings/tabs/plugins/PluginCard";
 import { TooltipContainer } from "@components/TooltipContainer";
-import { EQUIBOT_USER_ID } from "@utils/constants";
+import { EQUIBOT_USER_ID, GUNCORD_BOT_USER_ID } from "@utils/constants";
 import { isEquicordGuild, isEquicordSupport } from "@utils/misc";
 import { Message } from "@vencord/discord-types";
 import { showToast, Tooltip, useMemo } from "@webpack/common";
 import { JSX } from "react";
-
 import plugins, { ExcludedPlugins } from "~plugins";
 
 export function ChatPluginCard({ url, description }: { url: string, description: string; }) {
-    const pluginNameFromUrl = new URL(url).pathname.split("/")[2];
+    const pluginNameFromUrl = decodeURIComponent(new URL(url).pathname.split("/")[2]);
+    const pluginNameNoSpaces = pluginNameFromUrl?.toLowerCase().replace(/\s+/g, "");
 
-    const actualPluginName = Object.keys(plugins).find(name =>
-        name.toLowerCase() === pluginNameFromUrl?.toLowerCase()
-    );
+    const actualPluginName =
+        Object.keys(plugins).find(name => name.toLowerCase() === pluginNameFromUrl?.toLowerCase()) ??
+        Object.keys(plugins).find(name => name.toLowerCase() === pluginNameNoSpaces) ??
+        Object.keys(plugins).find(name => name.length > 3 && pluginNameNoSpaces?.startsWith(name.toLowerCase()));
 
     const pluginName = actualPluginName || pluginNameFromUrl;
 
@@ -80,7 +81,7 @@ export function ChatPluginCard({ url, description }: { url: string, description:
 
     if (required) {
         const tooltipText = p.required || !dependents.length
-            ? "This plugin is required for Guncord to function."
+            ? "This plugin is required for Equicord to function."
             : <PluginDependencyList deps={dependents} />;
 
         return (
@@ -128,6 +129,8 @@ export const PluginCards = ErrorBoundary.wrap(function PluginCards({ message }: 
         if (!pluginName || seenPlugins.has(pluginName)) return;
         seenPlugins.add(pluginName);
 
+        if (embed.rawDescription.startsWith("A fork that has")) embed.rawDescription = "";
+
         pluginCards.push(
             <ChatPluginCard
                 key={embed.url}
@@ -137,7 +140,7 @@ export const PluginCards = ErrorBoundary.wrap(function PluginCards({ message }: 
         );
     });
 
-    // Process components
+    // Process components — Equibot (equicord.org / vencord.dev)
     const components = (message.components?.[0] as any)?.components;
     if (message.author.id === EQUIBOT_USER_ID && components?.length >= 4) {
         const description = components[1]?.content;
@@ -158,6 +161,38 @@ export const PluginCards = ErrorBoundary.wrap(function PluginCards({ message }: 
                         description={description}
                     />
                 );
+            }
+        }
+    }
+
+    // Process components — GunCord Bot (domain, Component v2 Container format)
+    if (message.author.id === GUNCORD_BOT_USER_ID) {
+        const containerComponents = (message.components?.[0] as any)?.components;
+        if (containerComponents?.length >= 3) {
+            // Find ActionRow by presence of nested components (same pattern as Equibot check above)
+            const actionRow = containerComponents.find((c: any) => c?.components);
+            const pluginUrl = actionRow?.components?.[0]?.url;
+            if (pluginUrl?.startsWith("https://vencord.dev/plugins/")) {
+                const pluginNameFromUrl = decodeURIComponent(new URL(pluginUrl).pathname.split("/")[2]);
+                const pluginNameNoSpaces = pluginNameFromUrl?.toLowerCase().replace(/\s+/g, "");
+                const actualPluginName =
+                    Object.keys(plugins).find(name => name.toLowerCase() === pluginNameFromUrl?.toLowerCase()) ??
+                    Object.keys(plugins).find(name => name.toLowerCase() === pluginNameNoSpaces) ??
+                    Object.keys(plugins).find(name => name.length > 3 && pluginNameNoSpaces?.startsWith(name.toLowerCase()));
+                const pluginName = actualPluginName || pluginNameFromUrl;
+                // Description is in the second TextDisplay (index 1)
+                const description = containerComponents[1]?.content ?? "";
+
+                if (pluginName && !seenPlugins.has(pluginName)) {
+                    seenPlugins.add(pluginName);
+                    pluginCards.push(
+                        <ChatPluginCard
+                            key={pluginUrl}
+                            url={pluginUrl}
+                            description={description}
+                        />
+                    );
+                }
             }
         }
     }

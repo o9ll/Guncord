@@ -11,23 +11,24 @@ import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings, migratePluginToSettings, Settings } from "@api/Settings";
 import { ShieldIcon, WarningIcon } from "@components/Icons";
 import customRPC from "@plugins/customRPC";
-import { GUILD_ID, SUPPORT_CHANNEL_ID, SUPPORT_CHANNEL_IDS, VC_SUPPORT_CHANNEL_IDS } from "@utils/constants";
+import { Devs, EquicordDevs, GUILD_ID, SUPPORT_CHANNEL_ID, SUPPORT_CHANNEL_IDS, VC_SUPPORT_CHANNEL_IDS } from "@utils/constants";
 import { isAnyPluginDev } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { StandingState } from "@vencord/discord-types/enums";
-import { findByCodeLazy } from "@webpack";
-import { Alerts, ApplicationCommandIndexStore, NavigationRouter, React, SafetyHubStore, SettingsRouter, UserGuildSettingsStore, UserStore, useStateFromStores, VoiceStateStore } from "@webpack/common";
+import { findByCodeLazy, findStoreLazy } from "@webpack";
+import { Alerts, ApplicationCommandIndexStore, NavigationRouter, React, SettingsRouter, UserGuildSettingsStore, UserStore, useStateFromStores, VoiceStateStore } from "@webpack/common";
 import { ComponentType } from "react";
 
 import { PluginButtons } from "./pluginButtons";
 import { PluginCards } from "./pluginCards";
 
-migratePluginToSettings(true, "GuncordHelper", "NoBulletPoints", "noBulletPoints");
-migratePluginToSettings(true, "GuncordHelper", "NoModalAnimation", "noModalAnimation");
-migratePluginToSettings(true, "GuncordHelper", "GuildTagSettings", "disableAdoptTagPrompt");
+migratePluginToSettings(true, "EquicordHelper", "NoBulletPoints", "noBulletPoints");
+migratePluginToSettings(true, "EquicordHelper", "NoModalAnimation", "noModalAnimation");
+migratePluginToSettings(true, "EquicordHelper", "GuildTagSettings", "disableAdoptTagPrompt");
 
 let clicked = false;
 
+const SafetyHubStore = findStoreLazy("SafetyHubStore");
 const fetchSafetyHub: () => Promise<void> = findByCodeLazy("SAFETY_HUB_FETCH_START");
 
 const StandingConfig: Record<number, { label: string; hoverColor: string; Icon: ComponentType<any>; }> = {
@@ -141,11 +142,22 @@ const settings = definePluginSettings({
 });
 
 export default definePlugin({
-    name: "GuncordHelper",
-    description: "Main Guncord plugin: fixes Discord crashes, adds UI options and manages internal commands.",
-    authors: [{ name: ".zp", id: 1020801845490356245n }],
+    name: "EquicordHelper",
+    description: "Used to provide support, fix discord caused crashes, and other misc features.",
     tags: ["Appearance", "Commands", "Utility"],
     dependencies: ["CommandsAPI", "HeaderBarAPI", "MessageAccessoriesAPI"],
+    authors: [
+        Devs.thororen,
+        EquicordDevs.nyx,
+        EquicordDevs.Naibuu,
+        EquicordDevs.keircn,
+        EquicordDevs.SerStars,
+        EquicordDevs.mart,
+        EquicordDevs.omaw,
+        Devs.Samwich,
+        Devs.AutumnVN,
+        EquicordDevs.auggeeo
+    ],
     required: true,
     settings,
     headerBarButton: {
@@ -366,9 +378,9 @@ export default definePlugin({
             if (!selfId || isAnyPluginDev(selfId)) return;
             if (VC_SUPPORT_CHANNEL_IDS.includes(channelId) && !clicked) {
                 return Alerts.show({
-                    title: "Guncord Support Channel Warning",
-                    body: "Before asking for help. Check updates and if this issue is actually caused by Guncord!",
-                    confirmText: "Guncord Support",
+                    title: "Vencord Support Channel Warning",
+                    body: "Before asking for help. Check updates and if this issue is actually caused by Equicord!",
+                    confirmText: "Equicord Support",
                     onConfirm() {
                         NavigationRouter.transitionTo(`/channels/${GUILD_ID}/${SUPPORT_CHANNEL_ID}`);
                     },

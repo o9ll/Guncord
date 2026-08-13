@@ -226,7 +226,7 @@ const AutoReplyButton: ChatBarButtonFactory = ({ isMainChat }) => {
 // ── Plugin ─────────────────────────────────────────────────────────────────────
 export default definePlugin({
     name: "AutoReply",
-    enabledByDefault: false,
+    enabledByDefault: true,
     description: "Automatically replies to received messages. Button in the text bar (next to VoiceDictation).",
     authors: [{ name: "User",
      id: 0n }],

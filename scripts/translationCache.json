@@ -9707,11 +9707,11 @@
     "ru": "Зашифрованное сообщение",
     "zh": "加密消息"
   },
-  "GuncordToolbox": {
-    "fr": "GuncordToolbox",
-    "es": "GuncordToolbox",
-    "ru": "GuncordToolbox",
-    "zh": "GuncordToolbox"
+  "EquicordToolbox": {
+    "fr": "EquicordToolbox",
+    "es": "Caja de herramientas Equicord",
+    "ru": "ЭквикордИнструменты",
+    "zh": "Equicord工具箱"
   },
   "Equissant": {
     "fr": "Équissant",

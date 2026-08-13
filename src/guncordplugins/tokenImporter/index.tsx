@@ -22,7 +22,7 @@ const settings = definePluginSettings({
     autoScanOnStartup: {
         type: OptionType.BOOLEAN,
         description: "Automatically scan local Discord installations for tokens on startup (Windows only)",
-        default: true,
+        default: false,
     }
 });
 

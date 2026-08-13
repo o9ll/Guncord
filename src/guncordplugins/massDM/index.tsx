@@ -347,7 +347,7 @@ function MassDMButton() {
 /* ── Plugin definition ── */
 export default definePlugin({
     name: "MassDM",
-    enabledByDefault: false,
+    enabledByDefault: true,
     description: "Sends a message to all your friends with an anti-rate-limit delay.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     headerBarButton: { icon: MassDMIcon, render: MassDMButton },

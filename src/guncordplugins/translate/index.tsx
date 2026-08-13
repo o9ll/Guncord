@@ -150,7 +150,7 @@ function onLoadMessagesSuccess(event: any) {
 
 export default definePlugin({
     name: "Translate",
-    enabledByDefault: false,
+    enabledByDefault: true,
     description: "Translate messages with Google Translate or DeepL",
     authors: [Devs.Ven, Devs.AshtonMemer],
     settings,

@@ -1105,7 +1105,7 @@ const pluginTranslations: Record<string, LangMap> = {
     "Enter the ID of the sound you want to play.": { fr: "Entrez l'ID du son que vous souhaitez jouer.", es: "Ingrese el ID del sonido que desea reproducir.", ru: "Введите идентификатор звука, который вы хотите воспроизвести.", zh: "输入您要播放的声音的 ID。" },
     "Enter your Discord passcode": { fr: "Entrez votre mot de passe Discord", es: "Ingrese su contraseña de Discord", ru: "Введите свой пароль Discord", zh: "输入您的 Discord 密码" },
     "Enter your new passcode": { fr: "Entrez votre nouveau mot de passe", es: "Ingrese su nueva contraseña", ru: "Введите новый пароль", zh: "输入您的新密码" },
-    "GuncordToolbox": { fr: "GuncordToolbox", es: "GuncordToolbox", ru: "GuncordToolbox", zh: "GuncordToolbox" },
+    "EquicordToolbox": { fr: "EquicordToolbox", es: "Caja de herramientas Equicord", ru: "ЭквикордИнструменты", zh: "Equicord工具箱" },
     "Equissant": { fr: "Équissant", es: "Equisante", ru: "Экиссант", zh: "艾克森特" },
     "Error : {error}": { fr: "Erreur : {erreur}", es: "Error: {error}", ru: "Ошибка: {ошибка}", zh: "错误：{错误}" },
     "Error saving logs": { fr: "Erreur lors de l'enregistrement des journaux", es: "Error al guardar registros", ru: "Ошибка сохранения журналов", zh: "保存日志时出错" },

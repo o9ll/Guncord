@@ -334,7 +334,7 @@ const AutoResponderButton = () => {
 
 export default definePlugin({
     name: "AutoResponder",
-    enabledByDefault: false,
+    enabledByDefault: true,
     description: "Automatically reply to DMs using AI to match your writing style.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     settings,

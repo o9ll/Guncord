@@ -2135,7 +2135,7 @@ function CPDMNotice({ userId }: { userId: string; }) {
 
 export default definePlugin({
     name: "CustomProfile",
-    enabledByDefault: false,
+    enabledByDefault: true,
     description: "Visually customize your Discord profile (username, PFP, banner, badges, bio...) — persistent, only visible to you.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["HeaderBarAPI", "ContextMenuAPI"],

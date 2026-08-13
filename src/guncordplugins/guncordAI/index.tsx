@@ -752,7 +752,7 @@ function GuncordAINavButton({ selected, onClick }: { selected?: boolean; onClick
 
 export default definePlugin({
     name: "GuncordAI",
-    enabledByDefault: false,
+    enabledByDefault: true,
     description: "AI Chat (Groq) integrated in Discord. Replaces 'Shop' in the DM panel.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     settings,

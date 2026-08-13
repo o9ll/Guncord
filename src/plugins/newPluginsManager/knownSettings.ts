@@ -13,8 +13,6 @@ export type KnownPluginSettingsMap = Map<string, Set<string>>;
 export const KNOWN_PLUGINS_LEGACY_DATA_KEY = "NewPluginsManager_KnownPlugins";
 export const KNOWN_SETTINGS_DATA_KEY = "NewPluginsManager_KnownSettings";
 
-const NEVER_NEW = new Set(["GuncordToolbox"]);
-
 function getSettingsSetForPlugin(plugin: string): Set<string> {
     const settings = plugins[plugin]?.settings?.def || {};
     return new Set(Object.keys(settings).filter(setting => setting !== "enabled"));
@@ -51,7 +49,6 @@ export async function getNewSettings(): Promise<KnownPluginSettingsMap> {
     const map = getCurrentSettings(Object.keys(plugins));
     const knownSettings = await getKnownSettings();
     map.forEach((settings, plugin) => {
-        if (NEVER_NEW.has(plugin)) return map.delete(plugin);
         const filteredSettings = [...settings].filter(setting => !knownSettings.get(plugin)?.has(setting));
         if (!filteredSettings.length) return map.delete(plugin);
         map.set(plugin, new Set(filteredSettings));
@@ -67,7 +64,7 @@ export async function getKnownPlugins(): Promise<Set<string>> {
 export async function getNewPlugins(): Promise<Set<string>> {
     const currentPlugins = Object.keys(plugins);
     const knownPlugins = await getKnownPlugins();
-    return new Set(currentPlugins.filter(p => !NEVER_NEW.has(p) && !knownPlugins.has(p)));
+    return new Set(currentPlugins.filter(p => !knownPlugins.has(p)));
 }
 
 export async function writeKnownSettings() {
