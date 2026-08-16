@@ -191,13 +191,17 @@ if (!IS_REPORTER && settings.plugins && plugins) {
             continue;
         }
 
-        const shouldBeEnabled = Boolean(pluginDef?.required) || Boolean(pluginDef?.enabledByDefault);
-        if (shouldBeEnabled) {
+        const isRequired = Boolean(pluginDef?.required);
+        const isDefault = Boolean(pluginDef?.enabledByDefault);
+
+        if (isRequired) {
             if (!settings.plugins[pluginKey]) {
                 settings.plugins[pluginKey] = { enabled: true };
             } else {
                 settings.plugins[pluginKey].enabled = true;
             }
+        } else if (isDefault && settings.plugins[pluginKey] === undefined) {
+            settings.plugins[pluginKey] = { enabled: true };
         }
     }
 }
@@ -219,14 +223,15 @@ export const SettingsStore = new SettingsStoreClass(settings, {
                 FORCE_DISABLED_DEFAULT_PLUGIN_KEYS.has(pluginKey.toLowerCase())
                 || FORCE_DISABLED_DEFAULT_PLUGIN_KEYS.has(String(pluginDef?.name ?? "").toLowerCase());
 
-            const shouldBeEnabled = !forceOff && (IS_REPORTER || Boolean(pluginDef?.required) || Boolean(pluginDef?.enabledByDefault));
+            const isRequired = !forceOff && (IS_REPORTER || Boolean(pluginDef?.required));
+            const isDefault = !forceOff && (isRequired || Boolean(pluginDef?.enabledByDefault));
 
             if (!target[key]) {
-                return target[key] = { enabled: shouldBeEnabled };
+                return target[key] = { enabled: isDefault };
             }
 
-            // Force enabledByDefault plugins on, force disabled list off
-            if (shouldBeEnabled && target[key].enabled === false) {
+            // Force required plugins on, force disabled list off
+            if (isRequired && target[key].enabled === false) {
                 target[key].enabled = true;
             }
             if (forceOff) {

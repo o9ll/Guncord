@@ -1,12 +1,12 @@
-name: Release Guncord
+name: Build & Release Guncord
 
 on:
   push:
     tags:
-      - "v*"          # git tag v1.0.0 && git push --tags
+      - "v*"          # triggered on : git tag v1.0.0 && git push --tags
 
 permissions:
-  contents: write
+  contents: write    # necessary to create the GitHub Release
 
 jobs:
   build:
@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build standalone
+      - name: Build Guncord renderer (standalone)
         run: pnpm buildStandalone
 
       - name: Build & Package Electron
@@ -44,26 +44,42 @@ jobs:
       - name: Package guncord-dist.zip
         shell: pwsh
         run: |
+          # guncord-dist.zip — structure expected by the installer (Program.cs EnsureDistAsync):
+          # the root of the zip = _distDir (%LOCALAPPDATA%\Guncord\dist\)
+          # => patcher.js MUST be in the root directory, not in a subfolder dist\desktop\
           $staging = "guncord-dist-staging"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
+
+          # Compiled JS files: we copy the CONTENT of dist\desktop\ at the root of staging
+          # (patcher.js, renderer.js, preload.js, etc. directement accessibles)
           if (Test-Path "dist\desktop") {
             Copy-Item "dist\desktop\*" "$staging\" -Recurse -Force
           } elseif (Test-Path "dist") {
+            # Fallback: old structure
             Copy-Item "dist\*" "$staging\" -Recurse -Force
           }
+
+          # server (voice/stream server)
           if (Test-Path "server") {
             Copy-Item "server" "$staging\server" -Recurse
           }
+
+          # Static assets from release/guncord-dist (ffmpeg.dll, modules, mac/, multi-instance-icons/, etc.)
           if (Test-Path "release\guncord-dist") {
             Copy-Item "release\guncord-dist\*" "$staging\" -Recurse -Force
           }
+
+          # Entry-point files
           foreach ($f in @("guncord-index.js", "guncord-preload.js")) {
             if (Test-Path $f) { Copy-Item $f "$staging\" }
           }
+
+          # Sanity check: patcher.js must be in the root directory
           if (-not (Test-Path "$staging\patcher.js")) {
-            Write-Error "BUILD ERROR: patcher.js absent de la racine du staging — l'installeur ne pourra pas fonctionner."
+            Write-Error "BUILD ERROR: patcher.js If missing from the root of the staging environment, the installer will not be able to function."
             exit 1
           }
+
           Compress-Archive -Path "$staging\*" -DestinationPath "guncord-dist.zip" -Force
           Write-Host "guncord-dist.zip created ($($(Get-Item guncord-dist.zip).Length / 1MB) MB)"
 

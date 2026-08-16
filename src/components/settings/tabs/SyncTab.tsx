@@ -192,8 +192,8 @@ function CustomProfileSyncToggle() {
                 onChange={handleToggle}
                 title={t("Sync")}
                 description={isEnabled
-                    ? t("Your custom profile is synced. Other users can see your profile, and you can see theirs.")
-                    : t("Enable to share your custom profile with other users and see their profiles.")}
+                    ? t("Your custom profile is synced. Other Guncord users can see your profile, and you can see theirs.")
+                    : t("Enable to share your custom profile with other Guncord users and see their profiles.")}
                 disabled={busy}
             />
 
@@ -236,11 +236,11 @@ function CloudIntegrationSection() {
         <>
             <Heading className={Margins.top16}>{t("Cloud Integration")}</Heading>
             <Paragraph className={Margins.bottom16}>
-                {t("Cloud integration allows you to sync your settings across multiple devices and Discord installations. Your data is securely stored and can be easily restored at any time.")}
+                {t("Guncord's cloud integration allows you to sync your settings across multiple devices and Discord installations. Your data is securely stored and can be easily restored at any time.")}
             </Paragraph>
 
             <Notice.Info className={Margins.bottom16}>
-                {t("We use our own Cloud backend with enhanced features.")}
+                {t("We use our own Guncord Cloud backend with enhanced features.")}
                 {" "}
                 {t("View our privacy policy to see what we store and how we use your data.")}
             </Notice.Info>
@@ -311,7 +311,7 @@ function CloudIntegrationSection() {
 
             <Heading className={Margins.top20}>{t("Settings Sync")}</Heading>
             <Paragraph className={Margins.bottom16}>
-                {t("Synchronize your settings to the cloud. This makes it easy to keep your configuration consistent across multiple devices without manual import/export.")}
+                {t("Synchronize your Guncord settings to the cloud. This makes it easy to keep your configuration consistent across multiple devices without manual import/export.")}
             </Paragraph>
 
             <FormSwitch

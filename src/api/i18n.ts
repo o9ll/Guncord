@@ -189,7 +189,7 @@ const translations: Record<string, Partial<Record<Language, string>>> = {
     "Enable Online Themes": { fr: "Activer les thèmes en ligne", es: "Habilitar temas en línea", ru: "Включить онлайн темы", zh: "启用在线主题" },
     "Toggle online theme loading. When disabled, all online themes will be turned off and you won't be able to add new ones.": { fr: "Activer le chargement des thèmes en ligne.", es: "Alternar la carga de temas en línea.", ru: "Переключить загрузку онлайн-тем.", zh: "切换在线主题加载。" },
     "Looking for themes? Check out": { fr: "Vous cherchez des thèmes ? Consultez", es: "¿Buscas temas? Echa un vistazo a", ru: "Ищете темы? Загляните в", zh: "寻找主题？查看" },
-    "GunCord Themes": { fr: "Thèmes GunCord", es: "Temas GunCord", ru: "Темы GunCord", zh: "GunCord 主题" },
+    "Guncord Themes": { fr: "Thèmes Guncord", es: "Temas Guncord", ru: "Темы Guncord", zh: "Guncord 主题" },
     "or search on": { fr: "ou cherchez sur", es: "o busca en", ru: "или ищите на", zh: "或在...搜索" },
     "When downloading from BetterDiscord, click \"Download\" and place the .theme.css file into your themes folder.": { fr: "Lors du téléchargement depuis BetterDiscord...", es: "Al descargar desde BetterDiscord...", ru: "При загрузке с BetterDiscord нажмите «Download»...", zh: "从 BetterDiscord 下载时..." },
     "Installed Themes": { fr: "Thèmes installés", es: "Temas instalados", ru: "Установленные темы", zh: "已安装的主题" },

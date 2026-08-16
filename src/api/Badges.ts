@@ -138,4 +138,3 @@ export interface BadgeUserArgs {
     userId: string;
     guildId: string;
 }
-

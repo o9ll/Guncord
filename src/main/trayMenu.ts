@@ -126,4 +126,3 @@ function createGuncordMenuItems(): MenuItemConstructorOptions[] {
 export function patchTrayMenu(): void {
     // No longer patching tray menu — Guncord manages its own tray in patcher.ts
 }
-

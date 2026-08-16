@@ -19,6 +19,7 @@ import { changes, checkForUpdates, rebuild, update, UpdateLogger } from "@utils/
 import { React, useState } from "@webpack/common";
 import { Toasts } from "@webpack/common";
 import { t } from "@api/i18n";
+
 // Local version from package.json (injected during build)
 declare const VERSION: string;
 
@@ -108,7 +109,7 @@ function UpdaterTab() {
                     <div>
                         <Span size="sm" color="text-subtle">{t("Website")}</Span>
                         <div>
-                            <Link href="https://github.com/o9ll/Guncord" style={{ fontSize: 13 }}>
+                            <Link href={`https://github.com/o9ll/Guncord`} style={{ fontSize: 13 }}>
                                 Guncord
                             </Link>
                         </div>

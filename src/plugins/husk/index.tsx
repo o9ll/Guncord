@@ -1,5 +1,3 @@
-/* eslint-disable simple-header/header */
-
 /*
  * Guncord, a modification for Discord's desktop app
  * Copyright (c) 2026 o9

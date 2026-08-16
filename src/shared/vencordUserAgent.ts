@@ -12,4 +12,3 @@ export { gitHash, gitRemote };
 export const gitHashShort = gitHash.slice(0, 7);
 export const VENCORD_USER_AGENT = `Guncord/${gitHash}${gitRemote ? ` (https://github.com/${gitRemote})` : ""}`;
 export const VENCORD_USER_AGENT_HASHLESS = `Guncord${gitRemote ? ` (https://github.com/${gitRemote})` : ""}`;
-

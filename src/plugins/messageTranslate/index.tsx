@@ -6,7 +6,7 @@
 
 import "./styles.css";
 
-import { TranslateIcon } from "@guncordplugins/translate/TranslateIcon";
+import { TranslateIcon } from "@plugins/translate/TranslateIcon";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin from "@utils/types";

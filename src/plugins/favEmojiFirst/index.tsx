@@ -1099,9 +1099,9 @@ const messageSendListener = (_channelId: string, messageObj: { content: string; 
 
 export default definePlugin({
     name: "FavoriteEmojiFirst",
+    description: "Puts your favorite emoji first in the emoji autocomplete and also has emoji alias.",
     authors: [Devs.Aria, Devs.Ven, EquicordDevs.justjxke],
     tags: ["Emotes", "Customisation"],
-    description: "Puts your favorite emoji first in the emoji autocomplete and also has emoji alias.",
     dependencies: ["MessagePopoverAPI"],
     settings,
     contextMenus: {

@@ -222,16 +222,20 @@ const BADGE_IPC_CHANNELS = [
     "DISCORD_BADGE_COUNT",
     "VCD_SET_BADGE_COUNT"
 ];
+
 const NOTIFICATION_IPC_CHANNELS = [
     "DISCORD_NOTIFICATION",
     "SEND_NOTIFICATION",
     "DISPATCH_NOTIFICATION",
     "FLASH_FRAME"
 ];
+
 function registerNotificationIpc(win: BrowserWindow): () => void {
     if (win.isDestroyed()) return () => {};
+
     const wc = win.webContents as any;
     const cleanups: Array<() => void> = [];
+
     // ── Badge count handler ──────────────────────────────────────────────────
     const handleBadge = (_event: any, count?: number) => {
         if (win.isDestroyed()) return;
@@ -243,6 +247,7 @@ function registerNotificationIpc(win: BrowserWindow): () => void {
             }
         } catch { }
     };
+
     // ── Notification handler ─────────────────────────────────────────────────
     const handleNotification = (_event: any) => {
         if (win.isDestroyed()) return;
@@ -285,6 +290,7 @@ function registerNotificationIpc(win: BrowserWindow): () => void {
             cleanups.push(() => ipcMain.removeListener(channel, guardedNotif));
         }
     }
+
     return () => { for (const fn of cleanups) fn(); };
 }
 

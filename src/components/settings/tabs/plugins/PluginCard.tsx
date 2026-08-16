@@ -35,7 +35,6 @@ export function removeEmojis(text: string): string {
 
 const logger = new Logger("PluginCard");
 const cl = classNameFactory("vc-plugins-");
-
 interface PluginCardProps extends React.HTMLProps<HTMLDivElement> {
     plugin: Plugin;
     disabled?: boolean;
@@ -53,6 +52,7 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
     function doToggleEnabled() {
         const wasEnabled = isEnabled();
 
+        // If we're enabling a plugin, make sure all deps are enabled recursively.
         if (!wasEnabled) {
             const { restartNeeded, failures } = startDependenciesRecursive(plugin);
 
@@ -302,4 +302,3 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
             } />
     );
 }
-

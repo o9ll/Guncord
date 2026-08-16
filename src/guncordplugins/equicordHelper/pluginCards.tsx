@@ -172,7 +172,7 @@ export const PluginCards = ErrorBoundary.wrap(function PluginCards({ message }: 
             // Find ActionRow by presence of nested components (same pattern as Equibot check above)
             const actionRow = containerComponents.find((c: any) => c?.components);
             const pluginUrl = actionRow?.components?.[0]?.url;
-            if (pluginUrl?.startsWith("https://vencord.dev/plugins/")) {
+            if (pluginUrl?.startsWith(`https://equicord.org/plugins/`)) {
                 const pluginNameFromUrl = decodeURIComponent(new URL(pluginUrl).pathname.split("/")[2]);
                 const pluginNameNoSpaces = pluginNameFromUrl?.toLowerCase().replace(/\s+/g, "");
                 const actualPluginName =

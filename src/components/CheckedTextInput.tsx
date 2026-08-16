@@ -58,7 +58,9 @@ export function CheckedTextInput({ value: initialValue, onChange, validate, plac
 
     function handleChange(v: string) {
         setValue(v);
+
         const res = validate(v);
+
         if (res === true) {
             setError(void 0);
             onChange(v);

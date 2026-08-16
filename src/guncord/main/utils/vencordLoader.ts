@@ -11,7 +11,7 @@ import { USER_AGENT } from "../constants";
 import { VENCORD_DIR } from "../vencordDir";
 import { downloadFile, fetchie } from "./http";
 
-const API_BASE = "https://api.github.com";
+const API_BASE = `https://api.github.com`;
 
 export interface ReleaseData {
     name: string;
@@ -36,7 +36,7 @@ export async function githubGet(endpoint: string) {
 
 export async function downloadVencordAsar() {
     await downloadFile(
-        "https://github.com/o9ll/Guncord/releases/latest/download/desktop.asar",
+        `https://github.com/o9ll/Guncord/releases/latest/download/desktop.asar`,
         VENCORD_DIR,
         {},
         { retryOnNetworkError: true }

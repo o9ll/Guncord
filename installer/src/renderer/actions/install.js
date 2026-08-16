@@ -16,7 +16,7 @@ const INJECT_SHIM_PROGRESS = 98;
 const RESTART_DISCORD_PROGRESS = 100;
 
 
-const RELEASE_API = "https://api.github.com/repos/o9ll/Guncord/releases/latest";
+const RELEASE_API = `https://api.github.com/repos/o9ll/Guncord/releases/latest`;
 const DIST_ZIP = "guncord-dist.zip";
 const distDir = path.join(process.env.LOCALAPPDATA, "Guncord", "dist");
 

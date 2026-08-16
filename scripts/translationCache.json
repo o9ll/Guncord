@@ -16061,11 +16061,11 @@
     "ru": "WebRichPresence (arRPC)",
     "zh": "WebRichPresence (arRPC)"
   },
-  "Youtube in GunCord": {
-    "fr": "Youtube dans GunCord",
-    "es": "Youtube en GunCord",
-    "ru": "Youtube в GunCord",
-    "zh": "GunCord 中的 YouTube"
+  "Youtube in Guncord": {
+    "fr": "Youtube dans Guncord",
+    "es": "Youtube en Guncord",
+    "ru": "Youtube в Guncord",
+    "zh": "Guncord 中的 YouTube"
   },
   "${user.globalName || user.username} saved successfully!": {
     "fr": "${user.globalName || user.username} enregistré avec succès !",

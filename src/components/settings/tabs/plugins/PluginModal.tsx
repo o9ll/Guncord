@@ -281,4 +281,3 @@ export function openResetDefaultsModal(reset: () => void) {
         </ConfirmModal>
     ));
 }
-

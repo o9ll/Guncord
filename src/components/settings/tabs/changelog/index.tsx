@@ -689,4 +689,3 @@ function ChangelogTab() {
 }
 
 export default wrapTab(ChangelogTab, "Changelog");
-

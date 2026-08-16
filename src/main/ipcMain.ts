@@ -1431,7 +1431,7 @@ ipcMain.handle(IpcEvents.RELAUNCH_APP, async (event) => {
     app.exit(0);
 });
 
-const OFFICIAL_UPDATE_URL = "https://github.com/o9ll/Guncord/releases/latest/download/Guncord-Installer.exe";
+const OFFICIAL_UPDATE_URL = `https://github.com/o9ll/Guncord/releases/latest/download/Guncord-Installer.exe`;
 
 ipcMain.handle(IpcEvents.GUNCORD_DOWNLOAD_AND_RUN, async (event, url: string) => {
     if (!validateSender(event)) throw new Error("Unauthorized IPC invocation");

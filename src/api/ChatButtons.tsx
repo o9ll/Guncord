@@ -268,4 +268,3 @@ function CompactChatBarToggle({ chatBarProps }: any) {
         </Popout>
     );
 }
-

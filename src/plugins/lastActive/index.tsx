@@ -71,6 +71,7 @@ async function jumpToLastActive(channel: any, targetUserId?: string) {
         });
     }
 }
+
 const ChannelContextMenuPatch: NavContextMenuPatchCallback = (children, { channel }) => {
     children.push(
         <Menu.MenuItem
@@ -83,6 +84,7 @@ const ChannelContextMenuPatch: NavContextMenuPatchCallback = (children, { channe
         />
     );
 };
+
 const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { user, channel }) => {
     if (!channel || !user?.id) return;
 

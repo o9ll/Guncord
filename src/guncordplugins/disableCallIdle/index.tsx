@@ -4,15 +4,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "DisableCallIdle",
     enabledByDefault: true,
     description: "Disables automatically getting kicked from a DM voice call after 3 minutes and being moved to an AFK voice channel.",
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
     tags: ["Voice", "Utility"],
-    authors: [Devs.Nuckyz],
     patches: [
         {
             find: "this.idleTimeout.start(",

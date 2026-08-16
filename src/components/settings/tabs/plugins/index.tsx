@@ -881,4 +881,3 @@ export function PluginDependencyList({ deps }: { deps: string[]; }) {
         </>
     );
 }
-

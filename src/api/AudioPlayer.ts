@@ -184,11 +184,11 @@ export function createAudioPlayer(
     options: AudioPlayerOptions = {}
 ): AudioPlayerInterface {
     const internalPlayer: AudioPlayerInternal = new AudioPlayerConstructor(
-        options,
         audio,
         null,
         null,
-        "default"
+        "default",
+        options
     );
 
     return new AudioPlayerWrapper(internalPlayer);

@@ -1,3 +1,9 @@
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import definePlugin, { PluginNative } from "@utils/types";
 import { addServerListElement, removeServerListElement, ServerListRenderPosition } from "@api/ServerList";
 import { ErrorBoundary } from "@components/index";
@@ -82,6 +88,7 @@ export default definePlugin({
         FluxDispatcher.subscribe("GUILD_SELECT", handleDiscordNavigation);
         FluxDispatcher.subscribe("QXCHAT_TOGGLE", handleOtherPluginToggle);
         FluxDispatcher.subscribe("BROWSER_TOGGLE", handleOtherPluginToggle);
+        FluxDispatcher.subscribe("GUNCORDNEWS_TOGGLE", handleOtherPluginToggle);
     },
 
     stop() {
@@ -92,5 +99,6 @@ export default definePlugin({
         FluxDispatcher.unsubscribe("GUILD_SELECT", handleDiscordNavigation);
         FluxDispatcher.unsubscribe("QXCHAT_TOGGLE", handleOtherPluginToggle);
         FluxDispatcher.unsubscribe("BROWSER_TOGGLE", handleOtherPluginToggle);
+        FluxDispatcher.unsubscribe("GUNCORDNEWS_TOGGLE", handleOtherPluginToggle);
     }
 });

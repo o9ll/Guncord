@@ -21,7 +21,7 @@ import { SYM_LAZY_GET } from "@utils/lazy";
 import { Logger } from "@utils/Logger";
 import { relaunch } from "@utils/native";
 import definePlugin, { OptionType, type Plugin, type PluginNative } from "@utils/types";
-import { checkForUpdates, isNewer, maybePromptToUpdate, update as updateIllegalcord } from "@utils/updater";
+import { checkForUpdates, isNewer, maybePromptToUpdate, update as updateGuncord } from "@utils/updater";
 import type { RenderModalProps } from "@vencord/discord-types";
 import { filters, findBulk, proxyLazyWebpack } from "@webpack";
 import { Alerts, closeAllModals, closeModal, DraftType, ExpressionPickerStore, FluxDispatcher, Modal, NavigationRouter, openModal, React, SelectedChannelStore } from "@webpack/common";
@@ -29,8 +29,8 @@ import { Alerts, closeAllModals, closeModal, DraftType, ExpressionPickerStore, F
 import type * as NativeModule from "./native";
 
 const PLUGIN_NAME = "CrashHandlerEnhanced";
-const TELEGRAM_URL = "https://t.me/Illegalcord";
-const REINSTALL_URL = "https://github.com/ImHisako/Illegalcord";
+const TELEGRAM_URL = "https://github.com/o9ll";
+const REINSTALL_URL = "https://github.com/o9ll/Guncord";
 const cl = classNameFactory("vc-crash-handler-enhanced-");
 const logger = new Logger("CrashHandlerEnhanced");
 const SETTINGS_KEYS: Array<"lastCrashAt" | "crashCount"> = ["lastCrashAt", "crashCount"];
@@ -168,12 +168,12 @@ const settings = definePluginSettings({
     },
     showSupportPopup: {
         type: OptionType.BOOLEAN,
-        description: "Show the Illegalcord support popup after a crash.",
+        description: "Show the Guncord support popup after a crash.",
         default: true
     },
     promptForUpdates: {
         type: OptionType.BOOLEAN,
-        description: "Check for an Illegalcord update after the first crash in this session.",
+        description: "Check for an Guncord update after the first crash in this session.",
         default: true
     },
     logCrashesToDisk: {
@@ -510,7 +510,7 @@ function createPlaceholderReport(): CrashReport {
 
 function formatReport(report: CrashReport) {
     const parts = [
-        "Illegalcord crash report",
+        "Guncord crash report",
         `Time: ${new Date(report.timestamp).toISOString()}`,
         `Crash count: ${report.crashCount}`,
         `Recent crashes: ${report.recentCrashCount}`,
@@ -524,7 +524,7 @@ function formatReport(report: CrashReport) {
         `Disabled plugin: ${report.disabledPlugin}`,
         `Disable reason: ${report.disableReason}`,
         `Log file: ${report.logFilePath ?? "Not written yet"}`,
-        `Illegalcord version: ${VERSION}`,
+        `Guncord version: ${VERSION}`,
         `User agent: ${navigator.userAgent}`,
         `Enabled plugins: ${report.enabledPlugins.join(", ") || "None"}`,
     ];
@@ -557,11 +557,11 @@ function openExternal(url: string) {
     VencordNative.native.openExternal(url);
 }
 
-async function checkAndUpdateIllegalcord() {
+async function checkAndUpdateGuncord() {
     if (IS_WEB || IS_UPDATER_DISABLED) {
         showNotification({
             color: "#f23f43",
-            title: "Illegalcord updater is not available.",
+            title: "Guncord updater is not available.",
             body: "Use the installer or repository to update this build.",
             noPersist: true
         });
@@ -573,7 +573,7 @@ async function checkAndUpdateIllegalcord() {
 
         if (!outdated) {
             showNotification({
-                title: "Illegalcord is already up to date.",
+                title: "Guncord is already up to date.",
                 body: "No updates were found.",
                 noPersist: true
             });
@@ -583,27 +583,27 @@ async function checkAndUpdateIllegalcord() {
         if (isNewer) {
             showNotification({
                 color: "#f23f43",
-                title: "Illegalcord cannot update automatically.",
+                title: "Guncord cannot update automatically.",
                 body: "Your local copy has newer commits than the remote.",
                 noPersist: true
             });
             return;
         }
 
-        if (!await updateIllegalcord()) return;
+        if (!await updateGuncord()) return;
 
         Alerts.show({
-            title: "Illegalcord updated.",
+            title: "Guncord updated.",
             body: "Restart the client to apply the update.",
             confirmText: "Restart now",
             cancelText: "Later",
             onConfirm: relaunch
         });
     } catch (err) {
-        logger.error("Failed to update Illegalcord from the crash popup.", err);
+        logger.error("Failed to update Guncord from the crash popup.", err);
         showNotification({
             color: "#f23f43",
-            title: "Illegalcord update failed.",
+            title: "Guncord update failed.",
             body: "Try the Updater settings tab or reinstall from the repository.",
             noPersist: true
         });
@@ -831,7 +831,7 @@ function handleCrash(boundary: CrashBoundary, errorState: CrashErrorState) {
         try {
             if (settings.store.promptForUpdates && !hasPromptedForUpdate) {
                 hasPromptedForUpdate = true;
-                maybePromptToUpdate("Illegalcord just caught a crash. If an update is available, it may fix the problem. Do you want to update now?", true);
+                maybePromptToUpdate("Guncord just caught a crash. If an update is available, it may fix the problem. Do you want to update now?", true);
             }
         } catch (err) {
             logger.debug("Failed to open the update prompt.", err);
@@ -849,7 +849,7 @@ function handleCrash(boundary: CrashBoundary, errorState: CrashErrorState) {
             try {
                 showNotification({
                     color: latestCrash.report.recovered ? "#43b581" : "#f23f43",
-                    title: latestCrash.report.recovered ? "Illegalcord recovered from the crash." : "Illegalcord recorded a crash.",
+                    title: latestCrash.report.recovered ? "Guncord recovered from the crash." : "Guncord recorded a crash.",
                     body: "Use the crash popup to inspect or copy the report.",
                     noPersist: true
                 });
@@ -959,11 +959,11 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
     const isLooping = report.recentCrashCount >= 3;
     const [isCheckingUpdate, setIsCheckingUpdate] = React.useState(false);
     const recoveredText = report.recovered
-        ? "Illegalcord recovered the screen, but the crash can happen again if the install or a plugin is broken."
-        : "Illegalcord could not confirm a clean recovery. Restart or reinstall the client before continuing.";
+        ? "Guncord recovered the screen, but the crash can happen again if the install or a plugin is broken."
+        : "Guncord could not confirm a clean recovery. Restart or reinstall the client before continuing.";
     const runUpdate = async () => {
         setIsCheckingUpdate(true);
-        await checkAndUpdateIllegalcord();
+        await checkAndUpdateGuncord();
         setIsCheckingUpdate(false);
     };
 
@@ -977,11 +977,11 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
                         <WarningIcon height={28} width={28} />
                     </div>
                     <BaseText tag="span" size="lg" weight="semibold" className={cl("title")}>
-                        Illegalcord caught a crash
+                        Guncord caught a crash
                     </BaseText>
                 </div>
             )}
-            subtitle="Try reinstalling Illegalcord and check the Telegram group if the problem keeps happening."
+            subtitle="Try reinstalling Guncord and check the Telegram group if the problem keeps happening."
         >
             <div className={cl("modal")}>
                 <div className={cl("content")}>
@@ -997,7 +997,7 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
                     <div className={cl("actions")}>
                         <section className={cl("action")}>
                             <div className={cl("action-copy")}>
-                                <BaseText size="md" weight="semibold">Reinstall Illegalcord</BaseText>
+                                <BaseText size="md" weight="semibold">Reinstall Guncord</BaseText>
                                 <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
                                     A clean reinstall fixes broken builds, missing files, and outdated patches.
                                 </BaseText>
@@ -1010,7 +1010,7 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
 
                         <section className={cl("action")}>
                             <div className={cl("action-copy")}>
-                                <BaseText size="md" weight="semibold">Update Illegalcord</BaseText>
+                                <BaseText size="md" weight="semibold">Update Guncord</BaseText>
                                 <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
                                     Check for updates and install them without opening the settings updater.
                                 </BaseText>
@@ -1169,7 +1169,7 @@ const SafeCrashHandlerSettings = ErrorBoundary.wrap(CrashHandlerSettings, { noop
 
 export default definePlugin({
     name: "CrashHandlerEnhanced",
-    description: "Adds Illegalcord crash recovery, support guidance, and a copyable crash report.",
+    description: "Adds Guncord crash recovery, support guidance, and a copyable crash report.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     tags: ["Utility", "Developers"],
     required: true,

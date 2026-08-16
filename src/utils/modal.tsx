@@ -21,6 +21,7 @@ import type { ComponentType, PropsWithChildren, ReactNode, Ref } from "react";
 
 import { LazyComponent } from "./react";
 
+/** @deprecated Migrate to new Modals */
 export const enum ModalSize {
     SMALL = "small",
     MEDIUM = "medium",

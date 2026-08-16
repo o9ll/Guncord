@@ -11,7 +11,7 @@ const getJSON = phin.defaults({
 
 /* eslint-disable no-console */
 export default async function () {
-    const downloadUrl = "https://api.github.com/repos/o9ll/Guncord/releases/latest";
+    const downloadUrl = `https://api.github.com/repos/o9ll/Guncord/releases/latest`;
     console.info(`Guncord Installer ${version}`);
 
     try {

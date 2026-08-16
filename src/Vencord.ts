@@ -311,4 +311,3 @@ document.addEventListener("DOMContentLoaded", () => {
         createAndAppendStyle("vencord-native-titlebar-style", coreStyleRootNode).textContent = "[class*=titleBar]{display: none!important}";
     }
 }, { once: true });
-

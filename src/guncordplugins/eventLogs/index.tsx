@@ -995,8 +995,8 @@ function subscribeToEvents() {
         if (changed) scheduleFlush();
     });
 
-    sub("LOGOUT", () => { pushLog({ type: "user_disconnect", content: t("Déconnexion du account"), authorName: "System" }); });
     // Capture logout/disconnect (partial because plugin stops on total disconnect)
+    sub("LOGOUT", () => { pushLog({ type: "user_disconnect", content: t("Log out of account"), authorName: "System" }); });
 }
 
 export default definePlugin({

@@ -86,6 +86,7 @@ export default definePlugin({
         FluxDispatcher.subscribe("GUILD_SELECT", handleDiscordNavigation);
         FluxDispatcher.subscribe("YOUTUBE_TOGGLE", handleOtherPluginToggle);
         FluxDispatcher.subscribe("BROWSER_TOGGLE", handleOtherPluginToggle);
+        FluxDispatcher.subscribe("GUNCORDNEWS_TOGGLE", handleOtherPluginToggle);
     },
 
     stop() {
@@ -96,5 +97,6 @@ export default definePlugin({
         FluxDispatcher.unsubscribe("GUILD_SELECT", handleDiscordNavigation);
         FluxDispatcher.unsubscribe("YOUTUBE_TOGGLE", handleOtherPluginToggle);
         FluxDispatcher.unsubscribe("BROWSER_TOGGLE", handleOtherPluginToggle);
+        FluxDispatcher.unsubscribe("GUNCORDNEWS_TOGGLE", handleOtherPluginToggle);
     }
 });

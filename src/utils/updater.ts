@@ -71,4 +71,3 @@ export async function maybePromptToUpdate(confirmMessage: string, checkForDev = 
         alert("Update check failed. Check your connection or reinstall Guncord.");
     }
 }
-

@@ -665,7 +665,7 @@ function renderTabs() {
     tabsContainer.appendChild(newTabBtn);
 
     // Keep the native-side URL allowlist in sync so that did-frame-navigate events
-    // from non-browser iframes (YouTube, etc.) are ignored.
+    // from non-browser iframes (GuncordNews, YouTube, etc.) are ignored.
     try {
         const s = new Set<string>();
         for (const t of tabs) {

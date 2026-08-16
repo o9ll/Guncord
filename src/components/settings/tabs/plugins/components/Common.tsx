@@ -86,4 +86,3 @@ export function SettingsSection({ tag: Tag = "div", name, description, error, in
         </Tag>
     );
 }
-

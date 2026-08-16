@@ -147,7 +147,7 @@ export const globPlugins = kind => ({
         });
 
         build.onLoad({ filter, namespace: "import-plugins" }, async () => {
-            const pluginDirs = ["plugins/_api", "plugins/_core", "plugins", "userplugins", "guncordplugins", "guncordplugins/_api"];
+            const pluginDirs = ["plugins/_api", "plugins/_core", "plugins", "guncordplugins/_api", "guncordplugins", "userplugins"];
             
             let blacklist = [];
             try {

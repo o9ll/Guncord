@@ -113,6 +113,7 @@ function registerSubCommands(cmd: VencordCommand, plugin: string) {
     cmd.options?.forEach(o => {
         if (o.type !== ApplicationCommandOptionType.SUB_COMMAND)
             throw new Error("When specifying sub-command options, all options must be sub-commands.");
+
         const subCmd = {
             ...cmd,
             ...o,

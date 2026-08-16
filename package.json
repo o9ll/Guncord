@@ -1,16 +1,16 @@
 {
     "name": "guncord",
     "private": "true",
-    "version": "1.1.1",
-    "description": "Everything Discord doesn't build, we create",
+    "version": "1.1.2",
+    "description": "The other cutest Discord client mod",
     "main": "dist/js/main.js",
-    "homepage": "https://github.com/o9ll/Guncord",
+    "homepage": "https://github.com/o9ll/Guncord#readme",
     "bugs": {
         "url": "https://github.com/o9ll/Guncord/issues"
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/o9ll/Guncord.git"
+        "url": "git+https://github.com/o9ll/Guncord.git"
     },
     "license": "GPL-3.0-or-later",
     "author": "o9ll",
@@ -60,7 +60,7 @@
         "fflate": "^0.8.2",
         "fix-webm-duration": "^1.0.6",
         "gifenc": "github:mattdesl/gifenc#64842fca317b112a8590f8fef2bf3825da8f6fe3",
-        "gifuct-js": "^2.1.2",
+		"gifuct-js": "^2.1.2",
         "idb": "8.0.3",
         "jsqr": "1.4.0",
         "monaco-editor": "^0.54.0",
@@ -153,4 +153,3 @@
         "configFile": "electron-builder.config.cjs"
     }
 }
-

@@ -26,7 +26,7 @@ export function setup() {
 
     // Track iframe navigation in real-time bypassing cross-origin restrictions.
     // IMPORTANT: this listener fires for EVERY subframe in Discord, including
-    // YoutubePlayer, QxChat, etc.  We must only forward
+    // GuncordNews, YoutubePlayer, QxChat, etc.  We must only forward
     // navigations whose URL matches a tab that belongs to the PrivateBrowser.
     // The renderer registers the active browser-tab URLs via
     // window.__privateBrowserFrameUrls (a Set-like object).

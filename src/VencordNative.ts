@@ -39,6 +39,7 @@ export default {
         getThemesList: () => invoke<Array<{ fileName: string; content: string; }>>(IpcEvents.GET_THEMES_LIST),
         getThemeData: (fileName: string) => invoke<string | undefined>(IpcEvents.GET_THEME_DATA, fileName),
         getSystemValues: () => invoke<Record<string, string>>(IpcEvents.GET_THEME_SYSTEM_VALUES),
+
         openFolder: () => invoke<void>(IpcEvents.OPEN_THEMES_FOLDER),
     },
 
@@ -54,6 +55,7 @@ export default {
         get: () => sendSync<Settings>(IpcEvents.GET_SETTINGS),
         set: (settings: Settings, pathToNotify?: string) => invoke<void>(IpcEvents.SET_SETTINGS, settings, pathToNotify),
         getSettingsDir: () => invoke<string>(IpcEvents.GET_SETTINGS_DIR),
+
         openFolder: () => invoke<void>(IpcEvents.OPEN_SETTINGS_FOLDER),
     },
 
@@ -64,9 +66,11 @@ export default {
         addChangeListener(cb: (newCss: string) => void) {
             ipcRenderer.on(IpcEvents.QUICK_CSS_UPDATE, (_, css) => cb(css));
         },
+
         addThemeChangeListener(cb: () => void) {
             ipcRenderer.on(IpcEvents.THEME_UPDATE, () => cb());
         },
+
         openFile: () => invoke<void>(IpcEvents.OPEN_QUICKCSS),
         openEditor: () => invoke<void>(IpcEvents.OPEN_MONACO_EDITOR),
         getEditorTheme: () => sendSync<string>(IpcEvents.GET_MONACO_THEME),
@@ -78,11 +82,17 @@ export default {
         getRendererCss: () => invoke<string>(IpcEvents.GET_RENDERER_CSS),
         onRendererCssUpdate: (cb: (newCss: string) => void) => {
             if (!IS_DEV) return;
+
             ipcRenderer.on(IpcEvents.RENDERER_CSS_UPDATE, (_e, newCss: string) => cb(newCss));
         }
     },
 
     csp: {
+        /**
+         * Note: Only supports full explicit matches, not wildcards.
+         *
+         * If `*.example.com` is allowed, `isDomainAllowed("https://sub.example.com")` will return false.
+         */
         isDomainAllowed: (url: string, directives: string[]) => invoke<boolean>(IpcEvents.CSP_IS_DOMAIN_ALLOWED, url, directives),
         removeOverride: (url: string) => invoke<boolean>(IpcEvents.CSP_REMOVE_OVERRIDE, url),
         requestAddOverride: (url: string, directives: string[], callerName: string) =>
@@ -140,4 +150,3 @@ export default {
     setContentProtection: (enabled: boolean) =>
         invoke<boolean>(IpcEvents.SET_CONTENT_PROTECTION, enabled),
 };
-

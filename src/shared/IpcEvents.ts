@@ -94,6 +94,5 @@ export const enum IpcEvents {
     // Resizes the external window
     WORLD_BOMB_RESIZE_WINDOW = "WorldBombResizeWindow",
     // Updates global content protection
-    SET_CONTENT_PROTECTION = "GuncordSetContentProtection"
+    SET_CONTENT_PROTECTION = "GuncordSetContentProtection",
 }
-

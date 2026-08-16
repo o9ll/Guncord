@@ -96,16 +96,6 @@ export default {};
             contents: `export function tPlugin(key) { return key; }`
         }));
 
-        // ── src/api/illegalcord_base64.ts (~135 KB base64 image) ──────────
-        build.onResolve({ filter: /illegalcord_base64/ }, args => ({
-            path: args.path,
-            namespace: "ext-stub-illegalB64"
-        }));
-        build.onLoad({ filter: /.*/, namespace: "ext-stub-illegalB64" }, () => ({
-            loader: "js",
-            contents: `export const ILLEGALCORD_ICON_DATA_URI = "";`
-        }));
-
     }
 };
 

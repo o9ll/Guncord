@@ -3,7 +3,7 @@ import { API_BASE } from "./OAuth2";
 export async function getOwnPluginConfig(pluginName: string, token: string) {
     const response = await fetch(`${API_BASE}/api/sync/${encodeURIComponent(pluginName)}?token=${encodeURIComponent(token)}`);
     if (!response.ok) {
-        throw new Error("Failed to load plugin config");
+        throw new Error('Failed to load plugin config');
     }
     return response.json();
 }
@@ -13,9 +13,9 @@ export async function saveOwnPluginConfig(pluginName: string, token: string, set
     // always treats this config as public (visible via /public endpoint).
     const isPrivate = settings.private === true ? true : false;
     const response = await fetch(`${API_BASE}/api/sync/${encodeURIComponent(pluginName)}`, {
-        method: "PUT",
+        method: 'PUT',
         headers: {
-            "Content-Type": "application/json"
+            'Content-Type': 'application/json'
         },
         body: JSON.stringify({
             token,
@@ -25,7 +25,7 @@ export async function saveOwnPluginConfig(pluginName: string, token: string, set
     });
 
     if (!response.ok) {
-        throw new Error("Failed to save plugin config");
+        throw new Error('Failed to save plugin config');
     }
 
     return response.json();
