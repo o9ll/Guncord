@@ -8,16 +8,17 @@ import "./styles.css";
 
 import { addHeaderBarButton, HeaderBarButton, removeHeaderBarButton } from "@api/HeaderBar";
 import { ModalCloseButton,ModalContent, ModalHeader, ModalRoot, openModal } from "@utils/modal";
-import definePlugin from "@utils/types";
+import definePlugin, { OptionType } from "@utils/types";
 import { definePluginSettings } from "@api/Settings";
-import { findByProps } from "@webpack";
-import { ChannelStore, ContextMenuApi, FluxDispatcher, Forms, GuildStore, IconUtils, Menu, MessageStore, React, Select, SelectedChannelStore, showToast, Toasts, useCallback, useEffect, useMemo, UserStore, useState } from "@webpack/common";
+import { findByProps, findByPropsLazy } from "@webpack";
+import { ChannelStore, ContextMenuApi, FluxDispatcher, Forms, GuildStore, IconUtils, Menu, MessageStore, NavigationRouter, React, Select, SelectedChannelStore, showToast, Toasts, useCallback, useEffect, useMemo, UserStore, useState } from "@webpack/common";
 
 import { t, useTranslation } from "../autoTranslateGuncord";
 
 // Alternative navigation strategy via Dispatcher
 const navigateTo = (path: string) => {
     try {
+        if (NavigationRouter?.transitionTo) return NavigationRouter.transitionTo(path);
         const Router = findByProps("transitionTo") || findByProps("push");
         if (Router?.transitionTo) return Router.transitionTo(path);
         if (Router?.push) return Router.push(path);
@@ -32,8 +33,8 @@ const navigateTo = (path: string) => {
     }
 };
 
-const VoiceStateActionCreators = findByProps("selectVoiceChannel") || findByProps("connectToVoiceChannel");
-const ClipboardModule = findByProps("copy", "copyLink");
+const VoiceStateActionCreators = findByPropsLazy("selectVoiceChannel", "connectToVoiceChannel");
+const ClipboardModule = findByPropsLazy("copy", "copyLink");
 
 type LogType =
     | "message_delete" | "message_edit"
@@ -84,6 +85,12 @@ const NOTIF_TYPES = new Set(["ping", "friend_add", "friend_remove", "friend_requ
 const unreadLogEntries = new Set<LogEntry>();
 
 export const settings = definePluginSettings({
+    keepLogsOnRestart: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Don't Delete — Re-display all logged events after every app reload",
+        restartNeeded: false,
+    },
     persistentLogs: [] as Omit<LogEntry, "id" | "timeStr">[]
 });
 
@@ -103,13 +110,27 @@ function loadPersistLogs() {
     } catch { }
 }
 
+function safeSanitizeLogs(arr: any[]): any[] {
+    try {
+        return JSON.parse(JSON.stringify(arr, (k, v) => {
+            if (typeof v === "function" || typeof v === "symbol") return undefined;
+            if (typeof v === "bigint") return v.toString();
+            if (v instanceof Error) return { message: v.message };
+            if (v instanceof Node) return undefined;
+            return v;
+        }));
+    } catch {
+        return [];
+    }
+}
+
 function savePersistLogs() {
     try {
         const toSave = logs.filter(l => PERSISTENT_TYPES.has(l.type)).slice(0, 1000).map(l => {
             const { id, timeStr, ...rest } = l;
             return rest;
         });
-        settings.store.persistentLogs = toSave as any;
+        settings.store.persistentLogs = safeSanitizeLogs(toSave);
     } catch { }
 }
 
@@ -203,6 +224,53 @@ function pruneMsgCache() {
     }
 }
 
+/** Serializes Discord embeds into readable text + extracts embed images */
+function extractEmbedsData(embeds: any[]): { text: string; attachments: LogAttachment[]; } {
+    if (!Array.isArray(embeds) || embeds.length === 0) return { text: "", attachments: [] };
+    const parts: string[] = [];
+    const attachments: LogAttachment[] = [];
+
+    for (const embed of embeds) {
+        const lines: string[] = [];
+        if (embed.author?.name) lines.push(`[${embed.author.name}]`);
+        if (embed.title) lines.push(embed.url ? `${embed.title} (${embed.url})` : embed.title);
+        if (embed.description) lines.push(embed.description);
+        if (Array.isArray(embed.fields)) {
+            for (const f of embed.fields) {
+                if (f.name || f.value) lines.push(`${f.name ? f.name + ": " : ""}${f.value ?? ""}`);
+            }
+        }
+        if (embed.footer?.text) lines.push(`— ${embed.footer.text}`);
+        if (lines.length > 0) parts.push(lines.join(" | "));
+
+        // Extract the main image from the embed
+        const img = embed.image || embed.thumbnail;
+        if (img?.url) {
+            attachments.push({
+                url: img.url,
+                proxy_url: img.proxy_url || img.url,
+                width: img.width,
+                height: img.height,
+                filename: "embed-image",
+                content_type: "image/"
+            });
+        }
+        // Video embed
+        const vid = embed.video;
+        if (vid?.url) {
+            attachments.push({
+                url: vid.url,
+                proxy_url: vid.proxy_url || vid.url,
+                width: vid.width,
+                height: vid.height,
+                filename: "embed-video.mp4",
+                content_type: "video/mp4"
+            });
+        }
+    }
+    return { text: parts.join(" \n"), attachments };
+}
+
 function cacheMsg(msg: any) {
     if (!msg?.id) return;
     if (!isLoadingMessages) pruneMsgCache();
@@ -217,8 +285,18 @@ function cacheMsg(msg: any) {
         content_type: att.content_type || att.contentType || ""
     })).filter(att => !!att.url) : [];
 
+    // Support embeds (bot messages)
+    let content = msg.content ?? "";
+    if (Array.isArray(msg.embeds) && msg.embeds.length > 0) {
+        const { text: embedText, attachments: embedAtts } = extractEmbedsData(msg.embeds);
+        if (embedText) content = content ? `${content}\n${embedText}` : embedText;
+        for (const att of embedAtts) {
+            if (!attachments.find(a => a.url === att.url)) attachments.push(att);
+        }
+    }
+
     msgCache.set(msg.id, {
-        content: msg.content ?? "",
+        content,
         authorId: a.authorId ?? "",
         authorName: a.authorName,
         authorAvatar: a.authorAvatar,
@@ -273,33 +351,48 @@ function isImg(att: LogAttachment): boolean {
     return /\.(png|jpe?g|webp|gif|svg)($|\?)/i.test(url);
 }
 
-function LogRow({ e }: { e: LogEntry; }) {
+function isVideo(att: LogAttachment): boolean {
+    if (!att || !att.url) return false;
+    const type = (att.content_type || "").toLowerCase();
+    if (type.startsWith("video/")) return true;
+    const url = att.url.toLowerCase();
+    return /\.(mp4|webm|mov|avi|mkv|ogg)($|\?)/i.test(url);
+}
+
+function LogRow({ e, onClose }: { e: LogEntry; onClose?: () => void; }) {
     const cfg = CFG[e.type] ?? { label: e.type, color: "#747f8d" };
 
     const onDoubleClick = () => {
         if (!e.channelId) return;
 
         try {
-            // Pour le vocal
+            // For voice chat
             if (e.type.startsWith("voice_")) {
                 if (VoiceStateActionCreators?.selectVoiceChannel) {
                     VoiceStateActionCreators.selectVoiceChannel(e.channelId);
                 } else if (VoiceStateActionCreators?.connectToVoiceChannel) {
                     VoiceStateActionCreators.connectToVoiceChannel(e.guildId, e.channelId);
                 }
+                onClose?.();
                 return;
             }
 
-            // Pour les messages
+            // For messages and pings
             const guildId = e.guildId || "@me";
             const path = e.realId
                 ? `/channels/${guildId}/${e.channelId}/${e.realId}`
                 : `/channels/${guildId}/${e.channelId}`;
 
-            navigateTo(path);
+            if (NavigationRouter?.transitionTo) {
+                NavigationRouter.transitionTo(path);
+            } else {
+                navigateTo(path);
+            }
+            onClose?.();
         } catch (err) {
             console.error("Guncord Navigation Error:", err);
-            showToast(t("Navigation failed"), Toasts.Type.FAILURE);
+            navigateTo(e.realId ? `/channels/${e.guildId || "@me"}/${e.channelId}/${e.realId}` : `/channels/${e.guildId || "@me"}/${e.channelId}`);
+            onClose?.();
         }
     };
 
@@ -419,6 +512,15 @@ function LogRow({ e }: { e: LogEntry; }) {
                                                     }}
                                                     loading="lazy"
                                                 />
+                                            ) : isVideo(att) ? (
+                                                <video
+                                                    src={att.proxy_url || att.url}
+                                                    className="el-attachment-video"
+                                                    controls
+                                                    preload="metadata"
+                                                    onClick={ev => ev.stopPropagation()}
+                                                    title={att.filename || "video"}
+                                                />
                                             ) : (
                                                 <a href={att.url} target="_blank" rel="noreferrer" className="el-attachment-link" onClick={ev => ev.stopPropagation()}>
                                                     📁 {att.filename || "file"}
@@ -449,6 +551,15 @@ function LogRow({ e }: { e: LogEntry; }) {
                                                     window.open(att.url, "_blank");
                                                 }}
                                                 loading="lazy"
+                                            />
+                                        ) : isVideo(att) ? (
+                                            <video
+                                                src={att.proxy_url || att.url}
+                                                className="el-attachment-video"
+                                                controls
+                                                preload="metadata"
+                                                onClick={ev => ev.stopPropagation()}
+                                                title={att.filename || "video"}
                                             />
                                         ) : (
                                             <a href={att.url} target="_blank" rel="noreferrer" className="el-attachment-link" onClick={ev => ev.stopPropagation()}>
@@ -656,7 +767,7 @@ function LogsModal({ rootProps }: { rootProps: any; }) {
                 <div className="el-list">
                     {slice.length === 0
                         ? <div className="el-empty">{t("No events")}</div>
-                        : slice.map(e => <LogRow key={e.id} e={e} />)}
+                        : slice.map(e => <LogRow key={e.id} e={e} onClose={rootProps?.onClose} />)}
                 </div>
 
                 {totalPages > 1 && (
@@ -979,7 +1090,7 @@ function subscribeToEvents() {
         if (!d.guildId || !d.user?.id) return;
         const b = uInfo(d.user.id); const g = getGuild(d.guildId);
         if (d.communicationDisabledUntil) {
-            pushLog({ type: "guild_timeout", content: t("Timed out"), ...b, guildId: d.guildId, guildName: g?.name });
+            pushLog({ type: "guild_timeout", content: t("Temporarily excluded (Timeout)"), ...b, guildId: d.guildId, guildName: g?.name });
         }
     });
 
@@ -995,8 +1106,8 @@ function subscribeToEvents() {
         if (changed) scheduleFlush();
     });
 
-    // Capture logout/disconnect (partial because plugin stops on total disconnect)
-    sub("LOGOUT", () => { pushLog({ type: "user_disconnect", content: t("Log out of account"), authorName: "System" }); });
+    // Capture logout/disconnect (partial because the plugin stops if fully disconnected)
+    sub("LOGOUT", () => { pushLog({ type: "user_disconnect", content: t("Account logout"), authorName: "System" }); });
 }
 
 export default definePlugin({
@@ -1005,9 +1116,12 @@ export default definePlugin({
     description: "Logs deleted/edited messages, friends, pings, etc. Open via Discord Header Bar.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["HeaderBarAPI"],
+    settings,
 
     headerBarButton: {
         icon: LogsIconWithBadge,
+        render: () => <LogsButton />,
+        priority: 7,
     },
 
     start() {
@@ -1016,15 +1130,17 @@ export default definePlugin({
             const vcId = (SelectedChannelStore as any)?.getVoiceChannelId?.();
             if (vcId) myVoiceChannelId = vcId;
         } catch { }
-        loadPersistLogs();
-        addHeaderBarButton("guncord-event-logs", () => <LogsButton />, 7);
+        if (settings.store.keepLogsOnRestart !== false) {
+            setTimeout(() => {
+                loadPersistLogs();
+            }, 100);
+        }
         subscribeToEvents();
         // Also save on page unload (Discord force-close / crash)
         window.addEventListener("beforeunload", savePersistLogs);
     },
     stop() {
         window.removeEventListener("beforeunload", savePersistLogs);
-        removeHeaderBarButton("guncord-event-logs");
         unsubs.forEach(fn => fn()); unsubs = [];
         // Save before clearing — cancel the debounce timer then immediately persist
         if (flushTimer !== null) { clearTimeout(flushTimer); flushTimer = null; }

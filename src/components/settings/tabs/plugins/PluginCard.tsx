@@ -4,26 +4,31 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { detailedPluginDescriptions } from "@api/detailedPluginDescriptions";
+import { t } from "@api/i18n";
 import { showNotice } from "@api/Notices";
+import { getStoredToken } from "@api/OAuth2";
+import { tPlugin } from "@api/pluginI18n";
+import { fetchPluginRatings, PluginLikeData,togglePluginLike } from "@api/PluginLikes";
+import { LIKE_AUTH_EVENT } from "@api/PluginLikesAuth";
 import { isPluginEnabled, pluginRequiresRestart, startDependenciesRecursive, startPlugin, stopPlugin } from "@api/PluginManager";
+import { Button } from "@components/Button";
+import { HeadingPrimary } from "@components/Heading";
 import { CogWheel, InfoIcon } from "@components/Icons";
 import { AddonCard } from "@components/settings/AddonCard";
 import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
-import { ModalCloseButton, ModalContent, ModalHeader, ModalRoot, ModalSize,openModal } from "@utils/modal";
+import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { OptionType, Plugin } from "@utils/types";
-import { HeadingPrimary } from "@components/Heading";
-import { Button } from "@components/Button";
 import { React, showToast, Text, Toasts, Tooltip, UserStore } from "@webpack/common";
 import { Settings } from "Vencord";
-import { t } from "@api/i18n";
-import { tPlugin } from "@api/pluginI18n";
-import { detailedPluginDescriptions } from "@api/detailedPluginDescriptions";
+
+import { PluginMeta } from "~plugins";
 
 import { TUTORIAL_CACHE } from "./components/Common";
+import { getPluginIcon } from "./pluginIcons";
 import { openPluginModal } from "./PluginModal";
 import { getTutorialVideoName, TUTORIAL_PLUGIN_NAMES } from "./tutorialList";
-import { PluginMeta } from "~plugins";
 
 export function removeEmojis(text: string): string {
     if (!text) return "";
@@ -35,6 +40,7 @@ export function removeEmojis(text: string): string {
 
 const logger = new Logger("PluginCard");
 const cl = classNameFactory("vc-plugins-");
+
 interface PluginCardProps extends React.HTMLProps<HTMLDivElement> {
     plugin: Plugin;
     disabled?: boolean;
@@ -49,10 +55,45 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
     const settings = Settings.plugins[plugin.name];
     const isEnabled = () => isPluginEnabled(plugin.name);
 
+    const [likeData, setLikeData] = React.useState<PluginLikeData | null>(null);
+    const [likeLoading, setLikeLoading] = React.useState(false);
+    const [isLoggedIn, setIsLoggedIn] = React.useState(false);
+
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            const token = await getStoredToken();
+            if (cancelled) return;
+            setIsLoggedIn(!!token);
+            const ratings = await fetchPluginRatings();
+            if (cancelled) return;
+            setLikeData(ratings[plugin.name] ?? { likes: 0, likedByMe: false });
+        };
+        load();
+        window.addEventListener(LIKE_AUTH_EVENT, load);
+        return () => {
+            cancelled = true;
+            window.removeEventListener(LIKE_AUTH_EVENT, load);
+        };
+    }, [plugin.name]);
+
+    async function handleLike(e: React.MouseEvent) {
+        e.stopPropagation();
+        if (!isLoggedIn || likeLoading) return;
+        setLikeLoading(true);
+        // Optimistic update
+        setLikeData(prev => prev ? {
+            likes: prev.likedByMe ? prev.likes - 1 : prev.likes + 1,
+            likedByMe: !prev.likedByMe,
+        } : null);
+        const result = await togglePluginLike(plugin.name);
+        if (result) setLikeData(result);
+        setLikeLoading(false);
+    }
+
     function doToggleEnabled() {
         const wasEnabled = isEnabled();
 
-        // If we're enabling a plugin, make sure all deps are enabled recursively.
         if (!wasEnabled) {
             const { restartNeeded, failures } = startDependenciesRecursive(plugin);
 
@@ -110,7 +151,7 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
                             {t("Are you sure you want to enable the Autoresponder plugin? An AI will automatically reply to your DMs when you are unavailable.")}
                         </Text>
                     </ModalContent>
-                    <div style={{ padding: "16px", display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                    <ModalFooter style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
                         <Button
                             variant="link"
                             onClick={props.onClose}
@@ -126,41 +167,41 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
                         >
                             {t("Enable")}
                         </Button>
-                    </div>
+                    </ModalFooter>
                 </ModalRoot>
             ));
             return;
         }
+
         doToggleEnabled();
     }
 
     const openTutorialVideo = (e: React.MouseEvent) => {
         e.stopPropagation();
-        // The video filename on disk does not always exactly match plugin.name
-        // (case differences, or a handful of fully different names), so resolve it
-        // through the mapping instead of assuming they are identical. Also always
-        // URL-encode the segment since some filenames contain spaces (e.g. "Fake Voice Option.mp4").
         const videoName = getTutorialVideoName(plugin.name) ?? plugin.name;
         const videoUrl = `https://raw.githubusercontent.com/o9ll/GunTutorials/main/videos/${encodeURIComponent(videoName)}.mp4`;
+        const hasSettings = plugin.settings && Object.keys(plugin.settings).length > 0;
+
         openModal(props => (
             <ModalRoot {...props} size={ModalSize.DYNAMIC} className="nc-tutorial-modal">
-                <ModalHeader separator={false}>
-                    <Text variant="heading-xl/bold" style={{ flex: 1, color: "#fff" }}>
-                        {plugin.name} – Tutorial
-                    </Text>
+                <ModalHeader separator={false} style={{ padding: "20px 24px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 4 }}>
+                        <Text variant="heading-xl/bold" style={{ color: "#ffffff", fontSize: "20px", fontWeight: 700, margin: 0 }}>
+                            {plugin.name} – {t("Tutorial")}
+                        </Text>
+                        <Text variant="text-sm/normal" style={{ color: "#949ba4", fontSize: "14px", margin: 0 }}>
+                            {t("Watch full plugin guide and feature demonstration")}
+                        </Text>
+                    </div>
                     <ModalCloseButton onClick={props.onClose} />
                 </ModalHeader>
-                <ModalContent>
-                    <div style={{ padding: "0 16px 16px" }}>
+                <ModalContent style={{ padding: "0 24px 16px" }}>
+                    <div style={{ width: "100%", aspectRatio: "16 / 9", borderRadius: "10px", overflow: "hidden", background: "#000000", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
                         <video
                             src={videoUrl}
                             controls
                             autoPlay
-                            style={{
-                                width: "100%",
-                                borderRadius: "8px",
-                                background: "#000",
-                            }}
+                            style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
                             onError={e => {
                                 const el = e.currentTarget;
                                 el.style.display = "none";
@@ -175,49 +216,166 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
                                 flexDirection: "column",
                                 alignItems: "center",
                                 justifyContent: "center",
-                                padding: "48px 24px",
-                                color: "var(--text-muted)",
+                                width: "100%",
+                                height: "100%",
+                                padding: "32px 16px",
+                                color: "#949ba4",
                                 gap: "8px",
+                                textAlign: "center"
                             }}
                         >
-                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="var(--text-muted)" />
-                            </svg>
-                            <Text variant="text-md/medium">{t("No video tutorial available for this plugin.")}</Text>
+                            <Text variant="text-md/medium" style={{ color: "#949ba4" }}>{t("No video tutorial available for this plugin.")}</Text>
                         </div>
+                    </div>
+                </ModalContent>
+                <ModalFooter style={{ padding: "16px 24px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                            <Button
+                                variant="secondary"
+                                size="small"
+                                onClick={() => VencordNative.native.openExternal(videoUrl)}
+                            >
+                                {t("Open in Browser")}
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                size="small"
+                                onClick={() => {
+                                    VencordNative.clipboard.copy(videoUrl);
+                                    showToast(t("Video link copied to clipboard!"), Toasts.Type.SUCCESS);
+                                }}
+                            >
+                                {t("Copy Link")}
+                            </Button>
+                        </div>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                            {hasSettings && (
+                                <Button
+                                    variant="primary"
+                                    size="small"
+                                    onClick={() => {
+                                        props.onClose();
+                                        openPluginModal(plugin);
+                                    }}
+                                >
+                                    {t("Plugin Settings")}
+                                </Button>
+                            )}
+                            <Button
+                                variant="secondary"
+                                size="small"
+                                onClick={props.onClose}
+                            >
+                                {t("Close")}
+                            </Button>
+                        </div>
+                    </div>
+                </ModalFooter>
+            </ModalRoot>
+        ));
+    };
+
+    const sourceBadge = (
+        <Tooltip text={t("Show Tutorial")}>
+            {({ onMouseEnter, onMouseLeave }) => (
+                <button
+                    className="nc-badge-btn"
+                    onClick={openTutorialVideo}
+                    onMouseEnter={onMouseEnter}
+                    onMouseLeave={onMouseLeave}
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+                    </svg>
+                </button>
+            )}
+        </Tooltip>
+    );
+
+    const likeTooltip = !isLoggedIn ? t("Sign in to like plugins") : likeData?.likedByMe ? t("Unlike") : t("Like");
+    const canLike = isLoggedIn && !likeLoading;
+
+    const likeBadge = (
+        <Tooltip text={likeTooltip}>
+            {({ onMouseEnter, onMouseLeave }) => (
+                <button
+                    className={[
+                        "nc-badge-btn",
+                        likeData?.likedByMe && "nc-badge-liked",
+                        !isLoggedIn && "nc-badge-btn-disabled",
+                    ].filter(Boolean).join(" ")}
+                    onClick={e => { if (canLike) handleLike(e); else e.stopPropagation(); }}
+                    aria-disabled={!canLike}
+                    onMouseEnter={onMouseEnter}
+                    onMouseLeave={onMouseLeave}
+                >
+                    {likeData?.likedByMe ? (
+                        <svg aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24">
+                            <path fill="currentColor" d="M12.47 21.73a.92.92 0 0 1-.94 0C9.43 20.48 1 15.09 1 8.75A5.75 5.75 0 0 1 6.75 3c2.34 0 3.88.9 5.25 2.26A6.98 6.98 0 0 1 17.25 3 5.75 5.75 0 0 1 23 8.75c0 6.34-8.42 11.73-10.53 12.98Z" />
+                        </svg>
+                    ) : (
+                        <svg aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24">
+                            <path fill="currentColor" fillRule="evenodd" d="M12 8.07 10.6 6.7A5 5 0 0 0 6.75 5 3.75 3.75 0 0 0 3 8.75c0 2.32 1.59 4.76 3.87 6.96A31.87 31.87 0 0 0 12 19.67c1.2-.74 3.26-2.14 5.13-3.96 2.28-2.2 3.87-4.64 3.87-6.96A3.75 3.75 0 0 0 17.25 5a5 5 0 0 0-3.85 1.69L12 8.07Zm0-2.8A6.98 6.98 0 0 0 6.75 3 5.75 5.75 0 0 0 1 8.75c0 6.34 8.42 11.73 10.53 12.98.29.17.65.17.94 0C14.57 20.48 23 15.09 23 8.75A5.75 5.75 0 0 0 17.25 3c-2.34 0-3.88.9-5.25 2.26Z" clipRule="evenodd" />
+                        </svg>
+                    )}
+                </button>
+            )}
+        </Tooltip>
+    );
+
+    const openInfoModal = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const rawDesc = plugin.detailedDescription
+            ? tPlugin(plugin.detailedDescription)
+            : (detailedPluginDescriptions[plugin.name] ? tPlugin(detailedPluginDescriptions[plugin.name]) : tPlugin(plugin.description));
+        const cleanDesc = removeEmojis(rawDesc);
+
+        openModal(props => (
+            <ModalRoot {...props} size={ModalSize.SMALL}>
+                <ModalHeader separator={false}>
+                    <Text variant="heading-xl/bold" style={{ flex: 1, color: "#fff" }}>
+                        {removeEmojis(plugin.name)}
+                    </Text>
+                    <ModalCloseButton onClick={props.onClose} />
+                </ModalHeader>
+                <ModalContent>
+                    <div style={{ padding: "0 16px 16px" }}>
+                        <Text variant="text-md/medium" color="text-normal" style={{ whiteSpace: "pre-wrap" }}>
+                            {cleanDesc}
+                        </Text>
                     </div>
                 </ModalContent>
             </ModalRoot>
         ));
     };
 
-    const sourceBadge = (
-        <button
-            onClick={openTutorialVideo}
-            style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: "2px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: "4px",
-                color: "var(--interactive-normal)",
-                transition: "color 0.15s ease",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.color = "var(--interactive-hover)"; }}
-            onMouseLeave={e => { e.currentTarget.style.color = "var(--interactive-normal)"; }}
-        >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
-            </svg>
-        </button>
+    const infoBadge = (
+        <Tooltip text={t("Plugin Info")}>
+            {({ onMouseEnter, onMouseLeave }) => (
+                <button
+                    className="nc-badge-btn"
+                    onClick={openInfoModal}
+                    onMouseEnter={onMouseEnter}
+                    onMouseLeave={onMouseLeave}
+                >
+                    <svg className="vc-ic-save-icon" aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" fill="transparent" />
+                        <path fill="currentColor" fillRule="evenodd" d="M12 23a11 11 0 1 0 0-22 11 11 0 0 0 0 22Zm-.28-16c-.98 0-1.81.47-2.27 1.14A1 1 0 1 1 7.8 7.01 4.73 4.73 0 0 1 11.72 5c2.5 0 4.65 1.88 4.65 4.38 0 2.1-1.54 3.77-3.52 4.24l.14 1a1 1 0 0 1-1.98.27l-.28-2a1 1 0 0 1 .99-1.14c1.54 0 2.65-1.14 2.65-2.38 0-1.23-1.1-2.37-2.65-2.37ZM13 17.88a1.13 1.13 0 1 1-2.25 0 1.13 1.13 0 0 1 2.25 0Z" clipRule="evenodd" />
+                    </svg>
+                </button>
+            )}
+        </Tooltip>
     );
 
-    const tooltip = t("Show Tutorial");
     const isGuncord = !PluginMeta[plugin.name]?.userPlugin;
     const iconType = isGuncord ? "guncord" : "other";
+
+    // The like system only applies to Guncord plugins (not Vencord/Equicord,
+    // not User Plugins), and never to required plugins (including those displayed as
+    // required because an active dependency needs them, hence the check on `disabled`).
+    const isGuncordFolderPlugin = PluginMeta[plugin.name]?.folderName?.startsWith("src/guncordplugins/") ?? false;
+    const canShowLikeBadge = isGuncordFolderPlugin && !plugin.required && !disabled;
 
     function openCreditsModal() {
         openModal(props => (
@@ -251,18 +409,14 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
 
     const hasSettings = !!plugin.settingsAboutComponent || (plugin.settings?.def && Object.values(plugin.settings.def).some(s => s.type !== OptionType.CUSTOM && !s.hidden));
 
-    const PluginIcon = plugin.headerBarButton?.icon || 
-                       plugin.chatBarButton?.icon || 
-                       plugin.messagePopoverButton?.icon || 
-                       plugin.userAreaButton?.icon;
+    const PluginIcon = getPluginIcon(plugin);
 
     return (
         <AddonCard
             name={plugin.name}
             iconType={iconType}
             customIcon={PluginIcon}
-            sourceBadge={hasTutorial ? sourceBadge : undefined}
-            tooltip={tooltip}
+            sourceBadge={<>{hasTutorial && sourceBadge}{canShowLikeBadge && likeBadge}</>}
             description={tPlugin(plugin.description)}
             isNew={isNew}
             enabled={isEnabled()}

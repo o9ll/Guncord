@@ -7,6 +7,8 @@
 import electron, { app, Menu, nativeImage, Tray } from "electron";
 import { dirname, join } from "path";
 
+let guncordTrayInstance: Tray | null = null;
+
 /**
  * Initializes the Guncord system tray icon.
  * Should only be called on Windows, outside overlay mode.
@@ -40,8 +42,8 @@ export function initGuncordTray(injectorPath: string) {
                 }
             }
 
-            const tray = new Tray(icon);
-            tray.setToolTip("Guncord");
+            guncordTrayInstance = new Tray(icon);
+            guncordTrayInstance!.setToolTip("Guncord");
 
             const trayMenu = Menu.buildFromTemplate([
                 {
@@ -80,8 +82,8 @@ export function initGuncordTray(injectorPath: string) {
                 }
             ]);
 
-            tray.setContextMenu(trayMenu);
-            tray.on("click", () => {
+            guncordTrayInstance!.setContextMenu(trayMenu);
+            guncordTrayInstance!.on("click", () => {
                 const wins = electron.BrowserWindow.getAllWindows();
                 const main = wins.find(w => !w.isDestroyed()) ?? wins[0];
                 if (main) {

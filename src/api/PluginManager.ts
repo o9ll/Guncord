@@ -152,7 +152,9 @@ export function startDependenciesRecursive(p: Plugin) {
     p.dependencies?.forEach(d => {
         if (!settings[d].enabled) {
             const dep = Plugins[d];
-            startDependenciesRecursive(dep);
+            const { restartNeeded: depRestart, failures: depFailures } = startDependenciesRecursive(dep);
+            if (depRestart) restartNeeded = true;
+            failures.push(...depFailures);
 
             // If the plugin has patches, don't start the plugin, just enable it.
             settings[d].enabled = true;
@@ -178,6 +180,7 @@ export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof Flux
 
         logger.debug("Subscribing to flux events of plugin", p.name);
         for (const [event, handler] of Object.entries(p.flux)) {
+            if ((handler as any).__vcWrapped) continue;
             const wrappedHandler = p.flux[event] = function () {
                 if (p.name === "Encryptcord" && event === "MESSAGE_CREATE") return;
                 try {
@@ -190,6 +193,7 @@ export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof Flux
                 }
             };
 
+            (wrappedHandler as any).__vcWrapped = true;
             fluxDispatcher.subscribe(event as FluxEvents, wrappedHandler);
         }
     }

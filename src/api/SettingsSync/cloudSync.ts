@@ -73,6 +73,12 @@ async function buildLocalData(): Promise<Map<string, Uint8Array>> {
     const quickCss = await VencordNative.quickCss.get();
     if (quickCss) data.set("quickCss", encoder.encode(quickCss));
 
+    const totpVault = await DataStore.get("guncord_totp_encrypted_vault");
+    if (totpVault) data.set("dataStore/guncord_totp_encrypted_vault", encoder.encode(JSON.stringify(totpVault)));
+
+    const totpMeta = await DataStore.get("guncord_totp_vault_meta");
+    if (totpMeta) data.set("dataStore/guncord_totp_vault_meta", encoder.encode(JSON.stringify(totpMeta)));
+
     return data;
 }
 

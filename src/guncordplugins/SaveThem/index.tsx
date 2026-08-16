@@ -233,10 +233,63 @@ function SaveThemSettings({ closePluginSettings }: { closePluginSettings: () => 
         });
     };
 
+    // Save All Friends
+    const handleSaveAllFriends = async () => {
+        const friendIds: string[] = RelationshipStore.getFriendIDs?.() || [];
+        if (!friendIds.length) {
+            showToast(t("No friends found to save"), Toasts.Type.FAILURE);
+            return;
+        }
+
+        showToast(t("Saving friends..."), Toasts.Type.MESSAGE);
+
+        const currentUsers: SavedUser[] = [...users];
+        const existingIds = new Set(currentUsers.map(u => u.id));
+        let addedCount = 0;
+
+        for (const fId of friendIds) {
+            if (existingIds.has(fId)) continue;
+            const friendUser = UserStore.getUser(fId);
+            if (!friendUser) continue;
+
+            const avatarUrl = IconUtils.getUserAvatarURL(friendUser, true, 128) || IconUtils.getDefaultAvatarURL(friendUser.id);
+            const avatarDataUrl = await imageUrlToBase64(avatarUrl);
+
+            const newUser: SavedUser = {
+                id: friendUser.id,
+                username: friendUser.username,
+                globalName: friendUser.globalName || friendUser.username,
+                avatarDataUrl,
+                reason: t("Friend"),
+                timestamp: Date.now()
+            };
+
+            currentUsers.push(newUser);
+            existingIds.add(fId);
+            addedCount++;
+        }
+
+        setUsers(currentUsers);
+        await DataStore.set("SaveThem_users", currentUsers);
+        showToast(
+            t("All friends saved ({count} friends added)").replace("{count}", String(addedCount)),
+            Toasts.Type.SUCCESS
+        );
+    };
+
     return (
         <div className="vc-savethem-container">
             <div className="vc-savethem-header">
                 <BaseText tag="h3" size="lg" weight="semibold">{t("SaveThem - Saved Contacts")}</BaseText>
+                <div className="vc-savethem-header-actions">
+                    <Button
+                        size="small"
+                        color="BRAND"
+                        onClick={handleSaveAllFriends}
+                    >
+                        {t("Save All Friends")}
+                    </Button>
+                </div>
             </div>
 
             {!users.length ? (
@@ -268,14 +321,23 @@ function SaveThemSettings({ closePluginSettings }: { closePluginSettings: () => 
     );
 }
 
+import { iconsModule } from "@plugins/_core/concatenatedModules";
+
 const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
     if (!user) return;
 
+    const Icon = iconsModule?.UserPlusIcon || iconsModule?.SaveIcon;
     children.push(
         <Menu.MenuGroup key="vc-savethem-group">
             <Menu.MenuItem
                 id="vc-savethem-save"
                 label={t("Save to SaveThem")}
+                icon={Icon}
+                iconLeft={Icon}
+                leadingAccessory={{
+                    type: "icon",
+                    icon: Icon
+                }}
                 action={() => {
                     void handleSaveUser(user);
                 }}

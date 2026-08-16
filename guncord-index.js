@@ -13,8 +13,13 @@ const { app } = require("electron");
 // This is what prevents the infinite-restart loop.
 // ─────────────────────────────────────────────────────────────────────────────
 (function applyPendingUpdate() {
-    const markerPath = path.join(__dirname, "dist", "guncord", "guncord-pending-update.json");
-    if (!fs.existsSync(markerPath)) return;
+    const possibleMarkers = [
+        path.join(__dirname, "dist", "desktop", "guncord-pending-update.json"),
+        path.join(__dirname, "dist", "guncord", "guncord-pending-update.json"),
+        path.join(__dirname, "guncord-pending-update.json"),
+    ];
+    const markerPath = possibleMarkers.find(p => fs.existsSync(p));
+    if (!markerPath) return;
 
     let marker;
     try {

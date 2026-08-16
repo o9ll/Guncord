@@ -1226,8 +1226,10 @@ ipcMain.handle(IpcEvents.INIT_FILE_WATCHERS, (event) => {
 
     open(QUICK_CSS_PATH, "a+").then(fd => {
         fd.close();
+        if (sender.isDestroyed()) return; // Race condition guard
         quickCssWatcher = watch(QUICK_CSS_PATH, { persistent: false }, debounce(async () => {
-            sender.postMessage(IpcEvents.QUICK_CSS_UPDATE, await readCss());
+            if (!sender.isDestroyed())
+                sender.postMessage(IpcEvents.QUICK_CSS_UPDATE, await readCss());
         }, 50));
     }).catch(() => { });
 
@@ -1305,6 +1307,7 @@ ipcMain.handle(IpcEvents.OPEN_MONACO_EDITOR, async (event) => {
 
 app.on("before-quit", async event => {
     if (monacoWin && !monacoWin.isDestroyed() && !monacoWin.isVisible()) {
+        event.preventDefault(); // Must be sync before any await
         const result = await dialog.showMessageBox({
             type: "question",
             buttons: ["Cancel", "Close Anyway"],
@@ -1479,7 +1482,10 @@ ipcMain.handle(IpcEvents.GUNCORD_DOWNLOAD_AND_RUN, async (event, url: string) =>
         message: "A Guncord update is available.",
         detail: "Do you want to install the update now?"
     });
-    if (response === 1) return false;
+    if (response === 1) {
+        try { fs.unlinkSync(tmpPath); } catch { } // Clean up temp file if user cancels
+        return false;
+    }
 
     const { spawn } = require("child_process");
     const child = spawn(tmpPath, [], {

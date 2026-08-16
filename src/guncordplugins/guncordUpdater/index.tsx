@@ -72,7 +72,7 @@ async function checkForUpdates() {
             notify();
         }
     } catch (e: any) {
-        console.error("[GuncordUpdater] Error:", e);
+        console.debug("[GuncordUpdater] Check skipped:", e?.message || e);
     }
 }
 

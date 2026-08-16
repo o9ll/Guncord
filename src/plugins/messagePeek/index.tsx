@@ -157,7 +157,10 @@ function MessagePreviewContent({ channel, user }: { channel: Channel; user: User
     );
 
     if (channel.isSystemDM()) {
-        return <>Official Discord Message</>;
+        const isGuncord = channel.id === "999999999999999990" ||
+            channel.name?.toLowerCase().includes("guncord") ||
+            (channel.recipients && channel.recipients.includes("999999999999999999"));
+        return isGuncord ? <>Official Guncord Message</> : <>Official Discord Message</>;
     }
 
     const smynName = isPluginEnabled(showMeYourName.name) ? showMeYourName.getTypingMemberListProfilesReactionsVoiceNameText({ user: user ?? lastMessage?.author, type: "membersList" }) : null;
