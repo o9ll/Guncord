@@ -438,7 +438,13 @@ const pluginAliasesPlugin = {
             const match = args.path.match(/^@(?:plugins|equicordplugins|guncordplugins)(?:\/(.*))?$/);
             const rel = match?.[1] || "";
 
-            for (const base of ["./src/plugins", "./src/guncordplugins"]) {
+            const bases = args.path.startsWith("@guncordplugins")
+                ? ["./src/guncordplugins"]
+                : args.path.startsWith("@equicordplugins")
+                    ? ["./src/plugins"]
+                    : ["./src/plugins", "./src/guncordplugins"];
+
+            for (const base of bases) {
                 const fullBase = join(process.cwd(), base);
                 const target = rel ? join(fullBase, rel) : fullBase;
                 for (const candidate of [

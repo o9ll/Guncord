@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { PinOrder, PrivateChannelSortStore, settings } from "@guncordplugins/pinDms";
+import { PinOrder, PrivateChannelSortStore, settings } from "./index";
 import { useForceUpdater } from "@utils/react";
 import { UserStore } from "@webpack/common";
 
