@@ -58,9 +58,8 @@ export const settings = definePluginSettings({
     },
     autoTranslate: {
         type: OptionType.BOOLEAN,
-        description: "Automatically translate your messages before sending. You can also shift/right click the translate button to toggle this",
-        default: false,
-        disabled: () => true // Disabled — never auto-translate
+        description: "Automatically translate your messages before sending. You can also click the translate button in chat to toggle this",
+        default: false
     },
     autoTranslateReceived: {
         type: OptionType.BOOLEAN,
@@ -70,11 +69,11 @@ export const settings = definePluginSettings({
             if (onAutoTranslateReceivedToggled) onAutoTranslateReceivedToggled(v);
         }
     },
-    showAutoTranslateTooltip: {
+    translateOnSpace: {
         type: OptionType.BOOLEAN,
-        description: "Show a tooltip on the ChatBar button whenever a message is automatically translated",
-        default: true
-    }
+        description: "Translate each word automatically when pressing Space",
+        default: false
+    },
 }).withPrivateSettings<{
     showAutoTranslateAlert: boolean;
 }>();

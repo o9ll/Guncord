@@ -16,8 +16,9 @@ import { FSWatcher, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
 import { open, readdir, readFile, unlink } from "fs/promises";
 import { join, normalize } from "path";
 import { registerCspIpcHandlers } from "./csp/manager";
+import { registerUserPluginsIpcHandlers } from "./userplugins";
 import { ALLOWED_PROTOCOLS, DATA_DIR, QUICK_CSS_PATH, SETTINGS_DIR, THEMES_DIR } from "./utils/constants";
-import { makeLinksOpenExternally } from "../guncord/main/utils/makeLinksOpenExternally";
+import { getThemeInfo, stripBOM } from "../utils/themes/bd";
 
 const RENDERER_CSS_PATH = join(__dirname, "renderer.css");
 const USERPLUGINS_DIR = join(DATA_DIR, "userplugins");
@@ -26,15 +27,7 @@ mkdirSync(THEMES_DIR, { recursive: true });
 mkdirSync(USERPLUGINS_DIR, { recursive: true });
 
 registerCspIpcHandlers();
-
-import * as ghostNative from "../guncordplugins/ghostClient/native";
-(async () => {
-    try {
-        await (ghostNative as any).init(null);
-    } catch (e) {
-        console.warn("[Guncord] server pre-start failed:", e);
-    }
-})();
+registerUserPluginsIpcHandlers();
 
 export function ensureSafePath(basePath: string, path: string) {
     const normalizedBasePath = normalize(basePath + "/");
@@ -43,6 +36,14 @@ export function ensureSafePath(basePath: string, path: string) {
     const base = normalizedBasePath.toLowerCase();
     const target = normalizedPath.toLowerCase();
     return target.startsWith(base) ? normalizedPath : null;
+}
+
+let cachedAppPath: string | null = null;
+function getCachedAppPath() {
+    if (!cachedAppPath) {
+        cachedAppPath = normalize(app.getAppPath());
+    }
+    return cachedAppPath;
 }
 
 export function validateSender(event: any): boolean {
@@ -54,8 +55,7 @@ export function validateSender(event: any): boolean {
 
     if (url.startsWith("file://")) {
         const normalizedPath = normalize(url.replace("file://", ""));
-        const appPath = normalize(app.getAppPath());
-        return normalizedPath.startsWith(appPath);
+        return normalizedPath.startsWith(getCachedAppPath());
     }
 
     if (url.startsWith("data:")) return false;
@@ -93,10 +93,39 @@ function readCss() {
     return readFile(QUICK_CSS_PATH, "utf-8").catch(() => "");
 }
 
-async function listThemes(): Promise<{ fileName: string; content: string; }[]> {
+async function getThemeHeaderChunk(fileName: string): Promise<string> {
+    fileName = fileName.replace(/\?v=\d+$/, "");
+    const safePath = ensureSafePath(THEMES_DIR, fileName);
+    if (!safePath) return "";
+    try {
+        const fd = await open(safePath, "r");
+        try {
+            const buf = Buffer.alloc(32768);
+            const { bytesRead } = await fd.read(buf, 0, 32768, 0);
+            return buf.subarray(0, bytesRead).toString("utf-8");
+        } finally {
+            await fd.close();
+        }
+    } catch {
+        return "";
+    }
+}
+
+async function listThemes(): Promise<{ fileName: string; content: string; name: string; author?: string; description?: string; }[]> {
     try {
         const files = await readdir(THEMES_DIR);
-        return await Promise.all(files.map(async fileName => ({ fileName, content: await getThemeData(fileName) })));
+        const cssFiles = files.filter(f => f.endsWith(".css"));
+        return await Promise.all(cssFiles.map(async fileName => {
+            const headerChunk = await getThemeHeaderChunk(fileName);
+            const info = getThemeInfo(stripBOM(headerChunk), fileName);
+            return {
+                fileName,
+                name: info.name || fileName.replace(/\.css$/i, ""),
+                author: info.author,
+                description: info.description,
+                content: headerChunk
+            };
+        }));
     } catch {
         return [];
     }
@@ -109,48 +138,14 @@ function getThemeData(fileName: string) {
     return readFile(safePath, "utf-8");
 }
 
+import { simulateKey, simulateTyping } from "./platform/systemInput";
+
 ipcMain.handle(IpcEvents.WORLD_BOMB_TYPE, async (event, text: string, delay: number = 50) => {
     if (!validateSender(event)) throw new Error("Unauthorized IPC invocation");
-    if (process.platform !== "win32") return;
-    const { spawn } = require("child_process");
-    const { writeFileSync, unlinkSync, mkdtempSync, rmSync } = require("fs");
-    const { join } = require("path");
-    const { tmpdir } = require("os");
-
     if (!/^[\x20-\x7E]*$/.test(text)) {
         throw new Error("WorldBombType: disallowed characters");
     }
-    const safeDelay = Math.max(0, Math.min(10000, delay));
-
-    const psLines = [
-        "Add-Type -AssemblyName System.WindowsForms;",
-        "$text = $args[0];",
-        "$delay = [int]$args[1];",
-        "foreach ($char in $text.ToCharArray()) {",
-        "  [System.Windows.Forms.SendKeys]::SendWait($char);",
-        "  if ($delay -gt 0) { Start-Sleep -m $delay; }",
-        "}",
-    ];
-    const psScript = psLines.join("\r\n");
-    const tempDir = mkdtempSync(join(tmpdir(), "guncord-wb-"));
-    const tempFile = join(tempDir, "sendkeys.ps1");
-    try {
-        writeFileSync(tempFile, "\uFEFF" + psScript, "utf8");
-        const child = spawn("powershell", [
-            "-NoProfile", "-ExecutionPolicy", "Bypass",
-            "-File", tempFile, text, String(safeDelay)
-        ]);
-        await new Promise<void>((resolve, reject) => {
-            child.on("error", reject);
-            child.on("exit", code => {
-                if (code === 0) resolve();
-                else reject(new Error(`PowerShell exit code ${code}`));
-            });
-        });
-    } finally {
-        try { unlinkSync(tempFile); } catch {}
-        try { rmSync(tempDir, { recursive: true, force: true }); } catch {}
-    }
+    return simulateTyping(text, delay);
 });
 
 function runPowershellScript(psScript: string): Promise<void> {
@@ -168,10 +163,14 @@ function runPowershellScript(psScript: string): Promise<void> {
                 "-NoProfile", "-ExecutionPolicy", "Bypass",
                 "-File", tempFile
             ]);
-            child.on("error", reject);
+            child.on("error", (err: any) => {
+                try { unlinkSync(tempFile); } catch {}
+                try { rmSync(tempDir, { recursive: true, force: true }); } catch {}
+                reject(err);
+            });
             child.on("exit", code => {
                 try { unlinkSync(tempFile); } catch {}
-try { rmSync(tempDir, { recursive: true, force: true }); } catch {}
+                try { rmSync(tempDir, { recursive: true, force: true }); } catch {}
                 if (code === 0) resolve();
                 else reject(new Error(`PowerShell exit code ${code}`));
             });
@@ -185,22 +184,17 @@ try { rmSync(tempDir, { recursive: true, force: true }); } catch {}
 
 ipcMain.handle(IpcEvents.WORLD_BOMB_PRESS_ENTER, (event) => {
     if (!validateSender(event)) throw new Error("Unauthorized IPC invocation");
-    return runPowershellScript(`
-        $sig = '[DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);'
-        Add-Type -MemberDefinition $sig -Name WinAPI -Namespace NC -ErrorAction SilentlyContinue
-        [NC.WinAPI]::keybd_event(0x0D, 0x1C, 0, [UIntPtr]::Zero)
-        Start-Sleep -Milliseconds 20
-        [NC.WinAPI]::keybd_event(0x0D, 0x1C, 2, [UIntPtr]::Zero)
-    `);
+    return simulateKey("ENTER");
 });
 
 ipcMain.handle(IpcEvents.WORLD_BOMB_PRESS_BACKSPACE, (event) => {
     if (!validateSender(event)) throw new Error("Unauthorized IPC invocation");
-    return runPowershellScript("Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('{BACKSPACE}')");
+    return simulateKey("BACKSPACE");
 });
 
 ipcMain.handle(IpcEvents.WORLD_BOMB_CLICK, (event, x: number, y: number) => {
     if (!validateSender(event)) throw new Error("Unauthorized IPC invocation");
+    if (process.platform !== "win32") return Promise.resolve();
     const safeX = Math.max(0, Math.min(99999, Math.round(x)));
     const safeY = Math.max(0, Math.min(99999, Math.round(y)));
     return runPowershellScript(`
@@ -1173,9 +1167,9 @@ ipcMain.handle(IpcEvents.GET_QUICK_CSS, (event) => {
     if (!validateSender(event)) throw new Error("Unauthorized IPC invocation");
     return readCss();
 });
-ipcMain.handle(IpcEvents.SET_QUICK_CSS, (event, css) => {
+ipcMain.handle(IpcEvents.SET_QUICK_CSS, async (event, css) => {
     if (!validateSender(event)) throw new Error("Unauthorized IPC invocation");
-    return writeFileSync(QUICK_CSS_PATH, css);
+    return writeFile(QUICK_CSS_PATH, css);
 });
 
 ipcMain.handle(IpcEvents.GET_THEMES_DIR, (event) => {
@@ -1234,12 +1228,14 @@ ipcMain.handle(IpcEvents.INIT_FILE_WATCHERS, (event) => {
     }).catch(() => { });
 
     const themesWatcher = watch(THEMES_DIR, { persistent: false }, debounce(() => {
-        sender.postMessage(IpcEvents.THEME_UPDATE, void 0);
+        if (!sender.isDestroyed())
+            sender.postMessage(IpcEvents.THEME_UPDATE, void 0);
     }));
 
     if (IS_DEV) {
         rendererCssWatcher = watch(RENDERER_CSS_PATH, { persistent: false }, async () => {
-            sender.postMessage(IpcEvents.RENDERER_CSS_UPDATE, await readFile(RENDERER_CSS_PATH, "utf-8"));
+            if (!sender.isDestroyed())
+                sender.postMessage(IpcEvents.RENDERER_CSS_UPDATE, await readFile(RENDERER_CSS_PATH, "utf-8"));
         });
     }
 
@@ -1277,6 +1273,7 @@ ipcMain.handle(IpcEvents.OPEN_MONACO_EDITOR, async (event) => {
         return;
     }
 
+    const monacoSession = session.fromPartition("monaco-editor");
     monacoWin = new BrowserWindow({
         title: "Guncord QuickCSS Editor",
         autoHideMenuBar: true,
@@ -1285,19 +1282,27 @@ ipcMain.handle(IpcEvents.OPEN_MONACO_EDITOR, async (event) => {
             preload: join(__dirname, "preload.js"),
             contextIsolation: true,
             nodeIntegration: false,
-            sandbox: false
+            sandbox: false,
+            partition: "monaco-editor"
         }
     });
 
-    monacoWin.once("closed", () => { monacoWin = null; });
-
-    monacoWin.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    const headersListener = (details: any, callback: any) => {
         callback({
             responseHeaders: {
                 ...details.responseHeaders,
                 "Content-Security-Policy": ["default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval';"]
             }
         });
+    };
+
+    monacoSession.webRequest.onHeadersReceived(headersListener);
+
+    monacoWin.once("closed", () => {
+        try {
+            monacoSession.webRequest.onHeadersReceived(null as any);
+        } catch {}
+        monacoWin = null;
     });
 
     makeLinksOpenExternally(monacoWin);
@@ -1417,6 +1422,35 @@ if (IS_DISCORD_DESKTOP) {
     });
 }
 
+// Net fetch via main process — bypasses renderer CORS restrictions
+interface NetFetchOptions {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+    noCache?: boolean;
+}
+try { ipcMain.removeHandler(IpcEvents.GUNCORD_NET_FETCH); } catch {}
+ipcMain.handle(IpcEvents.GUNCORD_NET_FETCH, async (event, url: string, opts?: NetFetchOptions | boolean) => {
+    if (!validateSender(event)) throw new Error("Unauthorized IPC invocation");
+    const { net } = await import("electron");
+    // Support legacy boolean noCache arg as well as new options object
+    const options: NetFetchOptions = typeof opts === "boolean" ? { noCache: opts } : (opts ?? {});
+    const reqHeaders: Record<string, string> = { ...(options.headers ?? {}) };
+    if (options.noCache) reqHeaders["Cache-Control"] = "no-cache";
+    try {
+        const res = await net.fetch(url, {
+            method: options.method ?? "GET",
+            headers: reqHeaders,
+            body: options.body ?? undefined
+        });
+        if (!res.ok) return { ok: false, status: res.status, data: null };
+        const data = await res.json();
+        return { ok: true, status: res.status, data };
+    } catch {
+        return null;
+    }
+});
+
 try { ipcMain.removeHandler(IpcEvents.RELAUNCH_APP); } catch {}
 ipcMain.handle(IpcEvents.RELAUNCH_APP, async (event) => {
     if (!validateSender(event)) throw new Error("Unauthorized IPC invocation");
@@ -1451,7 +1485,7 @@ ipcMain.handle(IpcEvents.GUNCORD_DOWNLOAD_AND_RUN, async (event, url: string) =>
     const tmpPath = path.join(os.tmpdir(), "GuncordUpdate-Setup.exe");
 
     await new Promise<void>((resolve, reject) => {
-        https.get(url, (res: any) => {
+        const req = https.get(url, (res: any) => {
             if (res.statusCode !== 200) {
                 res.resume();
                 reject(new Error(`HTTP ${res.statusCode}`));
@@ -1462,7 +1496,11 @@ ipcMain.handle(IpcEvents.GUNCORD_DOWNLOAD_AND_RUN, async (event, url: string) =>
             file.on("finish", () => file.close(() => resolve()));
             file.on("error", (err: any) => { fs.unlink(tmpPath, () => { }); reject(err); });
             res.on("error", (err: any) => { fs.unlink(tmpPath, () => { }); reject(err); });
-        }).on("error", (err: any) => {
+        });
+        req.setTimeout(30000, () => {
+            req.destroy(new Error("Request timed out after 30 seconds"));
+        });
+        req.on("error", (err: any) => {
             fs.unlink(tmpPath, () => { });
             reject(err);
         });

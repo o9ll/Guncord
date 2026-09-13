@@ -11,8 +11,8 @@ import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
 import { ModalCloseButton, ModalContent, ModalHeader, ModalRoot, openModal } from "@utils/modal";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
-import { findByProps } from "@webpack";
-import { FluxDispatcher, Forms, IconUtils, React, ReactDOM, UserStore } from "@webpack/common";
+import { findByProps, waitFor } from "@webpack";
+import { AuthenticationStore, FluxDispatcher, Forms, IconUtils, React, ReactDOM, UserStore } from "@webpack/common";
 
 import { t } from "../autoTranslateGuncord";
 
@@ -54,95 +54,103 @@ async function loadTokenCache(): Promise<void> {
     if (tokenCacheLoaded) return;
     tokenCache = (await DataStore.get<Record<string, string>>(MI_TOKEN_CACHE_KEY)) ?? {};
     tokenCacheLoaded = true;
-}
 
-async function saveTokenCache(): Promise<void> {
-    await DataStore.set(MI_TOKEN_CACHE_KEY, tokenCache);
-}
+    // Purge any corrupted or cross-account tokens
+    const curUser = UserStore.getCurrentUser();
+    const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+    const curTok = tokenMod?.getToken?.();
 
-function cacheToken(userId: string, token: string): void {
-    if (!userId || !token) return;
-    tokenCache[userId] = token;
-}
-
-async function captureAllTokens(): Promise<void> {
-    try {
-        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
-        if (tokenMod) {
-            // 1. Check getTokens() function
-            if (typeof tokenMod.getTokens === "function") {
-                try {
-                    const allTokens = tokenMod.getTokens();
-                    if (allTokens && typeof allTokens === "object") {
-                        for (const [id, tok] of Object.entries(allTokens)) {
-                            if (id && typeof tok === "string" && tok) {
-                                cacheToken(id, tok);
-                            }
-                        }
-                    }
-                } catch {}
-            }
-
-            // 2. Check tokens or _tokens object
-            const tokObj = tokenMod.tokens || tokenMod._tokens;
-            if (tokObj && typeof tokObj === "object") {
-                for (const [id, tok] of Object.entries(tokObj)) {
-                    if (id && typeof tok === "string" && tok) {
-                        cacheToken(id, tok);
-                    }
-                }
-            }
-
-            // 3. Query getToken(u.id) for each user in MultiAccountStore
-            try {
-                const store = findByProps("getUsers", "getValidUsers");
-                const users: any[] = store?.getUsers?.() ?? store?.getValidUsers?.() ?? [];
-                for (const u of users) {
-                    if (!u?.id) continue;
-                    const tok = tokenMod.getToken?.(u.id);
-                    if (tok && typeof tok === "string") {
-                        cacheToken(u.id, tok);
-                    }
-                }
-            } catch {}
-
-            // 4. Current user token
-            const curUser = UserStore.getCurrentUser();
-            const curTok = tokenMod.getToken?.();
-            if (curUser?.id && curTok) {
-                cacheToken(curUser.id, curTok);
-            }
+    let dirty = false;
+    for (const [id, tok] of Object.entries(tokenCache)) {
+        if (!tok || typeof tok !== "string") {
+            delete tokenCache[id];
+            dirty = true;
+            continue;
         }
-
-        // 5. Fallback check TokenImporter_accounts
-        try {
-            const imported = await DataStore.get<SavedAccount[]>("TokenImporter_accounts");
-            if (Array.isArray(imported)) {
-                const TokenImporterNative = (VencordNative.pluginHelpers as any)?.TokenImporter;
-                for (const acc of imported) {
-                    if (!acc?.id || !acc?.token) continue;
-                    let tok = acc.token;
-                    if (tok.startsWith("dQw4w9WgXcQ:") && TokenImporterNative?.decryptTokenNative) {
-                        try {
-                            const decrypted = await TokenImporterNative.decryptTokenNative(tok);
-                            if (decrypted) tok = decrypted;
-                        } catch {}
-                    }
-                    if (tok && !tok.startsWith("dQw4w9WgXcQ:")) {
-                        cacheToken(acc.id, tok);
-                    }
+        let realTok = tok;
+        if (tok.startsWith("dQw4w9WgXcQ:")) {
+            try {
+                const dec = await Native.decryptToken(tok);
+                if (dec && !dec.startsWith("dQw4w9WgXcQ:")) {
+                    tokenCache[id] = dec;
+                    realTok = dec;
+                    dirty = true;
                 }
-            }
-        } catch {}
-
+            } catch { }
+        }
+        if (curUser?.id && curTok && id !== curUser.id && realTok === curTok) {
+            delete tokenCache[id];
+            dirty = true;
+            continue;
+        }
+        const owner = getUserIdFromToken(realTok);
+        if (owner && owner !== id) {
+            delete tokenCache[id];
+            dirty = true;
+        }
+    }
+    if (dirty) {
         await saveTokenCache();
-    } catch (e) {
-        console.warn("[MultiInstance] captureAllTokens failed:", e);
     }
 }
 
+let _saveTokenTimer: ReturnType<typeof setTimeout> | undefined;
+function saveTokenCache(): void {
+    if (_saveTokenTimer !== undefined) clearTimeout(_saveTokenTimer);
+    _saveTokenTimer = setTimeout(() => {
+        _saveTokenTimer = undefined;
+        DataStore.set(MI_TOKEN_CACHE_KEY, tokenCache).catch(() => {});
+    }, 1000);
+}
+
+function decodeBase64Safe(str: string): string | null {
+    try {
+        let normalized = str.replace(/-/g, "+").replace(/_/g, "/");
+        while (normalized.length % 4 !== 0) {
+            normalized += "=";
+        }
+        return atob(normalized);
+    } catch {
+        return null;
+    }
+}
+
+function getUserIdFromToken(token: string): string | null {
+    if (!token || typeof token !== "string") return null;
+    try {
+        const parts = token.split(".");
+        if (parts.length < 2) return null;
+        const decoded = decodeBase64Safe(parts[0]);
+        if (decoded && /^\d{17,20}$/.test(decoded)) {
+            return decoded;
+        }
+    } catch {}
+    return null;
+}
+
+function cacheToken(userId: string, token: string): boolean {
+    if (!userId || !token || typeof token !== "string") return false;
+    const cleanTok = token.trim().replace(/^"+|"+$/g, "");
+    const tokenOwner = getUserIdFromToken(cleanTok);
+    if (tokenOwner && tokenOwner !== userId) {
+        console.warn(`[MultiInstance] Token owner mismatch: belongs to ${tokenOwner}, expected ${userId}. Cache rejected.`);
+        return false;
+    }
+    if (tokenCache[userId] === cleanTok) return false;
+    tokenCache[userId] = cleanTok;
+    return true;
+}
+
 function captureCurrentToken(): void {
-    captureAllTokens();
+    try {
+        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const token = tokenMod?.getToken?.();
+        const user = UserStore.getCurrentUser();
+        if (token && user?.id && typeof token === "string") {
+            const changed = cacheToken(user.id, token);
+            if (changed) saveTokenCache();
+        }
+    } catch { }
 }
 
 function hookEncryptAndStoreTokens(): void {
@@ -152,11 +160,15 @@ function hookEncryptAndStoreTokens(): void {
         if (!tokenMod?.encryptAndStoreTokens) return;
         const orig = tokenMod.encryptAndStoreTokens.bind(tokenMod);
         tokenMod.encryptAndStoreTokens = async function (tokens: Record<string, string>) {
-            // Capture tous les tokens au passage
-            for (const [id, token] of Object.entries(tokens)) {
-                if (id && token) cacheToken(id, token);
+            if (tokens && typeof tokens === "object") {
+                let changed = false;
+                for (const [id, token] of Object.entries(tokens)) {
+                    if (id && token) {
+                        if (cacheToken(id, token)) changed = true;
+                    }
+                }
+                if (changed) saveTokenCache();
             }
-            saveTokenCache();
             return orig(tokens);
         };
         encryptHooked = true;
@@ -168,20 +180,12 @@ function hookFluxDispatcher(): (() => void) | null {
         if (!FluxDispatcher?.subscribe) return null;
         const handler = (event: any) => {
             if (event?.token && event?.userId) {
-                cacheToken(event.userId, event.token);
-                saveTokenCache();
+                const changed = cacheToken(event.userId, event.token);
+                if (changed) saveTokenCache();
             }
-            captureAllTokens();
         };
-        const events = [
-            "MULTI_ACCOUNT_VALIDATE_TOKEN_SUCCESS",
-            "MULTI_ACCOUNT_SWITCH_SUCCESS",
-            "MULTI_ACCOUNT_LOGIN_SUCCESS",
-            "LOGIN_SUCCESS",
-            "CONNECTION_OPEN"
-        ];
-        events.forEach(ev => FluxDispatcher.subscribe(ev, handler));
-        return () => events.forEach(ev => FluxDispatcher.unsubscribe(ev, handler));
+        FluxDispatcher.subscribe("MULTI_ACCOUNT_VALIDATE_TOKEN_SUCCESS", handler);
+        return () => FluxDispatcher.unsubscribe("MULTI_ACCOUNT_VALIDATE_TOKEN_SUCCESS", handler);
     } catch { return null; }
 }
 
@@ -221,15 +225,26 @@ function getNativeAccounts(): SavedAccount[] {
 }
 
 /** Quick switch — token direct */
-function switchToQuick(token: string) {
+function switchToQuick(token: string, userId?: string) {
+    const cleanTok = token.trim().replace(/^"+|"+$/g, "");
     try {
-        window.localStorage.setItem("token", `"${token}"`);
+        window.localStorage.setItem("token", `"${cleanTok}"`);
+        window.localStorage.setItem("default_token", `"${cleanTok}"`);
+        if (userId) {
+            window.localStorage.setItem("user_id_cache", `"${userId}"`);
+        }
         location.reload();
     } catch {
         const iframe = document.createElement("iframe");
         iframe.style.display = "none";
         document.body.appendChild(iframe);
-        try { (iframe as any).contentWindow.localStorage.token = `"${token}"`; } catch { }
+        try {
+            (iframe as any).contentWindow.localStorage.token = `"${cleanTok}"`;
+            (iframe as any).contentWindow.localStorage.default_token = `"${cleanTok}"`;
+            if (userId) {
+                (iframe as any).contentWindow.localStorage.user_id_cache = `"${userId}"`;
+            }
+        } catch { }
         document.body.removeChild(iframe);
         location.reload();
     }
@@ -322,15 +337,21 @@ function ContextMenuPortal(props: CtxMenuProps) {
             </div>
             <div className="mi-ctx-separator" />
 
-            {acc.hasToken && <>
-                <div className="mi-ctx-item" onClick={() => { onNewWindow(); onClose(); }}>
-                    <WindowIcon /> {t("New detached instance")}
+            {acc.hasToken ? (
+                <>
+                    <div className="mi-ctx-item" onClick={() => { onNewWindow(); onClose(); }}>
+                        <WindowIcon /> {t("New detached instance")}
+                    </div>
+                    <div className="mi-ctx-item" onClick={() => { onNewGrouped(); onClose(); }}>
+                        <GroupedIcon /> {t("New grouped instance")}
+                    </div>
+                    <div className="mi-ctx-separator" />
+                </>
+            ) : (
+                <div className="mi-ctx-hint">
+                    {t("Switch to this account once to capture its session token.")}
                 </div>
-                <div className="mi-ctx-item" onClick={() => { onNewGrouped(); onClose(); }}>
-                    <GroupedIcon /> {t("New grouped instance")}
-                </div>
-                <div className="mi-ctx-separator" />
-            </>}
+            )}
 
             <div className="mi-ctx-item" onClick={() => { onSwitch(); onClose(); }}>
                 <SwitchIcon /> {t("Quick switch")}
@@ -366,28 +387,64 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
     const [status, setStatus] = React.useState<string | null>(null);
 
     React.useEffect(() => {
-        captureAllTokens().then(() => {
-            setNativeAccounts(getNativeAccounts());
+        captureCurrentToken();
+        DataStore.get<SavedAccount[]>(STORE_KEY).then(async v => {
+            const raw = v ?? [];
+            const decrypted: SavedAccount[] = [];
+            for (const acc of raw) {
+                let tok = acc.token;
+                if (tok && tok.startsWith("dQw4w9WgXcQ:")) {
+                    try {
+                        const dec = await Native.decryptToken(tok);
+                        if (dec) tok = dec;
+                    } catch (e) {
+                        console.warn("[MultiInstance] Decryption failed for", acc.username, e);
+                    }
+                }
+                decrypted.push({ ...acc, token: tok });
+            }
+            setSavedAccounts(decrypted);
         });
-        DataStore.get<SavedAccount[]>(STORE_KEY).then(v => setSavedAccounts(v ?? []));
+        setNativeAccounts(getNativeAccounts());
         Native.getOpenInstances().then(ids => setOpenInstances(ids ?? [])).catch(() => { });
     }, []);
 
     const allAccounts = React.useMemo<AccountEntry[]>(() => {
         const seen = new Set<string>();
         const result: AccountEntry[] = [];
+        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const curTok = tokenMod?.getToken?.();
 
         for (const acc of nativeAccounts) {
             if (acc.id === currentUser?.id || seen.has(acc.id)) continue;
             seen.add(acc.id);
             const saved = savedAccounts.find(s => s.id === acc.id);
-            const token = saved?.token || acc.token || tokenCache[acc.id] || "";
+            let token = saved?.token || acc.token || tokenCache[acc.id] || "";
+            if (token && curTok && token === curTok && acc.id !== currentUser?.id) {
+                token = "";
+            }
+            if (token) {
+                const owner = getUserIdFromToken(token);
+                if (owner && owner !== acc.id) {
+                    token = "";
+                }
+            }
             result.push({ ...acc, token, hasToken: !!token, isNative: true });
         }
         for (const acc of savedAccounts) {
             if (acc.id === currentUser?.id || seen.has(acc.id)) continue;
             seen.add(acc.id);
-            result.push({ ...acc, hasToken: true, isNative: false });
+            let token = acc.token;
+            if (token && curTok && token === curTok && acc.id !== currentUser?.id) {
+                token = "";
+            }
+            if (token) {
+                const owner = getUserIdFromToken(token);
+                if (owner && owner !== acc.id) {
+                    token = "";
+                }
+            }
+            result.push({ ...acc, token, hasToken: !!token, isNative: false });
         }
         return result;
     }, [savedAccounts, nativeAccounts, currentUser]);
@@ -398,14 +455,21 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
     };
 
     const handleNewWindow = async (acc: AccountEntry) => {
-        if (!acc.hasToken) return;
+        if (!acc.hasToken || !acc.token) return;
+        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const curTok = tokenMod?.getToken?.();
+        if (curTok && acc.token === curTok && acc.id !== currentUser?.id) {
+            setStatus(t("Cannot launch: Token collision detected."));
+            setTimeout(() => setStatus(null), 4000);
+            return;
+        }
         setCtx(null);
         setStatus(t("Opening window…"));
         const { domain, blockExternalTokenAccess, performanceMode } = settings.store;
         // @ts-ignore - Passage du pseudo, domaine, token protection, perf mode
         const res = await Native.openInstanceWindow(acc.token, acc.id, false, acc.username, domain, blockExternalTokenAccess, performanceMode).catch(() => ({ ok: false, error: "error" }));
         if ((res as any).ok) {
-            setStatus(t("Window opened ✓"));
+            setStatus(t("Window opened"));
             await refreshInstances();
         } else {
             setStatus(`${t("Error:")} ` + ((res as any).error ?? t("unknown")));
@@ -414,14 +478,21 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
     };
 
     const handleNewDetached = async (acc: AccountEntry) => {
-        if (!acc.hasToken) return;
+        if (!acc.hasToken || !acc.token) return;
+        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const curTok = tokenMod?.getToken?.();
+        if (curTok && acc.token === curTok && acc.id !== currentUser?.id) {
+            setStatus(t("Cannot launch: Token collision detected."));
+            setTimeout(() => setStatus(null), 4000);
+            return;
+        }
         setCtx(null);
         setStatus(t("Opening detached instance…"));
         const { domain, blockExternalTokenAccess, performanceMode } = settings.store;
         // @ts-ignore - Argument 'detached', pseudo, domaine, token protection, perf mode
         const res = await Native.openInstanceWindow(acc.token, acc.id, true, acc.username, domain, blockExternalTokenAccess, performanceMode).catch(() => ({ ok: false, error: "error" }));
         if ((res as any).ok) {
-            setStatus(t("Instance opened ✓"));
+            setStatus(t("Instance opened"));
             await refreshInstances();
         } else {
             setStatus(`${t("Error:")} ` + ((res as any).error ?? t("unknown")));
@@ -430,14 +501,21 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
     };
 
     const handleNewGrouped = async (acc: AccountEntry) => {
-        if (!acc.hasToken) return;
+        if (!acc.hasToken || !acc.token) return;
+        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const curTok = tokenMod?.getToken?.();
+        if (curTok && acc.token === curTok && acc.id !== currentUser?.id) {
+            setStatus(t("Cannot launch: Token collision detected."));
+            setTimeout(() => setStatus(null), 4000);
+            return;
+        }
         setCtx(null);
         setStatus(t("Opening grouped instance…"));
         const { domain, blockExternalTokenAccess, performanceMode } = settings.store;
         // @ts-ignore
         const res = await Native.openInstanceWindowGrouped(acc.token, acc.id, acc.username, domain, blockExternalTokenAccess, performanceMode).catch(() => ({ ok: false, error: "error" }));
         if ((res as any).ok) {
-            setStatus(t("Instance opened ✓"));
+            setStatus(t("Instance opened"));
             await refreshInstances();
         } else {
             setStatus(`${t("Error:")} ` + ((res as any).error ?? t("unknown")));
@@ -499,20 +577,14 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
                     ) : allAccounts.map(acc => {
                         const isOpen = openInstances.includes(acc.id);
                         const tagText = acc.hasToken
-                            ? (acc.isNative ? "🔗 " + t("Discord Account") : "🔑 " + t("Token"))
-                            : "⚠️ " + t("Requires normal login to capture token");
+                            ? (acc.isNative ? t("Discord Account") : t("Token"))
+                            : t("Requires normal login to capture token");
                         return (
                             <div
                                 key={acc.id}
                                 className={`mi-account-row${isOpen ? " mi-account-row--active" : ""}${!acc.hasToken ? " mi-account-row--no-token" : ""}`}
-                                onClick={e => {
-                                    if (!acc.hasToken) return;
-                                    openCtx(e, acc);
-                                }}
-                                onContextMenu={e => {
-                                    if (!acc.hasToken) return;
-                                    openCtx(e, acc);
-                                }}
+                                onClick={e => openCtx(e, acc)}
+                                onContextMenu={e => openCtx(e, acc)}
                             >
                                 <AccountAvatar url={acc.avatar} name={acc.username} />
                                 <div className="mi-account-info">
@@ -526,7 +598,7 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
                                         ? <span className="mi-badge-open">{t("Open")}</span>
                                         : <span className="mi-badge-arrow">›</span>
                                 ) : (
-                                    <span style={{ fontSize: "14px", opacity: 0.6 }}>🔒</span>
+                                    <span className="mi-badge-lock"><LockIcon /></span>
                                 )}
                             </div>
                         );
@@ -554,7 +626,7 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
                         onNewWindow={() => handleNewWindow(acc)}
                         onNewDetached={() => handleNewDetached(acc)}
                         onNewGrouped={() => handleNewGrouped(acc)}
-                        onSwitch={() => acc.token ? switchToQuick(acc.token) : switchNativeAccount(acc.id)}
+                        onSwitch={() => acc.token ? switchToQuick(acc.token, acc.id) : switchNativeAccount(acc.id)}
                     />
                 );
             })()}
@@ -575,6 +647,14 @@ function AccountAvatar({ url, name }: { url: string; name: string; }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Icons
 // ─────────────────────────────────────────────────────────────────────────────
+
+function LockIcon() {
+    return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+        </svg>
+    );
+}
 
 function DiscordIcon() {
     return (
@@ -626,9 +706,9 @@ function CloseIcon() {
     );
 }
 
-function MultiInstanceIcon({ width = 20, height = 20 }: { width?: number; height?: number; }) {
+function MultiInstanceIcon({ width = 20, height = 20, className = "" }: { width?: number; height?: number; className?: string; }) {
     return (
-        <svg width={width} height={height} viewBox="0 0 24 24" fill="currentColor">
+        <svg className={`nc-multi-instance-icon ${className}`} width={width} height={height} viewBox="0 0 24 24" fill="currentColor">
             <path d="M19.73 4.87a18.2 18.2 0 0 0-4.6-1.44c-.21.4-.4.8-.58 1.21-1.69-.25-3.4-.25-5.1 0-.18-.41-.37-.82-.59-1.2-1.6.27-3.14.75-4.6 1.43A19.04 19.04 0 0 0 .96 17.7a18.43 18.43 0 0 0 5.63 2.87c.46-.62.86-1.28 1.2-1.98-.65-.25-1.29-.55-1.9-.92.17-.12.32-.24.47-.37 3.58 1.7 7.7 1.7 11.28 0l.46.37c-.6.36-1.25.67-1.9.92.35.7.75 1.35 1.2 1.98 2.03-.63 3.94-1.6 5.64-2.87.47-4.87-.78-9.09-3.3-12.83ZM8.3 15.12c-1.1 0-2-1.02-2-2.27 0-1.24.88-2.26 2-2.26s2.02 1.02 2 2.26c0 1.25-.89 2.27-2 2.27Zm7.4 0c-1.1 0-2-1.02-2-2.27 0-1.24.88-2.26 2-2.26s2.02 1.02 2 2.26c0 1.25-.88 2.27-2 2.27Z" />
             <circle cx="19.5" cy="19.5" r="4.5" fill="var(--brand-500, #5865f2)" />
             <path d="M19.5 17.5v4M17.5 19.5h4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
@@ -650,6 +730,162 @@ function MultiInstanceButton() {
     );
 }
 
+async function initInstanceWindowAuth(): Promise<void> {
+    let auth: { token: string; userId: string; username: string; } | null = null;
+    try {
+        if (typeof Native?.getInstanceAuth === "function") {
+            auth = await Native.getInstanceAuth();
+        }
+    } catch (e) {
+        console.warn("[GuncordMI] getInstanceAuth IPC error:", e);
+    }
+
+    const miToken = auth?.token || (window as any).__guncord_token;
+    const miUserId = auth?.userId || (window as any).__guncord_user_id || getUserIdFromToken(miToken || "");
+    if (!miToken || typeof miToken !== "string") {
+        return;
+    }
+
+    let cleanTok = miToken.trim().replace(/^"+|"+$/g, "");
+    if (!cleanTok || cleanTok === "undefined") return;
+
+    if (cleanTok.startsWith("dQw4w9WgXcQ:")) {
+        try {
+            const dec = await Native.decryptToken(cleanTok);
+            if (dec) cleanTok = dec;
+        } catch { }
+    }
+    if (cleanTok.startsWith("dQw4w9WgXcQ:")) return;
+
+    console.log("[GuncordMI] Instance token acquired for userId:", miUserId);
+
+    let encryptedTok = "";
+    try {
+        if (typeof (Native as any)?.encryptToken === "function") {
+            encryptedTok = await (Native as any).encryptToken(cleanTok);
+        }
+    } catch { }
+
+    const tokensMap: Record<string, string> = {};
+    if (miUserId && encryptedTok) {
+        tokensMap[miUserId] = encryptedTok;
+    }
+    const tokensJson = Object.keys(tokensMap).length > 0 ? JSON.stringify(tokensMap) : "";
+
+    // 1. Synchronously sync localStorage in current window and hidden iframe
+    const syncStorage = () => {
+        try {
+            const q = JSON.stringify(cleanTok);
+            window.localStorage.setItem("token", q);
+            window.localStorage.setItem("default_token", q);
+            if (miUserId) {
+                window.localStorage.setItem("user_id_cache", JSON.stringify(miUserId));
+            }
+            if (tokensJson) {
+                window.localStorage.setItem("tokens", tokensJson);
+                window.localStorage.setItem("multiaccount_tokens", tokensJson);
+            }
+            const iframe = document.createElement("iframe");
+            iframe.style.display = "none";
+            document.body.appendChild(iframe);
+            const ifLs = (iframe as any).contentWindow?.localStorage;
+            if (ifLs) {
+                ifLs.token = q;
+                ifLs.default_token = q;
+                if (miUserId) ifLs.user_id_cache = JSON.stringify(miUserId);
+                if (tokensJson) {
+                    ifLs.tokens = tokensJson;
+                    ifLs.multiaccount_tokens = tokensJson;
+                }
+            }
+            document.body.removeChild(iframe);
+        } catch (e) {
+            console.warn("[GuncordMI] syncStorage error:", e);
+        }
+    };
+    syncStorage();
+
+    // 2. Check if already authenticated with target account
+    const checkAuthAndRoute = () => {
+        const authStore = findByProps("getToken", "getId");
+        if (authStore?.getToken?.() === cleanTok && authStore?.getId?.()) {
+            console.log("[GuncordMI] User authenticated successfully!");
+            const router = findByProps("transitionTo", "replaceWith");
+            if ((window.location.pathname.includes("/login") || window.location.pathname === "/") && router?.transitionTo) {
+                router.transitionTo("/channels/@me");
+            }
+            return true;
+        }
+        return false;
+    };
+
+    if (checkAuthAndRoute()) return;
+
+    // 3. Trigger official Discord login action ONCE
+    let loginTriggered = false;
+    const triggerLogin = (loginMod: any) => {
+        if (loginTriggered || !loginMod?.loginToken) return;
+        loginTriggered = true;
+        console.log("[GuncordMI] Triggering loginMod.loginToken()...");
+        try {
+            loginMod.loginToken(cleanTok);
+        } catch (e) {
+            console.warn("[GuncordMI] loginToken error:", e);
+        }
+        const dispatcher = findByProps("dispatch", "subscribe") || FluxDispatcher;
+        if (dispatcher?.dispatch) {
+            try {
+                dispatcher.dispatch({ type: "LOGIN", token: cleanTok });
+                dispatcher.dispatch({ type: "LOGIN_SUCCESS", token: cleanTok });
+                if (miUserId) {
+                    dispatcher.dispatch({
+                        type: "MULTI_ACCOUNT_VALIDATE_TOKEN_SUCCESS",
+                        token: cleanTok,
+                        userId: miUserId
+                    });
+                }
+            } catch { }
+        }
+    };
+
+    const immediateLoginMod = findByProps("loginToken") || findByProps("switchAccount", "loginToken");
+    if (immediateLoginMod) {
+        triggerLogin(immediateLoginMod);
+    } else {
+        waitFor(["loginToken"], mod => triggerLogin(mod));
+    }
+
+    // 4. Transition to /channels/@me once gateway connects
+    const routeToMe = () => {
+        console.log("[GuncordMI] Transitioning to /channels/@me...");
+        const router = findByProps("transitionTo", "replaceWith");
+        if ((window.location.pathname.includes("/login") || window.location.pathname === "/") && router?.transitionTo) {
+            router.transitionTo("/channels/@me");
+        }
+    };
+
+    waitFor(["dispatch", "subscribe"], (dispatcher: any) => {
+        const unConn = dispatcher.subscribe("CONNECTION_OPEN", () => {
+            try { unConn(); } catch { }
+            routeToMe();
+        });
+        const unLogin = dispatcher.subscribe("LOGIN_SUCCESS", () => {
+            setTimeout(checkAuthAndRoute, 500);
+        });
+    });
+
+    // 5. Gentle fallback checks (at 1s, 2.5s, 5s)
+    [1000, 2500, 5000].forEach(delay => {
+        setTimeout(() => {
+            syncStorage();
+            if (!checkAuthAndRoute() && !loginTriggered) {
+                const mod = findByProps("loginToken") || findByProps("switchAccount", "loginToken");
+                if (mod) triggerLogin(mod);
+            }
+        }, delay);
+    });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Plugin
 // ─────────────────────────────────────────────────────────────────────────────
@@ -669,10 +905,11 @@ export default definePlugin({
     _fluxUnsub: null as (() => void) | null,
 
     async start() {
+        await initInstanceWindowAuth();
         await loadTokenCache();
         hookEncryptAndStoreTokens();
         this._fluxUnsub = hookFluxDispatcher();
-        await captureAllTokens();
+        captureCurrentToken();
         addHeaderBarButton("guncord-multi-instance", () => <MultiInstanceButton />, 9);
     },
 
@@ -683,3 +920,7 @@ export default definePlugin({
         if (root) root.remove();
     },
 });
+
+// Execute immediately on renderer startup — independent of any plugin lifecycle
+initInstanceWindowAuth().catch(err => console.warn("[GuncordMI] initInstanceWindowAuth error:", err));
+

@@ -82,6 +82,30 @@ export function CopyIcon(props: IconProps) {
 }
 
 /**
+ * Discord's ID icon, as seen in Developer Mode "Copy ID" context menu items
+ */
+export function CopyIdIcon(props: IconProps) {
+    return (
+        <Icon
+            {...props}
+            className={classes(props.className, "vc-copy-id-icon")}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill="currentColor"
+                d="M15.3 14.48c-.46.45-1.08.67-1.86.67h-1.39V9.2h1.39c.78 0 1.4.22 1.86.67.46.45.68 1.22.68 2.31 0 1.1-.22 1.86-.68 2.31Z"
+            />
+            <path
+                fill="currentColor"
+                fillRule="evenodd"
+                clipRule="evenodd"
+                d="M5 2a3 3 0 0 0-3 3v14a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3V5a3 3 0 0 0-3-3H5Zm1 15h2.04V7.34H6V17Zm4-9.66V17h3.44c1.46 0 2.6-.42 3.38-1.25.8-.83 1.2-2.02 1.2-3.58s-.4-2.75-1.2-3.58c-.79-.83-1.92-1.25-3.38-1.25H10Z"
+            />
+        </Icon>
+    );
+}
+
+/**
  * Discord's open external icon, as seen in the user profile connections
  */
 export function OpenExternalIcon(props: IconProps) {
@@ -216,9 +240,6 @@ export function Microphone(props: IconProps) {
     );
 }
 
-/** @deprecated Use Microphone instead */
-export const Micphone = Microphone;
-
 export function CogWheel(props: IconProps) {
     return (
         <Icon
@@ -273,34 +294,6 @@ export function DeleteIcon(props: IconProps) {
 /**
  * A plugin icon, created by CorellanStoma. https://github.com/CreArts-Community/Settings-Icons
  */
-export function PlanetIcon(props: IconProps) {
-    return (
-        <Icon
-            {...props}
-            viewBox="0 0 24 24"
-        >
-            <path
-                fill={props.fill || "#abacb2"}
-                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
-            />
-        </Icon>
-    );
-}
-
-export function HeartIcon(props: IconProps) {
-    return (
-        <Icon
-            {...props}
-            viewBox="0 0 24 24"
-        >
-            <path
-                fill={props.fill || "#abacb2"}
-                d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-            />
-        </Icon>
-    );
-}
-
 export function PluginIcon(props: IconProps) {
     return (
         <Icon
@@ -448,8 +441,6 @@ export function IDIcon(props: IconProps) {
     );
 }
 
-export const CopyIdIcon = IDIcon;
-
 export function FolderIcon(props: IconProps) {
     return (
         <Icon
@@ -556,8 +547,6 @@ export function WebsiteIcon(props: IconProps) {
         </Icon>
     );
 }
-
-// ─── Compatibility icons for Vencord/Equicord plugins ─────────────────────────
 
 /**
  * A question mark inside a square, used as a placeholder icon when no other icon is available
@@ -749,7 +738,7 @@ export function CloudUploadIcon(props: IconProps) {
     );
 }
 
-export const ClockIcon = (props?: any) => {
+export function ClockIcon(props: IconProps) {
     return (
         <Icon
             {...props}
@@ -763,21 +752,33 @@ export const ClockIcon = (props?: any) => {
             />
         </Icon>
     );
-};
+}
 
 export function ChevronSmallDownIcon(props: IconProps) {
     return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={props.width ?? 24} height={props.height ?? 24} fill="currentColor" className={props.className}>
-            <path d="M5.3 9.3a1 1 0 0 1 1.4 0l5.3 5.29 5.3-5.3a1 1 0 1 1 1.4 1.42l-6 6a1 1 0 0 1-1.4 0l-6-6a1 1 0 0 1 0-1.41Z"/>
-        </svg>
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                d="M5.3 9.3a1 1 0 0 1 1.4 0l5.3 5.29 5.3-5.3a1 1 0 1 1 1.4 1.42l-6 6a1 1 0 0 1-1.4 0l-6-6a1 1 0 0 1 0-1.42Z"
+            />
+        </Icon>
     );
 }
 
 export function ChevronSmallUpIcon(props: IconProps) {
     return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={props.width ?? 24} height={props.height ?? 24} fill="currentColor" className={props.className}>
-            <path d="M5.3 14.7a1 1 0 0 0 1.4 0L12 9.42l5.3 5.3a1 1 0 0 0 1.4-1.42l-6-6a1 1 0 0 0-1.4 0l-6 6a1 1 0 0 0 0 1.41Z"/>
-        </svg>
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                d="M5.3 14.7a1 1 0 0 0 1.4 0l5.3-5.29 5.3 5.3a1 1 0 1 0 1.4-1.42l-6-6a1 1 0 0 0-1.4 0l-6 6a1 1 0 0 0 0 1.42Z"
+            />
+        </Icon>
     );
 }
 
@@ -849,20 +850,6 @@ export const ComponentsIcon = (props?: any) => {
     );
 };
 
-export const BookmarkIcon = (props?: any) => {
-    return (
-        <Icon
-            {...props}
-            viewBox="0 0 24 24"
-        >
-            <path
-                fill={props.fill || "currentColor"}
-                d="M4 5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v16a1 1 0 0 1-1.67.74l-5.66-5.13a1 1 0 0 0-1.34 0l-5.66 5.13A1 1 0 0 1 4 20.99V5Z"
-            />
-        </Icon>
-    );
-};
-
 export const LogsIcon = (props?: any) => {
     return (
         <Icon
@@ -879,19 +866,67 @@ export const LogsIcon = (props?: any) => {
     );
 };
 
+export const BookmarkIcon = (props?: any) => {
+    return (
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                d="M4 5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v16a1 1 0 0 1-1.67.74l-5.66-5.13a1 1 0 0 0-1.34 0l-5.66 5.13A1 1 0 0 1 4 20.99V5Z"
+            />
+        </Icon>
+    );
+};
+
 export function RobotIcon(props: IconProps) {
     return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={props.width ?? 24} height={props.height ?? 24} fill="currentColor" className={props.className}>
-            <path d="M14 8a2 2 0 0 0-4 0H5a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-8a3 3 0 0 0-3-3h-5Zm-5 5a1 1 0 1 1 2 0 1 1 0 0 1-2 0Zm6 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0Zm-4 4h4a1 1 0 1 1 0 2h-4a1 1 0 1 1 0-2ZM12 2a1 1 0 0 1 1 1v1h1a1 1 0 1 1 0 2h-4a1 1 0 1 1 0-2h1V3a1 1 0 0 1 1-1Z"/>
-        </svg>
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                d="M7.89 13.46a1 1 0 0 1-1.78-.9L7 13l-.9-.45.01-.01.01-.02a2.24 2.24 0 0 1 .14-.23c.1-.14.23-.31.4-.5.37-.36.98-.79 1.84-.79.86 0 1.47.43 1.83.8a3.28 3.28 0 0 1 .55.72v.02h.01v.01L10 13l.9-.45a1 1 0 0 1-1.79.9 1.28 1.28 0 0 0-.19-.25c-.14-.13-.28-.2-.42-.2-.14 0-.28.07-.42.2a1.28 1.28 0 0 0-.19.25ZM13.55 13.9a1 1 0 0 0 1.34-.44c0-.02.02-.04.04-.06.03-.05.08-.13.15-.2.14-.13.28-.2.42-.2.14 0 .28.07.42.2a1.28 1.28 0 0 1 .19.25 1 1 0 0 0 1.78-.9L17 13l.9-.45-.01-.01-.01-.02a2.1 2.1 0 0 0-.14-.23 3.28 3.28 0 0 0-.4-.5c-.37-.36-.98-.79-1.84-.79-.86 0-1.47.43-1.83.8a3.28 3.28 0 0 0-.55.72v.02h-.01v.01L14 13l-.9-.45a1 1 0 0 0 .45 1.34Z"
+            />
+            <path
+                fill={props.fill || "currentColor"}
+                fillRule="evenodd"
+                d="M12 21c5.52 0 10-1.86 10-6 0-5.59-2.8-10.07-4.26-11.67a1 1 0 1 0-1.48 1.34 14.8 14.8 0 0 1 2.35 3.86A10.23 10.23 0 0 0 12 6C9.47 6 7.15 7.02 5.4 8.53a14.8 14.8 0 0 1 2.34-3.86 1 1 0 1 0-1.48-1.34A18.65 18.65 0 0 0 2 15c0 4.14 4.48 6 10 6Zm0-12c3.87 0 7 2 7 4.2S15.87 17 12 17s-7-1.6-7-3.8C5 11 8.13 9 12 9Z"
+                clipRule="evenodd"
+            />
+        </Icon>
     );
 }
 
 export function HeadphonesIcon(props: IconProps) {
     return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={props.width ?? 24} height={props.height ?? 24} fill="currentColor" className={props.className}>
-            <path d="M12 2a9 9 0 0 0-9 9v7a3 3 0 0 0 3 3h1a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H4v-3a8 8 0 0 1 16 0v3h-3a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1a3 3 0 0 0 3-3v-7a9 9 0 0 0-9-9Z"/>
-        </svg>
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                d="M12 3a9 9 0 0 0-8.95 10h1.87a5 5 0 0 1 4.1 2.13l1.37 1.97a3.1 3.1 0 0 1-.17 3.78 2.85 2.85 0 0 1-3.55.74 11 11 0 1 1 10.66 0c-1.27.71-2.73.23-3.55-.74a3.1 3.1 0 0 1-.17-3.78l1.38-1.97a5 5 0 0 1 4.1-2.13h1.86A9 9 0 0 0 12 3Z"
+            />
+        </Icon>
+    );
+}
+
+export function GhostIcon(props: IconProps) {
+    return (
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                fillRule="evenodd"
+                clipRule="evenodd"
+                d="M12 2a8 8 0 0 0-8 8v11l3-2.5 2.5 2.5L12 18.5l2.5 2.5 2.5-2.5 3 2.5V10a8 8 0 0 0-8-8Zm-3 7a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm6 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"
+            />
+        </Icon>
     );
 }
 
@@ -937,33 +972,65 @@ export function CircleQuestionIcon(props: IconProps) {
 
 export function AttachmentIcon(props: IconProps) {
     return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={props.width ?? 24} height={props.height ?? 24} fill="currentColor" className={props.className}>
-            <path d="M11.88 3.06a5.06 5.06 0 0 1 7.16 7.16l-9.19 9.19a3.04 3.04 0 1 1-4.3-4.3l8.14-8.14a1 1 0 1 1 1.42 1.42l-8.14 8.14a1.04 1.04 0 0 0 1.47 1.47l9.19-9.19a3.06 3.06 0 1 0-4.33-4.33L4.1 13.58a5.08 5.08 0 0 0 7.19 7.19l7.06-7.06a1 1 0 1 1 1.41 1.41l-7.06 7.07a7.08 7.08 0 1 1-10.01-10L11.88 3.06Z"/>
-        </svg>
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                d="M10.57 4.01a6.97 6.97 0 0 1 9.86 0l.54.55a6.99 6.99 0 0 1 0 9.88l-7.26 7.27a1 1 0 0 1-1.42-1.42l7.27-7.26a4.99 4.99 0 0 0 0-7.06L19 5.43a4.97 4.97 0 0 0-7.02 0l-8.02 8.02a3.24 3.24 0 1 0 4.58 4.58l6.24-6.24a1.12 1.12 0 0 0-1.58-1.58l-3.5 3.5a1 1 0 0 1-1.42-1.42l3.5-3.5a3.12 3.12 0 1 1 4.42 4.42l-6.24 6.24a5.24 5.24 0 0 1-7.42-7.42l8.02-8.02Z"
+            />
+        </Icon>
     );
 }
 
 export function StickerIcon(props: IconProps) {
     return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={props.width ?? 24} height={props.height ?? 24} fill="currentColor" className={props.className}>
-            <path d="M4.35 3A3.35 3.35 0 0 0 1 6.35v11.3A3.35 3.35 0 0 0 4.35 21h7.18c.89 0 1.74-.35 2.37-.98l4.12-4.12c.63-.63.98-1.48.98-2.37V6.35A3.35 3.35 0 0 0 16.65 3H4.35Z"/>
-        </svg>
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                fillRule="evenodd"
+                d="M6 2h12a4 4 0 0 1 4 4v7.5a.5.5 0 0 1-.5.5H19a5 5 0 0 0-5 5v2.5a.5.5 0 0 1-.5.5H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4Zm.5 8a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM19 8.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm-9.91 2.94a1 1 0 0 0-1.66 1.12 5.5 5.5 0 0 0 9.14 0 1 1 0 0 0-1.66-1.12 3.5 3.5 0 0 1-5.82 0Z"
+                clipRule="evenodd"
+            />
+            <path
+                fill={props.fill || "currentColor"}
+                d="M21.66 16c.03 0 .05.03.04.06a3 3 0 0 1-.58.82l-4.24 4.24a3 3 0 0 1-.82.58.04.04 0 0 1-.06-.04V19a3 3 0 0 1 3-3h2.66Z"
+            />
+        </Icon>
     );
 }
 
 export function GifIcon(props: IconProps) {
     return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={props.width ?? 24} height={props.height ?? 24} fill="currentColor" className={props.className}>
-            <path d="M2 5a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5Zm8.5 4a2.5 2.5 0 0 0-2.5 2.5v1A2.5 2.5 0 0 0 10.5 15h1a1 1 0 0 0 1-1v-1.5a1 1 0 0 0-1-1H11a1 1 0 1 0 0 2v.5h-.5a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h2a1 1 0 0 0 0-2h-2Zm4.5 0a1 1 0 1 0 0 2h.5v1h-.5a1 1 0 1 0 0 2H16a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-1Zm-7 0a1 1 0 0 0-1 1v4a1 1 0 1 0 2 0v-4a1 1 0 0 0-1-1Z"/>
-        </svg>
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                fillRule="evenodd"
+                d="M5 2a3 3 0 0 0-3 3v14a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3V5a3 3 0 0 0-3-3H5Zm2.18 13.87a2.9 2.9 0 0 1-1.66-.49 3.18 3.18 0 0 1-1.12-1.35A4.88 4.88 0 0 1 4 12c0-.75.14-1.42.42-2 .29-.59.7-1.04 1.24-1.37a3.7 3.7 0 0 1 1.95-.5c.64 0 1.21.14 1.72.4.5.28.89.67 1.15 1.16l-1.22.88a1.76 1.76 0 0 0-1.64-1.02c-.66 0-1.17.22-1.52.65a2.74 2.74 0 0 0-.53 1.8c0 .78.18 1.39.53 1.81.35.42.86.64 1.52.64.3 0 .57-.06.81-.16.25-.12.45-.27.58-.47v-.93H7.3v-1.4h3.24v4.23H9.27l-.2-.71c-.43.57-1.06.86-1.89.86Zm6.34-.15h-1.57V8.28h1.57v7.44Zm1.51 0h1.57v-2.83h2.76v-1.42H16.6V9.7H20V8.28h-4.97v7.44Z"
+                clipRule="evenodd"
+            />
+        </Icon>
     );
 }
 
 export function VideoIcon(props: IconProps) {
     return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={props.width ?? 24} height={props.height ?? 24} fill="currentColor" className={props.className}>
-            <path d="M2 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v1.38l2.37-1.9A1 1 0 0 1 22 7.26v9.48a1 1 0 0 1-1.63.78L18 15.62V17a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V7Z"/>
-        </svg>
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                d="M4 4a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h11a3 3 0 0 0 3-3v-2.12a1 1 0 0 0 .55.9l3 1.5a1 1 0 0 0 1.45-.9V7.62a1 1 0 0 0-1.45-.9l-3 1.5a1 1 0 0 0-.55.9V7a3 3 0 0 0-3-3H4Z"
+            />
+        </Icon>
     );
 }
 
@@ -1201,3 +1268,46 @@ export function StarOutlined(props: IconProps) {
         </Icon>
     );
 }
+
+export function PlanetIcon(props: IconProps) {
+    return (
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
+            />
+        </Icon>
+    );
+}
+
+export function HeartIcon(props: IconProps) {
+    return (
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+            />
+        </Icon>
+    );
+}
+
+export function DiscordIcon(props: IconProps) {
+    return (
+        <Icon
+            {...props}
+            viewBox="0 0 24 24"
+        >
+            <path
+                fill={props.fill || "currentColor"}
+                d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.01.06.02.09.01 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02zM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12zm6.97 0c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12z"
+            />
+        </Icon>
+    );
+}
+

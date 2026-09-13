@@ -192,7 +192,6 @@ export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof Flux
                     logger.error(`${p.name}: Error while handling ${event}\n`, e);
                 }
             };
-
             (wrappedHandler as any).__vcWrapped = true;
             fluxDispatcher.subscribe(event as FluxEvents, wrappedHandler);
         }

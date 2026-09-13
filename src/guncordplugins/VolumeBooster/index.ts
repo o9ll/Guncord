@@ -35,6 +35,8 @@ interface StreamData {
     _volume: number;
 }
 
+const activeCleanups = new Set<() => void>();
+
 export default definePlugin({
     name: "VolumeBooster",
     enabledByDefault: true,
@@ -43,6 +45,13 @@ export default definePlugin({
     tags: ["Voice", "Utility"],
     required: false,
     settings,
+
+    stop() {
+        for (const cleanup of activeCleanups) {
+            try { cleanup(); } catch {}
+        }
+        activeCleanups.clear();
+    },
 
     patches: [
         // Change the max volume for sliders to allow for values above 200
@@ -128,12 +137,14 @@ export default definePlugin({
             gain.connect(data.audioContext.destination);
 
             const cleanup = () => {
+                activeCleanups.delete(cleanup);
                 try { data.streamSourceNode?.disconnect(); } catch {}
                 try { data.gainNode?.disconnect(); } catch {}
                 delete data.streamSourceNode;
                 delete data.gainNode;
                 data.stream.removeEventListener("inactive", cleanup);
             };
+            activeCleanups.add(cleanup);
             data.stream.addEventListener("inactive", cleanup);
         }
 

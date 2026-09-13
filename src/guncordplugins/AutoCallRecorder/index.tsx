@@ -6,15 +6,15 @@
 
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType, IPluginOptionComponentProps } from "@utils/types";
-import { FluxDispatcher, SelectedChannelStore, React, Avatar, IconUtils, UserStore, RelationshipStore, Toasts } from "@webpack/common";
+import { ChannelStore, FluxDispatcher, SelectedChannelStore, React, Avatar, IconUtils, UserStore, RelationshipStore, Toasts } from "@webpack/common";
 import { Button, TextInput } from "@webpack/common/components";
-import { findByProps } from "@webpack";
+import { findByPropsLazy, findStoreLazy } from "@webpack";
 import { SafeSearchableSelect } from "@components/SafeSearchableSelect";
 import { startRecording, stopRecording, isCurrentlyRecording, getRecordingDurationMs } from "./recorder";
 import { t } from "../autoTranslateGuncord";
 import "./style.css";
 
-const VoiceStateStore = findByProps("getVoiceState");
+const VoiceStateStore = findStoreLazy("VoiceStateStore") ?? findByPropsLazy("getVoiceState");
 
 const BlacklistSelector = (props: IPluginOptionComponentProps) => {
     const friends = RelationshipStore?.getFriendIDs?.()?.map((id: string) => UserStore?.getUser?.(id))?.filter(Boolean) || [];
@@ -81,7 +81,6 @@ const SavePathSelector = (props: IPluginOptionComponentProps) => {
                                 props.setValue(dir);
                             }
                         } else {
-                            // Fallback si VencordNative n'est pas dispo
                             alert("VencordNative is required for folder picking.");
                         }
                     } catch (e) {
@@ -98,15 +97,15 @@ const SavePathSelector = (props: IPluginOptionComponentProps) => {
 const settings = definePluginSettings({
     mode: {
         type: OptionType.SELECT,
-        description: t("Recording Mode"),
+        description: "Recording Mode",
         options: [
-            { label: t("Only Voice"), value: "voice", default: true },
-            { label: t("Image + Voice"), value: "video" }
+            { label: "Only Voice", value: "voice", default: true },
+            { label: "Image + Voice", value: "video" }
         ]
     },
     videoQuality: {
         type: OptionType.SELECT,
-        description: t("Video Quality"),
+        description: "Video Quality",
         options: [
             { label: "720p 30fps", value: "720p30", default: true },
             { label: "1080p 60fps", value: "1080p60" },
@@ -115,7 +114,7 @@ const settings = definePluginSettings({
     },
     videoFormat: {
         type: OptionType.SELECT,
-        description: t("Video Format"),
+        description: "Video Format",
         options: [
             { label: "WebM", value: "webm", default: true },
             { label: "MKV", value: "mkv" }
@@ -123,7 +122,7 @@ const settings = definePluginSettings({
     },
     audioFormat: {
         type: OptionType.SELECT,
-        description: t("Audio Format"),
+        description: "Audio Format",
         options: [
             { label: "OGG", value: "ogg", default: true },
             { label: "WebM", value: "webm" }
@@ -136,17 +135,17 @@ const settings = definePluginSettings({
     },
     maxStorage: {
         type: OptionType.NUMBER,
-        description: t("Max Storage (GB) - 0 for unlimited"),
+        description: "Max Storage (GB) - 0 for unlimited",
         default: 0
     },
     shadowplayMinutes: {
         type: OptionType.NUMBER,
-        description: t("Record last X minutes (0 to disable/keep all)"),
+        description: "Record last X minutes (0 to disable/keep all)",
         default: 0
     },
     autoSave: {
         type: OptionType.BOOLEAN,
-        description: t("Autosave without prompting"),
+        description: "Autosave without prompting",
         default: true
     },
     savePath: {
@@ -156,12 +155,12 @@ const settings = definePluginSettings({
     },
     showTimes: {
         type: OptionType.BOOLEAN,
-        description: t("Show Times (Visual indicator)"),
+        description: "Show Times (Visual indicator)",
         default: true
     },
     showSaveToast: {
         type: OptionType.BOOLEAN,
-        description: t("Show Save Notification"),
+        description: "Show Save Notification",
         default: true
     }
 });
@@ -176,10 +175,22 @@ function formatTime(ms: number) {
     return `${m}:${s}`;
 }
 
+function getConnectedVoiceChannelId(): string | null {
+    const vcId = SelectedChannelStore?.getVoiceChannelId?.();
+    if (vcId) return vcId;
+    try {
+        const currentUserId = UserStore?.getCurrentUser?.()?.id;
+        if (currentUserId && VoiceStateStore?.getVoiceStateForUser) {
+            const state = VoiceStateStore.getVoiceStateForUser(currentUserId);
+            if (state?.channelId) return state.channelId;
+        }
+    } catch { }
+    return null;
+}
+
 function updateUI() {
-    // Failsafe: if we are recording but have no active channel, stop immediately
     if (isCurrentlyRecording()) {
-        const activeChannelId = SelectedChannelStore?.getVoiceChannelId?.();
+        const activeChannelId = getConnectedVoiceChannelId();
         if (!activeChannelId) {
             stopRecording();
             lastChannelId = null;
@@ -193,14 +204,21 @@ function updateUI() {
     }
 
     if (isCurrentlyRecording()) {
-        const titleH1 = document.querySelector('div[class*="titleWrapper_"] > h1') || document.querySelector('div[class*="children_"]');
-        if (!titleH1) return;
+        const titleContainer =
+            document.querySelector('div[class*="titleWrapper_"] > h1') ||
+            document.querySelector('div[class*="children_"]') ||
+            document.querySelector('section[class*="themed_"] [class*="toolbar_"]') ||
+            document.querySelector('.vc-header-bar-btns');
+
+        if (!titleContainer) return;
 
         let indicator = document.getElementById("autocall-indicator");
         if (!indicator) {
             indicator = document.createElement("div");
             indicator.id = "autocall-indicator";
-            titleH1.appendChild(indicator);
+            titleContainer.appendChild(indicator);
+        } else if (indicator.parentElement !== titleContainer) {
+            titleContainer.appendChild(indicator);
         }
 
         let timeSpan = indicator.querySelector('.autocall-time');
@@ -247,7 +265,6 @@ async function handleVoiceStateUpdates(e: any) {
 
     const updates = Array.isArray(e.voiceStates) ? e.voiceStates : (e.voiceState ? [e.voiceState] : []);
     for (const update of updates) {
-        // Detect if current user disconnects
         if (update.userId === UserStore?.getCurrentUser?.()?.id) {
             if (!update.channelId) {
                 await stopRecording();
@@ -268,8 +285,26 @@ async function handleVoiceStateUpdates(e: any) {
     }
 }
 
+function getVoiceChannelName(channelId: string | null): string {
+    if (!channelId) return "Vocal";
+    try {
+        const channel = ChannelStore.getChannel(channelId);
+        if (!channel) return "Vocal";
+        if (channel.name) return channel.name;
+        if (channel.isGroupDM?.() && channel.rawRecipients?.length) {
+            return channel.rawRecipients.map((u: any) => u.globalName || u.username).join(", ");
+        }
+        if (channel.isDM?.()) {
+            const recipientId = channel.getRecipientId?.();
+            const user = recipientId ? UserStore.getUser(recipientId) : null;
+            if (user) return user.globalName || user.username;
+        }
+    } catch {}
+    return "Vocal";
+}
+
 async function handleVoiceChannelSelect(e: any) {
-    const newChannelId = e.channelId;
+    const newChannelId = e.channelId || getConnectedVoiceChannelId();
 
     if (lastChannelId && lastChannelId !== newChannelId) {
         await stopRecording();
@@ -289,7 +324,8 @@ async function handleVoiceChannelSelect(e: any) {
                 shadowplayMinutes: settings.store.shadowplayMinutes,
                 autoSave: settings.store.autoSave,
                 savePath: settings.store.savePath,
-                showSaveToast: settings.store.showSaveToast
+                showSaveToast: settings.store.showSaveToast,
+                channelName: getVoiceChannelName(newChannelId)
             });
             startUIInterval();
         }
@@ -306,7 +342,7 @@ export default definePlugin({
     settings,
 
     start() {
-        lastChannelId = SelectedChannelStore?.getVoiceChannelId?.();
+        lastChannelId = getConnectedVoiceChannelId();
         if (lastChannelId) {
             if (isBlacklistedUserInChannel(lastChannelId)) {
                 Toasts.show(Toasts.create(t("Blacklisted user in channel."), Toasts.Type.WARNING));
@@ -320,7 +356,8 @@ export default definePlugin({
                     shadowplayMinutes: settings.store.shadowplayMinutes,
                     autoSave: settings.store.autoSave,
                     savePath: settings.store.savePath,
-                    showSaveToast: settings.store.showSaveToast
+                    showSaveToast: settings.store.showSaveToast,
+                    channelName: getVoiceChannelName(lastChannelId)
                 }).then(() => {
                     startUIInterval();
                 });

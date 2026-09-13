@@ -23,12 +23,12 @@ const DS_KEY = "followuser-v2";
 export const settings = definePluginSettings({
     afkTimeout: {
         type: OptionType.SELECT,
-        name: t("AFK Timeout"),
-        description: t("Inactivity timeout before stopping follow (AFK)"),
+        name: "AFK Timeout",
+        description: "Inactivity timeout before stopping follow (AFK)",
         options: [
-            { label: t("10 minutes"), value: 10 * 60 * 1000 },
-            { label: t("1 hour"), value: 60 * 60 * 1000, default: true },
-            { label: t("3 hours"), value: 3 * 60 * 60 * 1000 }
+            { label: "10 minutes", value: 10 * 60 * 1000 },
+            { label: "1 hour", value: 60 * 60 * 1000, default: true },
+            { label: "3 hours", value: 3 * 60 * 60 * 1000 }
         ]
     }
 });
@@ -183,7 +183,7 @@ function startFlux() {
     try { VoiceStateStore?.addChangeListener?.(checkFollowedUser); } catch { }
 
     if (fastCheckInterval) clearInterval(fastCheckInterval);
-    fastCheckInterval = setInterval(checkFollowedUser, 50);
+    fastCheckInterval = setInterval(checkFollowedUser, 1000);
 
     fluxUnsub = () => {
         FluxDispatcher?.unsubscribe?.("VOICE_STATE_UPDATES", handler);

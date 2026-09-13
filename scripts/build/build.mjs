@@ -245,3 +245,28 @@ await Promise.all([
     createPackage("dist/guncord", "dist/guncord.asar"),
 ]);
 
+// Automatically mirror dist/desktop to LocalAppData/Guncord/dist if it exists
+try {
+    const localAppData = process.env.LOCALAPPDATA;
+    if (localAppData) {
+        const targetDir = join(localAppData, "Guncord", "dist");
+        if (await exists(targetDir)) {
+            const { copyFile } = await import("fs/promises");
+            const files = ["patcher.js", "preload.js", "renderer.js", "renderer.css", "package.json"];
+            for (const file of files) {
+                const src = join("dist", "desktop", file);
+                const dest = join(targetDir, file);
+                if (await exists(src)) {
+                    await copyFile(src, dest);
+                }
+            }
+        }
+    }
+} catch { }
+
+// Automatically ensure all Discord installations are injected
+try {
+    const { execSync } = await import("child_process");
+    execSync("node scripts/inject.mjs", { stdio: "ignore" });
+} catch { }
+

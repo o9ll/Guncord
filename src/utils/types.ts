@@ -16,11 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { AudioProcessor } from "@api/AudioPlayer";
+import type { AudioProcessor } from "@api/AudioPlayer";
 import type { ProfileBadge } from "@api/Badges";
 import type { ChatBarButtonData, ChatBarButtonFactory } from "@api/ChatButtons";
 import type { NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { HeaderBarButtonData } from "@api/HeaderBar";
+import type { HeaderBarButtonData } from "@api/HeaderBar";
 import type { MemberListDecoratorFactory } from "@api/MemberListDecorators";
 import type { MessageAccessoryFactory } from "@api/MessageAccessories";
 import type { MessageDecorationFactory } from "@api/MessageDecorations";
@@ -311,7 +311,7 @@ interface IsDisabled<D = unknown> {
 
 interface IsValid<T, D = unknown> {
     /**
-     * Whether the value the user provided is valid. Either return a boolean for a generic error message or a string for a custom error message.
+     * Prevents the user from saving settings if this is false or a string
      */
     isValid?(this: D, value: T): boolean | string;
 }
@@ -417,7 +417,7 @@ export interface DefinedSettings<
     plain: SettingsStore<Def> & PrivateSettings;
     /**
      * React hook for getting the settings for this plugin
-     * @param filter optional filter to avoid rerenders for irrelevant settings
+     * @param filter optional filter to avoid rerenders for irrelevent settings
      */
     use<F extends Extract<keyof Def | keyof PrivateSettings, string>>(filter?: F[]): Pick<SettingsStore<Def> & PrivateSettings, F>;
     /** Definitions of each setting */

@@ -9,7 +9,6 @@ import { definePluginSettings } from "@api/Settings";
 import { openPluginModal } from "@components/settings/tabs/plugins/PluginModal";
 import definePlugin, { OptionType } from "@utils/types";
 import { React } from "@webpack/common";
-
 import plugins from "~plugins";
 
 import { t } from "../autoTranslateGuncord";
@@ -108,7 +107,7 @@ const NoCapsChatBarButton: ChatBarButtonFactory = ({ type }) => {
             onClick={toggle}
             onContextMenu={e => {
                 e.preventDefault();
-                openPluginModal(plugins.NoCaps ?? plugins.noCaps);
+                openPluginModal(plugins["NoCaps"] ?? plugins["noCaps"]);
             }}
         >
             <NoCapsIcon enabled={enabled} />

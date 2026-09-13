@@ -48,6 +48,14 @@ function addDecryptedId(id: string) {
         decryptedMessageIds.delete(decryptedMessageIds.values().next().value!);
     }
 }
+
+function setOriginalEncryptedMessage(id: string, value: { channelId: string; content: string; }) {
+    originalEncryptedMessages.set(id, value);
+    if (originalEncryptedMessages.size > MAX_DECRYPTED_CACHE) {
+        const oldestKey = originalEncryptedMessages.keys().next().value;
+        if (oldestKey) originalEncryptedMessages.delete(oldestKey);
+    }
+}
 const decryptingMessageIds = new Set<string>();
 
 function validatePassword(password: string): string[] {
@@ -155,8 +163,23 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
     return copy.buffer;
 }
 
+const MAX_CACHE_SIZE = 500;
 const derivedKeyCache = new Map<string, Promise<CryptoKey>>();
 const decryptedPlaintextCache = new Map<string, string>();
+
+function setDecryptedCache(key: string, val: string) {
+    decryptedPlaintextCache.set(key, val);
+    if (decryptedPlaintextCache.size > MAX_CACHE_SIZE) {
+        decryptedPlaintextCache.delete(decryptedPlaintextCache.keys().next().value!);
+    }
+}
+
+function setDerivedKeyCache(key: string, val: Promise<CryptoKey>) {
+    derivedKeyCache.set(key, val);
+    if (derivedKeyCache.size > MAX_CACHE_SIZE) {
+        derivedKeyCache.delete(derivedKeyCache.keys().next().value!);
+    }
+}
 
 async function deriveAESKey(password: string, salt: Uint8Array, iterations: number, usages: KeyUsage[]): Promise<CryptoKey> {
     const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, "0")).join("");
@@ -187,7 +210,7 @@ async function deriveAESKey(password: string, salt: Uint8Array, iterations: numb
         );
     })();
 
-    derivedKeyCache.set(cacheKey, promise);
+    setDerivedKeyCache(cacheKey, promise);
     return promise;
 }
 
@@ -247,8 +270,8 @@ async function encryptAES(text: string, password: string): Promise<string> {
         throw new Error("Encrypted message is too long for Discord.");
     }
 
-    decryptedPlaintextCache.set(`${password}:${encryptedMessage}`, text);
-    decryptedPlaintextCache.set(`${password}:${wrappedMessage}`, text);
+    setDecryptedCache(`${password}:${encryptedMessage}`, text);
+    setDecryptedCache(`${password}:${wrappedMessage}`, text);
 
     return encryptedMessage;
 }
@@ -305,7 +328,7 @@ async function decryptAES(encrypted: string, password: string): Promise<string> 
 
     resetSecurityState();
     const result = decoder.decode(decrypted);
-    decryptedPlaintextCache.set(cacheKey, result);
+    setDecryptedCache(cacheKey, result);
     return result;
 }
 
@@ -375,14 +398,27 @@ function setChannelGeneratedPassword(channelId: string, password: string) {
     }
 }
 
+let cachedEnabledChannels: Set<string> | null = null;
+
+function getEnabledChannels(): Set<string> {
+    if (!cachedEnabledChannels) {
+        try {
+            const map = JSON.parse(settings.store.channelEncryptionStates || "{}");
+            cachedEnabledChannels = new Set(Object.keys(map).filter(k => !!map[k]));
+        } catch {
+            cachedEnabledChannels = new Set();
+        }
+    }
+    return cachedEnabledChannels;
+}
+
+function invalidateEnabledChannelsCache() {
+    cachedEnabledChannels = null;
+}
+
 function isEncryptionEnabledForChannel(channelId: string): boolean {
     if (!channelId) return false;
-    try {
-        const map = JSON.parse(settings.store.channelEncryptionStates || "{}");
-        return !!map[channelId];
-    } catch {
-        return false;
-    }
+    return getEnabledChannels().has(channelId);
 }
 
 function setEncryptionEnabledForChannel(channelId: string, enabled: boolean) {
@@ -395,6 +431,7 @@ function setEncryptionEnabledForChannel(channelId: string, enabled: boolean) {
             delete map[channelId];
         }
         settings.store.channelEncryptionStates = JSON.stringify(map);
+        invalidateEnabledChannelsCache();
     } catch (e) {
         console.error("[EncryptedMessage] Failed to save channel encryption state:", e);
     }
@@ -723,7 +760,7 @@ const EncryptionToggleButton: ChatBarButtonFactory = ({ type }) => {
 
     return (
         <ChatBarButton
-            tooltip={t("Securecord Password Manager")}
+            tooltip={enabled ? t("Encrypted Messages: Active") : t("Encrypted Messages: Inactive")}
             onClick={() => {
                 openModal(props => <EncryptionSettingsModal modalProps={props} close={props.onClose} />);
             }}
@@ -769,7 +806,7 @@ function decryptMessage(message: any, passedChannelId?: string) {
 
     if (!message.originalEncryptedContent || !isEncryptedMessage(message.originalEncryptedContent)) return;
 
-    originalEncryptedMessages.set(message.id, { channelId, content: message.originalEncryptedContent });
+    setOriginalEncryptedMessage(message.id, { channelId, content: message.originalEncryptedContent });
 
     const encryptedPart = getEncryptedPart(message.originalEncryptedContent);
     const cached = decryptedPlaintextCache.get(`${password}:${encryptedPart}`) ?? decryptedPlaintextCache.get(`${password}:${message.originalEncryptedContent}`);
@@ -833,6 +870,7 @@ function decryptMessage(message: any, passedChannelId?: string) {
 
 function scanAndDecrypt(obj: any, parentChannelId?: string, depth = 0, visited = new WeakSet()) {
     if (!obj || typeof obj !== "object" || depth > 10) return;
+    if (getEnabledChannels().size === 0) return;
     if (visited.has(obj)) return;
     visited.add(obj);
 
@@ -858,7 +896,7 @@ function scanAndDecrypt(obj: any, parentChannelId?: string, depth = 0, visited =
                         obj.originalEncryptedContent = rawEncrypted;
                     }
                     if (rawEncrypted) {
-                        originalEncryptedMessages.set(obj.id, { channelId: currentChannelId, content: rawEncrypted });
+                        setOriginalEncryptedMessage(obj.id, { channelId: currentChannelId, content: rawEncrypted });
                     }
                     obj.content = cached;
                     try { delete obj._contentParsed; } catch {}
@@ -1008,7 +1046,7 @@ const settings = definePluginSettings({
     },
     acceptLegacyPayloads: {
         type: OptionType.BOOLEAN,
-        description: "Allow decrypting older Securecord version 1 payloads.",
+        description: "Allow decrypting legacy version 1 payloads.",
         default: true
     },
     maxFailedAttempts: {
@@ -1034,7 +1072,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "EncryptedMessage",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "AES-256 end-to-end encryption for Discord. Share the same password with other users to communicate securely.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["ChatInputButtonAPI", "MessageEventsAPI", "MessageAccessoriesAPI"],
@@ -1077,14 +1115,27 @@ export default definePlugin({
         originalEncryptedMessages.clear();
         decryptingMessageIds.clear();
 
+        const MESSAGE_EVENT_TYPES = new Set([
+            "MESSAGE_CREATE",
+            "MESSAGE_UPDATE",
+            "LOAD_MESSAGES_SUCCESS",
+            "SEARCH_FINISH",
+            "LOCAL_MESSAGE_CREATE",
+            "PINNED_MESSAGES_FETCH_SUCCESS",
+            "THREAD_MESSAGES_FIRST_PAGE"
+        ]);
+
         const origDispatch = FluxDispatcher.dispatch;
         FluxDispatcher.dispatch = function (event: any) {
-            // Skip scan for events we explicitly marked to bypass re-decryption
-            if (!event._nc_skip_scan) {
-                try {
-                    scanAndDecrypt(event);
-                } catch (e) {
-                    console.error("[EncryptedMessage] dispatch scan error:", e);
+            // Only scan events that can contain chat messages if encryption is active somewhere
+            if (event && !event._nc_skip_scan && getEnabledChannels().size > 0) {
+                const type = event.type as string | undefined;
+                if (type && MESSAGE_EVENT_TYPES.has(type)) {
+                    try {
+                        scanAndDecrypt(event);
+                    } catch (e) {
+                        console.error("[EncryptedMessage] dispatch scan error:", e);
+                    }
                 }
             }
             return origDispatch.call(this, event);
@@ -1113,6 +1164,9 @@ export default definePlugin({
         decryptedMessageIds.clear();
         originalEncryptedMessages.clear();
         decryptingMessageIds.clear();
+        derivedKeyCache.clear();
+        decryptedPlaintextCache.clear();
+        invalidateEnabledChannelsCache();
     },
 
     async onBeforeMessageSend(channelId, messageObj) {
@@ -1124,7 +1178,7 @@ export default definePlugin({
         const password = getChannelPassword(channelId);
         if (!password) {
             Toasts.show({
-                message: "❌ No encryption password set for this channel.",
+                message: "No encryption password set for this channel.",
                 type: Toasts.Type.FAILURE,
                 id: Toasts.genId()
             });
@@ -1135,13 +1189,13 @@ export default definePlugin({
             const originalPlaintext = messageObj.content;
             const encryptedMessage = await encryptAES(originalPlaintext, password);
             const wrapped = `${SECURITY_CONSTANTS.ENCRYPTION_MARKER_START}${encryptedMessage}${SECURITY_CONSTANTS.ENCRYPTION_MARKER_END}`;
-            decryptedPlaintextCache.set(`${password}:${encryptedMessage}`, originalPlaintext);
-            decryptedPlaintextCache.set(`${password}:${wrapped}`, originalPlaintext);
+            setDecryptedCache(`${password}:${encryptedMessage}`, originalPlaintext);
+            setDecryptedCache(`${password}:${wrapped}`, originalPlaintext);
             messageObj.content = wrapped;
         } catch (error) {
             const errorMessage = getErrorMessage(error);
             Toasts.show({
-                message: `❌ Message encryption failed: ${errorMessage}`,
+                message: `Message encryption failed: ${errorMessage}`,
                 type: Toasts.Type.FAILURE,
                 id: Toasts.genId()
             });

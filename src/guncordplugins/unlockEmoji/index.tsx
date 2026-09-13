@@ -66,7 +66,7 @@ const settings = definePluginSettings({
         description: "Allows sending fake emojis (also bypasses missing permission to use custom emojis)",
         type: OptionType.BOOLEAN,
         default: true,
-        restartNeeded: true
+        restartNeeded: false
     },
     emojiSize: {
         description: "Size of the emojis when sending",
@@ -78,13 +78,13 @@ const settings = definePluginSettings({
         description: "Whether to transform fake emojis into real ones",
         type: OptionType.BOOLEAN,
         default: true,
-        restartNeeded: true
+        restartNeeded: false
     },
     enableStickerBypass: {
         description: "Allows sending fake stickers (also bypasses missing permission to use stickers)",
         type: OptionType.BOOLEAN,
         default: true,
-        restartNeeded: true
+        restartNeeded: false
     },
     stickerSize: {
         description: "Size of the stickers when sending",
@@ -96,7 +96,7 @@ const settings = definePluginSettings({
         description: "Whether to transform fake stickers into real ones",
         type: OptionType.BOOLEAN,
         default: true,
-        restartNeeded: true
+        restartNeeded: false
     },
     transformCompoundSentence: {
         description: "Whether to transform fake stickers and emojis in compound sentences (sentences with more content than just the fake emoji or sticker link)",
@@ -107,7 +107,7 @@ const settings = definePluginSettings({
         description: "Allow streaming in nitro quality",
         type: OptionType.BOOLEAN,
         default: true,
-        restartNeeded: true
+        restartNeeded: false
     },
     useHyperLinks: {
         description: "Whether to use hyperlinks when sending fake emojis and stickers",

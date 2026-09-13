@@ -6,6 +6,7 @@
 
 import "./styles.css";
 
+import * as DataStore from "@api/DataStore";
 import { addHeaderBarButton, HeaderBarButton, removeHeaderBarButton } from "@api/HeaderBar";
 import { ModalCloseButton,ModalContent, ModalHeader, ModalRoot, openModal } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
@@ -40,8 +41,8 @@ type LogType =
     | "message_delete" | "message_edit"
     | "voice_join" | "voice_leave" | "voice_move"
     | "voice_mute" | "voice_deaf" | "voice_stream" | "voice_mute_mod"
-    | "friend_add" | "friend_remove" | "friend_request" | "friend_request_cancel"
-    | "block" | "guild_member_add" | "guild_member_remove" | "guild_ban"
+    | "friend_add" | "friend_remove" | "friend_request" | "friend_request_cancel" | "unblock"
+    | "block" | "guild_member_add" | "guild_member_remove" | "guild_ban" | "guild_unban"
     | "guild_timeout" | "guild_kick" | "user_disconnect" | "ping";
 
 interface LogAttachment {
@@ -80,8 +81,8 @@ let logs: LogEntry[] = [];
 let myVoiceChannelId: string | null = null;
 let logCount = 0;
 
-const PERSISTENT_TYPES = new Set(["ping", "message_delete", "message_edit", "friend_add", "friend_remove", "friend_request", "friend_request_cancel", "block"]);
-const NOTIF_TYPES = new Set(["ping", "friend_add", "friend_remove", "friend_request", "friend_request_cancel", "block"]);
+const PERSISTENT_TYPES = new Set(["ping", "message_delete", "message_edit", "friend_add", "friend_remove", "friend_request", "friend_request_cancel", "block", "unblock"]);
+const NOTIF_TYPES = new Set(["ping", "friend_add", "friend_remove", "friend_request", "friend_request_cancel", "block", "unblock"]);
 const unreadLogEntries = new Set<LogEntry>();
 
 export const settings = definePluginSettings({
@@ -91,21 +92,63 @@ export const settings = definePluginSettings({
         description: "Don't Delete — Re-display all logged events after every app reload",
         restartNeeded: false,
     },
-    persistentLogs: [] as Omit<LogEntry, "id" | "timeStr">[]
+    ignoreBots: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Ignore Bots — Do not log message edits or deletions from bots and webhooks",
+        restartNeeded: false,
+    },
+    maxLogsLimit: {
+        type: OptionType.NUMBER,
+        default: 0,
+        description: "Max Logs Limit — Limit the maximum number of logs to retain (0 = Unlimited, no auto-deletion)",
+        restartNeeded: false,
+    },
 });
 
-function loadPersistLogs() {
+const DATA_STORE_KEY = "Guncord_EventLogs";
+const MAX_PERSISTENT_LOGS = 1000;
+
+function formatTimestamp(ts: number): string {
+    const d = new Date(ts);
+    const h = d.getHours().toString().padStart(2, "0");
+    const m = d.getMinutes().toString().padStart(2, "0");
+    const s = d.getSeconds().toString().padStart(2, "0");
+    return `${h}:${m}:${s}`;
+}
+
+async function loadPersistLogs() {
     try {
-        const saved = settings.store.persistentLogs;
+        // Clean up legacy settings.store.persistentLogs if present in settings.json
+        const legacy = (settings.store as any).persistentLogs;
+        if (legacy) {
+            delete (settings.store as any).persistentLogs;
+        }
+
+        let saved = await DataStore.get<any[]>(DATA_STORE_KEY);
+        if (!saved || !Array.isArray(saved) || saved.length === 0) {
+            // Check if there was any legacy array in settings
+            if (Array.isArray(legacy) && legacy.length > 0) {
+                saved = legacy.slice(0, MAX_PERSISTENT_LOGS);
+                DataStore.set(DATA_STORE_KEY, safeSanitizeLogs(saved)).catch(() => {});
+            }
+        }
+
         if (Array.isArray(saved) && saved.length > 0) {
-            // Reconstruct full objects
-            const parsed = saved.map((l: any) => ({
+            const capped = saved.slice(0, MAX_PERSISTENT_LOGS);
+            const parsed: LogEntry[] = capped.map((l: any) => ({
                 ...l,
-                id: Math.random().toString(36).slice(2),
-                timeStr: new Date(l.timestamp).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+                id: l.id || `${l.timestamp}_${logCount++}`,
+                timeStr: formatTimestamp(l.timestamp)
             }));
-            logs = parsed.concat(logs).sort((a, b) => b.timestamp - a.timestamp);
+            const seen = new Set(logs.map(l => `${l.timestamp}_${l.type}_${l.authorId || ""}_${l.content || ""}`));
+            const fresh = parsed.filter(l => !seen.has(`${l.timestamp}_${l.type}_${l.authorId || ""}_${l.content || ""}`));
+            logs = fresh.concat(logs).sort((a, b) => b.timestamp - a.timestamp);
             logCount = Math.max(logCount, logs.length);
+            globalVersion++;
+            for (const fn of updateListeners) {
+                try { fn(); } catch { }
+            }
         }
     } catch { }
 }
@@ -126,11 +169,15 @@ function safeSanitizeLogs(arr: any[]): any[] {
 
 function savePersistLogs() {
     try {
-        const toSave = logs.filter(l => PERSISTENT_TYPES.has(l.type)).slice(0, 1000).map(l => {
+        const limit = settings.store.maxLogsLimit && settings.store.maxLogsLimit > 0
+            ? Math.min(settings.store.maxLogsLimit, MAX_PERSISTENT_LOGS)
+            : MAX_PERSISTENT_LOGS;
+        const persistentFiltered = logs.filter(l => PERSISTENT_TYPES.has(l.type)).slice(0, limit);
+        const toSave = persistentFiltered.map(l => {
             const { id, timeStr, ...rest } = l;
             return rest;
         });
-        settings.store.persistentLogs = safeSanitizeLogs(toSave);
+        DataStore.set(DATA_STORE_KEY, safeSanitizeLogs(toSave)).catch(() => {});
     } catch { }
 }
 
@@ -170,11 +217,18 @@ function fmtNow(): string {
 
 function pushLog(entry: Omit<LogEntry, "id" | "timestamp" | "timeStr">) {
     const now = Date.now();
-    if (logs.length >= MAX_LOGS) logs.pop();
+    const limit = settings.store.maxLogsLimit ?? 0;
+    if (limit > 0 && logs.length >= limit) {
+        logs.pop();
+    }
     const newLog: LogEntry = { id: `${now}_${logCount++}`, timestamp: now, timeStr: fmtNow(), ...(entry as any) };
     logs.unshift(newLog);
     if (NOTIF_TYPES.has(newLog.type)) {
         unreadLogEntries.add(newLog);
+        if (unreadLogEntries.size > 200) {
+            const oldest = unreadLogEntries.values().next().value;
+            if (oldest) unreadLogEntries.delete(oldest);
+        }
     }
     scheduleFlush();
 }
@@ -195,8 +249,16 @@ function authorFrom(msg: any) {
     const id = msg?.author?.id ?? msg?.authorId;
     let name = msg?.author?.global_name ?? msg?.author?.username ?? "?";
     let av: string | null = msg?.author?.avatar ?? null;
-    if (id) { const u = getUser(id); if (u) { if (name === "?") name = u.globalName ?? u.username ?? name; if (!av) av = u.avatar ?? null; } }
-    return { authorId: id, authorName: name, authorAvatar: av };
+    let isBot = Boolean(msg?.author?.bot || msg?.webhook_id || msg?.webhookId);
+    if (id) {
+        const u = getUser(id);
+        if (u) {
+            if (name === "?") name = u.globalName ?? u.username ?? name;
+            if (!av) av = u.avatar ?? null;
+            if (u.bot) isBot = true;
+        }
+    }
+    return { authorId: id, authorName: name, authorAvatar: av, isBot };
 }
 
 const MSG_CACHE_MAX = 50000;
@@ -224,53 +286,6 @@ function pruneMsgCache() {
     }
 }
 
-/** Serializes Discord embeds into readable text + extracts embed images */
-function extractEmbedsData(embeds: any[]): { text: string; attachments: LogAttachment[]; } {
-    if (!Array.isArray(embeds) || embeds.length === 0) return { text: "", attachments: [] };
-    const parts: string[] = [];
-    const attachments: LogAttachment[] = [];
-
-    for (const embed of embeds) {
-        const lines: string[] = [];
-        if (embed.author?.name) lines.push(`[${embed.author.name}]`);
-        if (embed.title) lines.push(embed.url ? `${embed.title} (${embed.url})` : embed.title);
-        if (embed.description) lines.push(embed.description);
-        if (Array.isArray(embed.fields)) {
-            for (const f of embed.fields) {
-                if (f.name || f.value) lines.push(`${f.name ? f.name + ": " : ""}${f.value ?? ""}`);
-            }
-        }
-        if (embed.footer?.text) lines.push(`— ${embed.footer.text}`);
-        if (lines.length > 0) parts.push(lines.join(" | "));
-
-        // Extract the main image from the embed
-        const img = embed.image || embed.thumbnail;
-        if (img?.url) {
-            attachments.push({
-                url: img.url,
-                proxy_url: img.proxy_url || img.url,
-                width: img.width,
-                height: img.height,
-                filename: "embed-image",
-                content_type: "image/"
-            });
-        }
-        // Video embed
-        const vid = embed.video;
-        if (vid?.url) {
-            attachments.push({
-                url: vid.url,
-                proxy_url: vid.proxy_url || vid.url,
-                width: vid.width,
-                height: vid.height,
-                filename: "embed-video.mp4",
-                content_type: "video/mp4"
-            });
-        }
-    }
-    return { text: parts.join(" \n"), attachments };
-}
-
 function cacheMsg(msg: any) {
     if (!msg?.id) return;
     if (!isLoadingMessages) pruneMsgCache();
@@ -285,15 +300,7 @@ function cacheMsg(msg: any) {
         content_type: att.content_type || att.contentType || ""
     })).filter(att => !!att.url) : [];
 
-    // Support embeds (bot messages)
-    let content = msg.content ?? "";
-    if (Array.isArray(msg.embeds) && msg.embeds.length > 0) {
-        const { text: embedText, attachments: embedAtts } = extractEmbedsData(msg.embeds);
-        if (embedText) content = content ? `${content}\n${embedText}` : embedText;
-        for (const att of embedAtts) {
-            if (!attachments.find(a => a.url === att.url)) attachments.push(att);
-        }
-    }
+    const content = msg.content ?? "";
 
     msgCache.set(msg.id, {
         content,
@@ -319,17 +326,19 @@ const CFG: Record<LogType, { label: string; color: string; }> = {
     friend_request: { label: "Request", color: "#5865f2" },
     friend_request_cancel: { label: "Cancelled", color: "#747f8d" },
     block: { label: "Blocked", color: "#ed4245" },
+    unblock: { label: "Unblocked", color: "#3ba55c" },
     guild_member_add: { label: "Joined", color: "#3ba55c" },
     guild_member_remove: { label: "Left", color: "#ed4245" },
     guild_ban: { label: "Banned", color: "#ed4245" },
+    guild_unban: { label: "Unbanned", color: "#3ba55c" },
     guild_timeout: { label: "Timeout", color: "#faa61a" },
     guild_kick: { label: "Kick", color: "#ed4245" },
     user_disconnect: { label: "Disconnected", color: "#747f8d" },
     ping: { label: "Ping", color: "#eb459f" },
 };
 
-const FRIENDS_SET = new Set(["friend_add", "friend_remove", "friend_request", "friend_request_cancel", "block"]);
-const GUILD_SET = new Set(["guild_member_add", "guild_member_remove", "guild_ban", "guild_timeout", "guild_kick", "user_disconnect"]);
+const FRIENDS_SET = new Set(["friend_add", "friend_remove", "friend_request", "friend_request_cancel", "block", "unblock"]);
+const GUILD_SET = new Set(["guild_member_add", "guild_member_remove", "guild_ban", "guild_unban", "guild_timeout", "guild_kick", "user_disconnect"]);
 
 const avatarUrl = (userId: string, av?: string | null) =>
     av ? IconUtils.getUserAvatarURL({ id: userId, avatar: av } as any, false, 32) : IconUtils.getDefaultAvatarURL(userId);
@@ -496,7 +505,7 @@ function LogRow({ e, onClose }: { e: LogEntry; onClose?: () => void; }) {
                     <div className="el-msg el-msg--deleted">
                         <span className="el-msg-label">{t("Message:")} </span>
                         <div style={{ flex: 1, overflow: "hidden" }}>
-                            <span>{renderContent(e.content) || (!e.attachments?.length && <em style={{ opacity: 0.5 }}>{t("pas en cache")}</em>)}</span>
+                            <span>{renderContent(e.content)}</span>
                             {e.attachments && e.attachments.length > 0 && (
                                 <div className="el-attachments">
                                     {e.attachments.map((att, i) => (
@@ -889,16 +898,35 @@ function subscribeToEvents() {
     });
     sub("MESSAGE_UPDATE", d => {
         if (!d.message) return;
-        const m = d.message; const cached = msgCache.get(m.id);
-        const oldC = cached?.content ?? "", newC = m.content ?? "";
-        if (oldC === newC) return;
+        const m = d.message;
+        const cached = msgCache.get(m.id);
+        const oldC = cached?.content ?? "";
+        const newC = m.content ?? "";
+        // If content didn't change or if either string is empty (unknown previous message or embed update), ignore
+        if (oldC === newC || !newC || !oldC) {
+            if (cached) cached.content = newC || cached.content;
+            else if (newC) cacheMsg(m);
+            return;
+        }
+
         const a = authorFrom(m);
+        if (settings.store.ignoreBots && a.isBot) {
+            if (cached) cached.content = newC;
+            return;
+        }
+
         pushLog({
-            type: "message_edit", content: newC, extra: oldC || "(inconnu)", realId: m.id,
-            authorId: a.authorId ?? cached?.authorId, authorName: a.authorName !== "?" ? a.authorName : (cached?.authorName ?? "?"),
-            authorAvatar: a.authorAvatar ?? cached?.authorAvatar ?? null, ...chInfo(m.channel_id)
+            type: "message_edit",
+            content: newC,
+            extra: oldC,
+            realId: m.id,
+            authorId: a.authorId ?? cached?.authorId,
+            authorName: a.authorName !== "?" ? a.authorName : (cached?.authorName ?? "?"),
+            authorAvatar: a.authorAvatar ?? cached?.authorAvatar ?? null,
+            ...chInfo(m.channel_id)
         });
-        if (cached) cached.content = newC; else cacheMsg(m);
+        if (cached) cached.content = newC;
+        else cacheMsg(m);
     });
     sub("MESSAGE_DELETE", d => {
         if (d.mlDeleted) return;
@@ -962,6 +990,14 @@ function subscribeToEvents() {
                     }
                 }
             } catch { }
+        }
+
+        // If message had no text and no attachments (embeds only or empty), do not log anything
+        if (!content && !attachments.length) return;
+
+        if (settings.store.ignoreBots) {
+            const a = authorId ? authorFrom({ author: { id: authorId } }) : null;
+            if (a?.isBot) return;
         }
 
         if (authorId) {
@@ -1045,7 +1081,7 @@ function subscribeToEvents() {
     });
     sub("RELATIONSHIP_REMOVE", d => {
         const b = relUser(d); const t_type = relType(d);
-        const [type, content]: [LogType, string] = (t_type === 3 || t_type === 4) ? ["friend_request_cancel", t("Request cancelled")] : t_type === 2 ? ["friend_remove", t("Unblocked")] : ["friend_remove", t("Friend removed")];
+        const [type, content]: [LogType, string] = (t_type === 3 || t_type === 4) ? ["friend_request_cancel", t("Request cancelled")] : t_type === 2 ? ["unblock", t("Unblocked")] : ["friend_remove", t("Friend removed")];
         pushLog({ type, content, ...b });
     });
     sub("GUILD_MEMBER_ADD", d => { const b = uInfo(d.user?.id); const g = getGuild(d.guildId); pushLog({ type: "guild_member_add", content: t("Joined"), ...b, guildId: d.guildId, guildName: g?.name }); });
@@ -1083,8 +1119,32 @@ function subscribeToEvents() {
             }
         }
     });
-    sub("GUILD_BAN_ADD", d => { const b = uInfo(d.user?.id); const g = getGuild(d.guildId); pushLog({ type: "guild_ban", content: t("Banned"), ...b, guildId: d.guildId, guildName: g?.name }); });
-    sub("GUILD_BAN_REMOVE", d => { const b = uInfo(d.user?.id); const g = getGuild(d.guildId); pushLog({ type: "friend_remove", content: t("Unbanned"), ...b, guildId: d.guildId, guildName: g?.name }); });
+    sub("GUILD_BAN_ADD", d => {
+        const userId = d.user?.id;
+        if (!userId) return;
+        const recentDupe = logs.find((l: any) =>
+            l.type === "guild_ban" &&
+            l.authorId === userId &&
+            l.guildId === d.guildId &&
+            Date.now() - l.timestamp < 3000
+        );
+        if (recentDupe) return;
+        const b = uInfo(userId); const g = getGuild(d.guildId);
+        pushLog({ type: "guild_ban", content: t("Banned"), ...b, guildId: d.guildId, guildName: g?.name });
+    });
+    sub("GUILD_BAN_REMOVE", d => {
+        const userId = d.user?.id;
+        if (!userId) return;
+        const recentDupe = logs.find((l: any) =>
+            l.type === "guild_unban" &&
+            l.authorId === userId &&
+            l.guildId === d.guildId &&
+            Date.now() - l.timestamp < 3000
+        );
+        if (recentDupe) return;
+        const b = uInfo(userId); const g = getGuild(d.guildId);
+        pushLog({ type: "guild_unban", content: t("Unbanned"), ...b, guildId: d.guildId, guildName: g?.name });
+    });
 
     sub("GUILD_MEMBER_UPDATE", d => {
         if (!d.guildId || !d.user?.id) return;
@@ -1131,9 +1191,11 @@ export default definePlugin({
             if (vcId) myVoiceChannelId = vcId;
         } catch { }
         if (settings.store.keepLogsOnRestart !== false) {
-            setTimeout(() => {
-                loadPersistLogs();
-            }, 100);
+            if ("requestIdleCallback" in window) {
+                (window as any).requestIdleCallback(() => loadPersistLogs(), { timeout: 1500 });
+            } else {
+                setTimeout(() => loadPersistLogs(), 500);
+            }
         }
         subscribeToEvents();
         // Also save on page unload (Discord force-close / crash)
@@ -1142,8 +1204,9 @@ export default definePlugin({
     stop() {
         window.removeEventListener("beforeunload", savePersistLogs);
         unsubs.forEach(fn => fn()); unsubs = [];
-        // Save before clearing — cancel the debounce timer then immediately persist
+        // Save before clearing — cancel the debounce timers then immediately persist
         if (flushTimer !== null) { clearTimeout(flushTimer); flushTimer = null; }
+        if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
         savePersistLogs();
         logs = []; msgCache.clear(); prevVS.clear(); updateListeners.clear();
         isLoadingMessages = false;

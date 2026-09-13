@@ -37,7 +37,8 @@
                 "./debug/*"
             ],
             "@plugins/*": [
-                "./plugins/*"
+                "./plugins/*",
+                "./guncordplugins/*"
             ],
             "@shared/*": [
                 "./shared/*"
@@ -58,10 +59,12 @@
                 "./webpack/wreq.d"
             ],
             "@guncordplugins/*": [
-                "./guncordplugins/*"
+                "./guncordplugins/*",
+                "./plugins/*"
             ],
             "@equicordplugins/*": [
-                "./plugins/*"
+                "./plugins/*",
+                "./guncordplugins/*"
             ],
             "main/*": [
                 "./guncord/main/*"

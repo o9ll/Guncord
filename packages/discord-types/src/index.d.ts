@@ -1,6 +1,5 @@
 export * from "./common";
 export * from "./components";
-export * from "./components/Modal";
 export * from "./flux";
 export * from "./fluxEvents";
 export * from "./menu";

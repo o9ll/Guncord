@@ -1706,14 +1706,10 @@ const DiagnosticsPageWrapped = ErrorBoundary.wrap(ClientDiagnosticsPage, { noop:
 
 export default definePlugin({
     name: "ClientDiagnostics",
-    enabledByDefault: true,
     description: "Profiles plugin callback time, heap deltas, and active resources to find laggy plugins.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     tags: ["Developers", "Utility"],
     searchTerms: ["lag", "cpu", "ram", "memory", "performance", "profiler"],
-    required: true,
-    startAt: StartAt.Init,
-    requiresRestart: true,
     settings,
 
     start() {

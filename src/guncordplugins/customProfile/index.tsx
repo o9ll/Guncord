@@ -1,9 +1,10 @@
-import { t } from "../autoTranslateGuncord";
 /*
  * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
+import { t } from "../autoTranslateGuncord";
 
 import "./styles.css";
 
@@ -1143,6 +1144,8 @@ function updateCachedRealData() {
 
 let _domQueued = false;
 let _domMutations: MutationRecord[] = [];
+/** Tracks every text node we have modified with __cp_orig so stopDomObserver can restore them in O(modified) instead of O(all-DOM). */
+const _modifiedNodes = new Set<Text>();
 
 function scanTextNode(node: Text) {
     if (!isEnabled || !node.nodeValue) return;
@@ -1163,7 +1166,7 @@ function scanTextNode(node: Text) {
     }
     if (_realUsername && storedData.username && result.includes(_realUsername)) { result = result.split(_realUsername).join(storedData.username); replaced = true; }
     if (_realGlobalName && storedData.globalName && result.includes(_realGlobalName)) { result = result.split(_realGlobalName).join(storedData.globalName); replaced = true; }
-    if (replaced && result !== node.nodeValue) { if ((node as any).__cp_orig === undefined) (node as any).__cp_orig = val; node.nodeValue = result; }
+    if (replaced && result !== node.nodeValue) { if ((node as any).__cp_orig === undefined) { (node as any).__cp_orig = val; _modifiedNodes.add(node); } node.nodeValue = result; }
 }
 
 function scanNode(node: Node) {
@@ -1203,7 +1206,7 @@ function processDomBatch() {
         // HypeSquad changer is handled by standalone HypeSquadChanger plugin
     } finally {
         if (isEnabled && obs) {
-            obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+            obs.observe(document.body, { childList: true, subtree: true });
         }
     }
 }
@@ -1211,9 +1214,50 @@ function processDomBatch() {
 function startDomObserver() {
     stopDomObserver();
     if (!isEnabled || document.visibilityState === "hidden") return;
-    scanNode(document.body);
+    if (!storedData?.username && !storedData?.globalName && !storedData?.createdAt) return;
+
+    // Time-sliced scanner that yields every 4ms so the main thread / UI never freezes at startup
+    const runDeferredScan = () => {
+        if (!isEnabled || document.visibilityState === "hidden") return;
+        const targets = [
+            document.querySelector("section[aria-label]"),
+            document.querySelector("[class*='userProfile']"),
+            document.querySelector("[class*='userPopout']"),
+            document.querySelector("[class*='accountProfileCard']")
+        ].filter(Boolean) as Node[];
+
+        for (const t of targets) scanNode(t);
+
+        const ric = (window as any).requestIdleCallback || ((cb: any) => setTimeout(cb, 1000));
+        ric(() => {
+            if (!isEnabled || document.visibilityState === "hidden") return;
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+            let n: Node | null;
+            const slice = () => {
+                if (!isEnabled || document.visibilityState === "hidden") return;
+                const start = performance.now();
+                while ((n = walker.nextNode())) {
+                    const parent = n.parentElement;
+                    if (parent) {
+                        const tag = parent.tagName;
+                        if (tag === "SCRIPT" || tag === "STYLE" || tag === "SVG" || tag === "CANVAS" || tag === "VIDEO" || tag === "IFRAME") continue;
+                    }
+                    scanTextNode(n as Text);
+                    if (performance.now() - start > 4) {
+                        requestAnimationFrame(slice);
+                        return;
+                    }
+                }
+            };
+            slice();
+        }, { timeout: 3000 });
+    };
+
+    setTimeout(runDeferredScan, 1500);
+
     domObserver = new MutationObserver(mutations => {
         if (!isEnabled || !mutations.length) return;
+        if (!storedData?.username && !storedData?.globalName && !storedData?.createdAt) return;
         if (document.visibilityState === "hidden") {
             _domMutations = [];
             return;
@@ -1221,17 +1265,24 @@ function startDomObserver() {
         _domMutations.push(...mutations);
         if (!_domQueued) {
             _domQueued = true;
-            setTimeout(processDomBatch, 20);
+            setTimeout(processDomBatch, 100);
         }
     });
-    domObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+    domObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 function stopDomObserver() {
     domObserver?.disconnect(); domObserver = null;
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let n: Node | null;
-    while ((n = walker.nextNode())) { if ((n as any).__cp_orig !== undefined) { n.nodeValue = (n as any).__cp_orig; delete (n as any).__cp_orig; } }
+    // Restore only the text nodes we actually modified — O(modified) not O(all-DOM).
+    // Previously this used a full synchronous TreeWalker over document.body which froze
+    // Discord for hundreds of ms on every CONNECTION_OPEN at startup.
+    for (const node of _modifiedNodes) {
+        if ((node as any).__cp_orig !== undefined) {
+            node.nodeValue = (node as any).__cp_orig;
+            delete (node as any).__cp_orig;
+        }
+    }
+    _modifiedNodes.clear();
 }
 
 function handleVisibilityChange() {
@@ -1253,7 +1304,7 @@ function isMe(userId: string | null | undefined): boolean {
 }
 
 function EditIcon({ size = 18 }: { size?: number; }) {
-    return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>;
+    return <svg className="nc-sway-icon" width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>;
 }
 function FolderIcon() {
     return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2Z" /></svg>;
@@ -1340,9 +1391,105 @@ function BadgeBtn({ label, icon, active, onClick }: { label: string; icon?: stri
     return (
         <button onClick={onClick} className={`cp-badge ${active ? "cp-badge--on" : ""}`}
             style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            {icon && <img src={icon} alt="" style={{ width: 16, height: 16, objectFit: "contain", flexShrink: 0 }} />}
+            {icon && <img src={icon} alt="" style={{ width: 16, height: 16, objectFit: "contain", flexShrink: 0 }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />}
             <span>{label}</span>
         </button>
+    );
+}
+
+function ProfileHeaderPreview({
+    account,
+    data
+}: {
+    account: any;
+    data: CustomProfileData;
+}) {
+    const isFr = getDiscordLocale().toLowerCase().startsWith("fr");
+    const username = data.username?.trim() || account?.username || "username";
+    const displayName = data.globalName?.trim() || account?.globalName || account?.username || "User";
+    const avatarUrl = data.avatar || IconUtils.getUserAvatarURL(account || { id: "0" }, false, 80);
+    const decorationUrl = data.decorationAsset ? getDecorationUrl(data.decorationAsset) : null;
+
+    const badges: Array<{ id: string; icon: string; title: string }> = [];
+
+    // Base badges
+    const flags = data.badgeFlags ?? 0;
+    if (flags) {
+        for (const b of BADGES) {
+            if (flags & b.flag) {
+                badges.push({ id: b.key, icon: b.icon, title: getStandardBadgeDesc(b.key) });
+            }
+        }
+    }
+
+    // Nitro badge
+    const nitroLevel = data.nitroLevel ?? -1;
+    if (data.nitro && nitroLevel >= 0 && NITRO_LEVELS[nitroLevel]) {
+        badges.push({ id: `nitro_${nitroLevel}`, icon: NITRO_LEVELS[nitroLevel].icon, title: NITRO_LEVELS[nitroLevel].label });
+    }
+
+    // Boost badge
+    const boostMonths = data.boostMonths ?? -1;
+    if (data.nitro && boostMonths >= 0 && BOOST_ICONS[boostMonths]) {
+        badges.push({ id: `boost_${boostMonths}`, icon: BOOST_ICONS[boostMonths], title: `Server Booster (${BOOST_LABELS[boostMonths]})` });
+    }
+
+    // Special badges
+    const customIds = data.customBadgeIds ?? [];
+    if (customIds.includes("quest")) {
+        badges.push({ id: "quest", icon: "https://cdn.discordapp.com/badge-icons/7d9ae358c8c5e118768335dbe68b4fb8.png", title: getLocalizedBadgeLabel("Completed a quest") });
+    }
+    if (customIds.includes("orbs")) {
+        badges.push({ id: "orbs", icon: "https://cdn.discordapp.com/badge-icons/83d8a1eb09a8d64e59233eec5d4d5c2d.png", title: getLocalizedBadgeLabel("Orbs — Apprentice") });
+    }
+    if (customIds.includes("oldname")) {
+        const dText = data.oldName ? (isFr ? "Connu à l'origine sous le nom de " + data.oldName : "Originally known as " + data.oldName) : (isFr ? "Ancien nom d'utilisateur" : "Old username");
+        badges.push({ id: "oldname", icon: OLD_NAME_BADGE_ICON, title: dText });
+    }
+    if (customIds.includes("gifting_level")) {
+        const lvl = data.levelReached ?? 1;
+        badges.push({ id: "gifting_level", icon: "https://cdn.discordapp.com/badge-icons/ca105ad9cfc8580c765101d17bbb2323.png", title: getLevelBadgeDesc(lvl) });
+    }
+
+    // Gifting badges
+    if (customIds.includes("gifting_icon")) badges.push({ id: "gifting_icon", icon: "https://cdn.discordapp.com/badge-icons/64f2413c9b9803661322aaad25826b62.png", title: getGiftingBadgeDesc("icon") });
+    if (customIds.includes("gifting_patron")) badges.push({ id: "gifting_patron", icon: "https://cdn.discordapp.com/badge-icons/ac305d1b9481f312ce4419e7f8296558.png", title: getGiftingBadgeDesc("patron") });
+    if (customIds.includes("gifting_champion")) badges.push({ id: "gifting_champion", icon: "https://cdn.discordapp.com/badge-icons/8b7792c4f65953d3ff564f23429cb79e.png", title: getGiftingBadgeDesc("champion") });
+    if (customIds.includes("gifting_luminary")) badges.push({ id: "gifting_luminary", icon: "https://cdn.discordapp.com/badge-icons/3119f5504b2cd09576a323908c7c3517.png", title: getGiftingBadgeDesc("luminary") });
+    if (customIds.includes("gifting_hero")) badges.push({ id: "gifting_hero", icon: "https://cdn.discordapp.com/badge-icons/77d65b1f210014a11eb1582ee06ab684.png", title: getGiftingBadgeDesc("hero") });
+    if (customIds.includes("gifting_legend")) badges.push({ id: "gifting_legend", icon: "https://cdn.discordapp.com/badge-icons/7fe346cfc5da1340087d8759a9e7a395.png", title: getGiftingBadgeDesc("legend") });
+
+    return (
+        <div className="cp-live-preview-card">
+            <div className="cp-live-preview-avatar-wrapper">
+                <img src={avatarUrl} alt="" className="cp-live-preview-avatar" />
+                {decorationUrl && (
+                    <img src={decorationUrl} alt="" className="cp-live-preview-decoration" />
+                )}
+            </div>
+            <div className="cp-live-preview-details">
+                <div className="cp-live-preview-names">
+                    <span className="cp-live-preview-username">@{username}</span>
+                    {displayName && displayName !== username && (
+                        <span className="cp-live-preview-globalname">{displayName}</span>
+                    )}
+                </div>
+                {badges.length > 0 && (
+                    <div className="cp-live-preview-badges">
+                        {badges.map((b, idx) => (
+                            <img
+                                key={b.id + idx}
+                                src={b.icon}
+                                alt={b.title}
+                                title={b.title}
+                                className="cp-live-preview-badge-icon"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
     );
 }
 
@@ -1547,7 +1694,7 @@ function ConnectionsPicker({ connections, onChange }: {
                                             alignItems: "center",
                                             justifyContent: "center"
                                         }}>
-                                            <img src={pObj.icon} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} />
+                                            <img src={pObj.icon} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
                                         </div>
                                         <div>
                                             <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 14, color: "#fff" }}>
@@ -1578,7 +1725,7 @@ function ConnectionsPicker({ connections, onChange }: {
             <div>
                 <SectionLabel>{t("Add New Connection")}</SectionLabel>
 
-                {/* Grid selection for fast platform picking — expanded height so all options fit nicely */}
+                {/* Grid selection for fast platform picking */}
                 <div style={{ marginBottom: 16 }}>
                     <SectionLabel style={{ marginTop: 0, fontSize: 11 }}>{t("Select Platform")}</SectionLabel>
                     <div className="cp-custom-scroll" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(115px, 1fr))", gap: 8, paddingRight: 4 }}>
@@ -1598,7 +1745,7 @@ function ConnectionsPicker({ connections, onChange }: {
                                     transition: "all 0.15s ease"
                                 }}
                             >
-                                <img src={p.icon} alt="" style={{ width: 18, height: 18, objectFit: "contain", flexShrink: 0 }} />
+                                <img src={p.icon} alt="" style={{ width: 18, height: 18, objectFit: "contain", flexShrink: 0 }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
                                 <span style={{ fontSize: 12, fontWeight: platform === p.id ? 700 : 500, color: platform === p.id ? "#fff" : "#dbdee1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                     {p.label.split(" ")[0]}
                                 </span>
@@ -1630,7 +1777,7 @@ function ConnectionsPicker({ connections, onChange }: {
                                 justifyContent: "space-between"
                             }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                    <img src={currentPlat.icon} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} />
+                                    <img src={currentPlat.icon} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
                                     <div>
                                         <div style={{ color: "#fff", fontWeight: 600, fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
                                             {name}
@@ -1940,7 +2087,13 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
     }
 
     const [activeTab, setActiveTab] = React.useState("general");
+    const [decoSearch, setDecoSearch] = React.useState("");
+    const [effectSearch, setEffectSearch] = React.useState("");
     const accentHex = data.accentColor != null ? "#" + data.accentColor.toString(16).padStart(6, "0") : "";
+
+    const currentAccount = React.useMemo(() => {
+        return accounts.find((a: any) => a.id === selectedAccountId) || UserStore.getCurrentUser();
+    }, [accounts, selectedAccountId]);
 
     return (
         <ModalRoot {...rootProps} className="cp-modal-root" size="large">
@@ -1986,6 +2139,12 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
             </ModalHeader>
             <ModalContent style={{ padding: 0, overflow: 'hidden' }}>
                 <div className="cp-layout">
+                    {/* Live Profile & Badges Header Preview */}
+                    <ProfileHeaderPreview
+                        account={currentAccount}
+                        data={data}
+                    />
+
                     <div className="cp-tabs">
                         <div className={`cp-tab ${activeTab === 'general' ? 'cp-tab--active' : ''}`} onClick={() => setActiveTab('general')}>{t("General")}</div>
                         <div className={`cp-tab ${activeTab === 'aesthetics' ? 'cp-tab--active' : ''}`} onClick={() => setActiveTab('aesthetics')}>{t("Aesthetics")}</div>
@@ -2729,20 +2888,6 @@ export default definePlugin({
                 const lvl = data.levelReached ?? 1;
                 badgesArr.push({ id: "gifting_level", icon: "ca105ad9cfc8580c765101d17bbb2323", description: getLevelBadgeDesc(lvl) });
             }
-
-            // FILTER OUT custom client badges to prevent double rendering/flicker
-            badgesArr = badgesArr.filter(b => {
-                if (!b) return false;
-                const id = (b.id || "").toLowerCase();
-                const desc = (b.description || "").toLowerCase();
-                if (id.includes("vencord") || desc.includes("vencord")) return false;
-                if (id.includes("equicord") || desc.includes("equicord")) return false;
-                if (id.includes("guncord") || desc.includes("guncord")) return false;
-                if (id.includes("contributor") || desc.includes("contributor")) return false;
-                if (id === "nc-badge") return false;
-                return true;
-            });
-
             badgesArr = deduplicateProfileBadges(badgesArr);
             merged.badges = badgesArr;
 
@@ -2940,20 +3085,6 @@ export default definePlugin({
                 const lvl = storedData.levelReached ?? 1;
                 badgesArr.push({ id: "gifting_level", icon: "ca105ad9cfc8580c765101d17bbb2323", description: getLevelBadgeDesc(lvl) });
             }
-
-            // FILTER OUT custom client badges to prevent double rendering/flicker
-            badgesArr = badgesArr.filter(b => {
-                if (!b) return false;
-                const id = (b.id || "").toLowerCase();
-                const desc = (b.description || "").toLowerCase();
-                if (id.includes("vencord") || desc.includes("vencord")) return false;
-                if (id.includes("equicord") || desc.includes("equicord")) return false;
-                if (id.includes("guncord") || desc.includes("guncord")) return false;
-                if (id.includes("contributor") || desc.includes("contributor")) return false;
-                if (id === "nc-badge") return false;
-                return true;
-            });
-
             badgesArr = deduplicateProfileBadges(badgesArr);
             merged.badges = badgesArr;
 
@@ -3227,6 +3358,13 @@ export default definePlugin({
         FluxDispatcher.subscribe("CURRENT_USER_UPDATE", _onCurrentUserUpdate);
         FluxDispatcher.subscribe("CONNECTION_OPEN", _onCurrentUserUpdate);
 
+        // Defer all heavy store-patching to next macrotask so Discord renders first.
+        // This eliminates the startup freeze caused by ~400 lines of synchronous
+        // findByProps + prototype-patching running on the main thread before the
+        // first paint. All the hooks below are idempotent and guarded with _cp_*_hook
+        // flags, so there is no race condition — they simply install ~0 ms later.
+        setTimeout(() => {
+
         // PERFECT AND SECURE NATIVE INTERCEPTION ON USER STORE.
         try {
             const US = (Vencord as any).Webpack?.findByProps?.("getCurrentUser", "getUser");
@@ -3303,13 +3441,10 @@ export default definePlugin({
 
                             UserClass.prototype._cp_premium_hook = true;
 
-                            // Clean up existing own properties in UserStore to force prototype usage
-                            const allUsers = US.getUsers ? US.getUsers() : [];
-                            for (const u of Object.values(allUsers)) {
-                                if (u && typeof u === "object" && Object.prototype.hasOwnProperty.call(u, "premiumType")) {
-                                    (u as any)._realPremiumType = (u as any).premiumType;
-                                    delete (u as any).premiumType;
-                                }
+                            // Clean up existing own property on current user to force prototype usage
+                            if (realUser && typeof realUser === "object" && Object.prototype.hasOwnProperty.call(realUser, "premiumType")) {
+                                (realUser as any)._realPremiumType = (realUser as any).premiumType;
+                                delete (realUser as any).premiumType;
                             }
                         } catch (e) {
                             console.error("[CustomProfile] Failed to patch User prototype", e);
@@ -3620,6 +3755,7 @@ export default definePlugin({
                 (GuildMemberStore as any)._cp_orig_getMember = _origGetMember;
             }
         } catch { }
+        }, 500); // end deferred startup — all store patches run after first paint + CONNECTION_OPEN
     },
 
     userProfileBadges: [

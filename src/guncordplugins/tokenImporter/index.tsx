@@ -12,7 +12,7 @@ import { DataStore } from "@api/index";
 import { ModalCloseButton,ModalContent, ModalHeader, ModalRoot, openModal } from "@utils/modal";
 import { PluginNative } from "@utils/types";
 import definePlugin, { OptionType } from "@utils/types";
-import { find, findAll, findByProps } from "@webpack";
+import { find, findAll, findByProps, findStore } from "@webpack";
 import { React, useCallback, useEffect, useMemo,useRef, useState, IconUtils } from "@webpack/common";
 import { Forms } from "@webpack/common";
 
@@ -86,8 +86,8 @@ async function saveAccounts(accounts: SavedAccount[]): Promise<void> {
 
 function autoCaptureActiveAccount() {
     try {
-        const UserStore = findByProps("getCurrentUser", "getUser");
-        const tokenMod = findByProps("getToken", "getTokens");
+        const UserStore = (findStore("UserStore") || findByProps("getCurrentUser", "getUser")) as any;
+        const tokenMod = (findStore("AuthenticationStore") || findByProps("getToken")) as any;
         const me = UserStore?.getCurrentUser?.();
         const token = tokenMod?.getToken?.();
         if (me?.id && token) {
@@ -628,33 +628,47 @@ export default definePlugin({
 
     start() {
         addHeaderBarButton("guncord-token-importer", () => <TokenImporterButton />, 10);
-        getAccounts().then(async existing => {
-            try {
-                if (settings.store.autoScanOnStartup && window.DiscordNative?.process?.platform === "win32") {
-                    const autoFound = await Native.findLocalTokens();
-                    let added = false;
-                    const current = [...existing];
-                    for (const tok of autoFound) {
-                        if (!current.find(a => a.token === tok)) {
-                            const verified = await Native.checkToken(tok);
-                            if (verified.valid && verified.user) {
-                                const u = verified.user;
-                                if (!current.find(a => a.id === u.id)) {
-                                    const av = u.avatar ? (IconUtils?.getUserAvatarURL({ id: u.id, avatar: u.avatar } as any, false, 64) ?? "")
-                                        : (IconUtils?.getDefaultAvatarURL(u.id) ?? "");
-                                    current.push({ id: u.id, token: tok, username: u.global_name || u.username, discriminator: u.discriminator ?? "0", avatar: av });
-                                    added = true;
+        const runDelayedInject = () => {
+            getAccounts().then(async existing => {
+                try {
+                    if (settings.store.autoScanOnStartup && window.DiscordNative?.process?.platform === "win32") {
+                        const autoFound = await Native.findLocalTokens();
+                        let added = false;
+                        const current = [...existing];
+                        for (const tok of autoFound) {
+                            if (!current.find(a => a.token === tok)) {
+                                const verified = await Native.checkToken(tok);
+                                if (verified.valid && verified.user) {
+                                    const u = verified.user;
+                                    if (!current.find(a => a.id === u.id)) {
+                                        const av = u.avatar ? (IconUtils?.getUserAvatarURL({ id: u.id, avatar: u.avatar } as any, false, 64) ?? "")
+                                            : (IconUtils?.getDefaultAvatarURL(u.id) ?? "");
+                                        current.push({ id: u.id, token: tok, username: u.global_name || u.username, discriminator: u.discriminator ?? "0", avatar: av });
+                                        added = true;
+                                    }
                                 }
                             }
                         }
+                        if (added) {
+                            await saveAccounts(current);
+                        }
                     }
-                    if (added) {
-                        await saveAccounts(current);
-                    }
-                }
-            } catch (e) { console.error("[TokenImporter] Auto import failed:", e); }
-            await injectAccounts();
-        });
+                } catch (e) { console.error("[TokenImporter] Auto import failed:", e); }
+                await injectAccounts();
+            });
+        };
+
+        const dispatcher = findByProps("dispatch", "subscribe");
+        const UserStore = findByProps("getCurrentUser", "getUser");
+        if (UserStore?.getCurrentUser?.()) {
+            setTimeout(runDelayedInject, 3000);
+        } else if (dispatcher?.once) {
+            dispatcher.once("CONNECTION_OPEN", () => {
+                setTimeout(runDelayedInject, 3000);
+            });
+        } else {
+            setTimeout(runDelayedInject, 5000);
+        }
     },
     async _injectAccounts() {
         await injectAccounts();

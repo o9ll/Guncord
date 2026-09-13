@@ -4,31 +4,30 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { detailedPluginDescriptions } from "@api/detailedPluginDescriptions";
-import { t } from "@api/i18n";
 import { showNotice } from "@api/Notices";
-import { getStoredToken } from "@api/OAuth2";
-import { tPlugin } from "@api/pluginI18n";
-import { fetchPluginRatings, PluginLikeData,togglePluginLike } from "@api/PluginLikes";
-import { LIKE_AUTH_EVENT } from "@api/PluginLikesAuth";
 import { isPluginEnabled, pluginRequiresRestart, startDependenciesRecursive, startPlugin, stopPlugin } from "@api/PluginManager";
-import { Button } from "@components/Button";
-import { HeadingPrimary } from "@components/Heading";
+import { fetchPluginRatings, togglePluginLike, PluginLikeData } from "@api/PluginLikes";
+import { LIKE_AUTH_EVENT } from "@api/PluginLikesAuth";
+import { getStoredToken } from "@api/OAuth2";
 import { CogWheel, InfoIcon } from "@components/Icons";
 import { AddonCard } from "@components/settings/AddonCard";
 import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
 import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { OptionType, Plugin } from "@utils/types";
+import { HeadingPrimary } from "@components/Heading";
+import { Button } from "@components/Button";
 import { React, showToast, Text, Toasts, Tooltip, UserStore } from "@webpack/common";
-import { Settings } from "Vencord";
-
-import { PluginMeta } from "~plugins";
+import { flushSettings, Settings } from "@api/Settings";
+import { t } from "@api/i18n";
+import { tPlugin } from "@api/pluginI18n";
+import { detailedPluginDescriptions } from "@api/detailedPluginDescriptions";
 
 import { TUTORIAL_CACHE } from "./components/Common";
-import { getPluginIcon } from "./pluginIcons";
 import { openPluginModal } from "./PluginModal";
 import { getTutorialVideoName, TUTORIAL_PLUGIN_NAMES } from "./tutorialList";
+import { getPluginIcon } from "./pluginIcons";
+import { PluginMeta } from "~plugins";
 
 export function removeEmojis(text: string): string {
     if (!text) return "";
@@ -52,7 +51,7 @@ interface PluginCardProps extends React.HTMLProps<HTMLDivElement> {
 }
 
 export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, onMouseLeave, isNew, hasTutorial }: PluginCardProps) {
-    const settings = Settings.plugins[plugin.name];
+    const settings = (Settings.plugins[plugin.name] ??= {} as any);
     const isEnabled = () => isPluginEnabled(plugin.name);
 
     const [likeData, setLikeData] = React.useState<PluginLikeData | null>(null);
@@ -93,6 +92,10 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
 
     function doToggleEnabled() {
         const wasEnabled = isEnabled();
+        const nextState = !wasEnabled;
+        const targetSettings = (Settings.plugins[plugin.name] ??= {} as any);
+        targetSettings.enabled = nextState;
+        flushSettings();
 
         if (!wasEnabled) {
             const { restartNeeded, failures } = startDependenciesRecursive(plugin);
@@ -100,31 +103,37 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
             if (failures.length) {
                 logger.error(`Failed to start dependencies for ${plugin.name}: ${failures.join(", ")}`);
                 showNotice("Failed to start dependencies: " + failures.join(", "), "Close", () => null);
+                targetSettings.enabled = false;
+                flushSettings();
                 return;
             }
 
             if (restartNeeded) {
-                settings.enabled = true;
+                targetSettings.enabled = true;
+                flushSettings();
                 onRestartNeeded(plugin.name, "enabled");
                 return;
             }
         }
 
         if (pluginRequiresRestart(plugin)) {
-            settings.enabled = !wasEnabled;
+            targetSettings.enabled = nextState;
+            flushSettings();
             onRestartNeeded(plugin.name, "enabled");
             return;
         }
 
         if (wasEnabled && !plugin.started) {
-            settings.enabled = !wasEnabled;
+            targetSettings.enabled = nextState;
+            flushSettings();
             return;
         }
 
         const result = wasEnabled ? stopPlugin(plugin) : startPlugin(plugin);
 
         if (!result) {
-            settings.enabled = false;
+            targetSettings.enabled = false;
+            flushSettings();
 
             const msg = `Error while ${wasEnabled ? "stopping" : "starting"} plugin ${plugin.name}`;
             showToast(msg, Toasts.Type.FAILURE, {
@@ -134,7 +143,8 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
             return;
         }
 
-        settings.enabled = !wasEnabled;
+        targetSettings.enabled = nextState;
+        flushSettings();
     }
 
     function toggleEnabled() {
@@ -184,18 +194,18 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
 
         openModal(props => (
             <ModalRoot {...props} size={ModalSize.DYNAMIC} className="nc-tutorial-modal">
-                <ModalHeader separator={false} style={{ padding: "20px 24px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 4 }}>
+                <ModalHeader separator={false} style={{ padding: "24px 24px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 8 }}>
                         <Text variant="heading-xl/bold" style={{ color: "#ffffff", fontSize: "20px", fontWeight: 700, margin: 0 }}>
                             {plugin.name} – {t("Tutorial")}
                         </Text>
-                        <Text variant="text-sm/normal" style={{ color: "#949ba4", fontSize: "14px", margin: 0 }}>
+                        <Text variant="text-sm/normal" style={{ color: "#949ba4", fontSize: "14px", margin: 0, paddingBottom: "6px" }}>
                             {t("Watch full plugin guide and feature demonstration")}
                         </Text>
                     </div>
                     <ModalCloseButton onClick={props.onClose} />
                 </ModalHeader>
-                <ModalContent style={{ padding: "0 24px 16px" }}>
+                <ModalContent style={{ padding: "6px 24px 20px" }}>
                     <div style={{ width: "100%", aspectRatio: "16 / 9", borderRadius: "10px", overflow: "hidden", background: "#000000", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
                         <video
                             src={videoUrl}

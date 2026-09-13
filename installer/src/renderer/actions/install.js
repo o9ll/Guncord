@@ -93,7 +93,10 @@ async function cleanModulePatches(resourcesPath) {
                         }
                     }
                     if (!restored) {
-                        await safeDelete(pf);
+                        try {
+                            const cleaned = content.replace(/require\(["'][^"']*(?:vencord|equicord|guncord)[^"']*["']\);?/gi, "");
+                            await fs.writeFile(pf, cleaned, "utf-8");
+                        } catch {}
                     }
                 }
 
@@ -117,61 +120,157 @@ async function cleanModulePatches(resourcesPath) {
     }
 }
 
-function downloadFileAsync(url, destPath, onProgress) {
+import http from "http";
+
+function fetchJsonWithFallback(url) {
     return new Promise((resolve, reject) => {
-        const file = createWriteStream(destPath);
-        https.get(url, { headers: { "User-Agent": "Guncord-Installer/3.0" }, rejectUnauthorized: false }, (response) => {
-            if (response.statusCode === 302 || response.statusCode === 301) {
-                file.close();
-                downloadFileAsync(response.headers.location, destPath, onProgress).then(resolve).catch(reject);
-                return;
-            }
-            if (response.statusCode !== 200) {
-                file.close();
-                reject(new Error(`Failed to download: HTTP ${response.statusCode}`));
-                return;
-            }
-            const totalBytes = parseInt(response.headers["content-length"], 10) || 0;
-            let downloadedBytes = 0;
-
-            response.on("data", (chunk) => {
-                downloadedBytes += chunk.length;
-                if (totalBytes > 0) {
-                    const percent = (downloadedBytes / totalBytes) * 100;
-                    onProgress(percent, downloadedBytes, totalBytes);
+        function fallbackPowerShell(originalErr) {
+            try {
+                const psCmd = `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13; (Invoke-WebRequest -Uri '${url}' -UseBasicParsing -Headers @{'User-Agent'='Guncord-Installer/3.0'; 'Accept'='application/json'}).Content`;
+                const out = execSync(`powershell.exe -NoProfile -Command "${psCmd}"`, { encoding: "utf8", timeout: 15000 });
+                const parsed = JSON.parse(out.trim());
+                resolve(parsed);
+            } catch (psErr) {
+                try {
+                    const curlOut = execSync(`curl.exe -skL -H "User-Agent: Guncord-Installer/3.0" -H "Accept: application/json" "${url}"`, { encoding: "utf8", timeout: 15000 });
+                    const parsed = JSON.parse(curlOut.trim());
+                    resolve(parsed);
+                } catch (curlErr) {
+                    reject(originalErr || psErr || curlErr);
                 }
+            }
+        }
+
+        try {
+            const client = url.startsWith("https") ? https : http;
+            const req = client.get(url, {
+                headers: {
+                    "User-Agent": "Guncord-Installer/3.0",
+                    "Accept": "application/json"
+                },
+                rejectUnauthorized: false
+            }, (res) => {
+                if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {
+                    const loc = res.headers.location;
+                    if (loc) {
+                        fetchJsonWithFallback(loc).then(resolve).catch(reject);
+                        return;
+                    }
+                }
+                if (res.statusCode !== 200) {
+                    fallbackPowerShell(new Error(`HTTP ${res.statusCode}`));
+                    return;
+                }
+                let data = "";
+                res.on("data", chunk => data += chunk);
+                res.on("end", () => {
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch (e) {
+                        fallbackPowerShell(e);
+                    }
+                });
             });
 
-            response.pipe(file);
-
-            file.on("finish", () => {
-                file.close();
-                resolve();
+            req.on("error", (err) => {
+                fallbackPowerShell(err);
             });
-        }).on("error", (err) => {
-            file.close();
-            safeDelete(destPath);
-            reject(err);
-        });
+
+            req.setTimeout(8000, () => {
+                req.destroy();
+                fallbackPowerShell(new Error("Request timeout"));
+            });
+        } catch (err) {
+            fallbackPowerShell(err);
+        }
     });
 }
 
-const getJSON = phin.defaults({
-    method: "GET",
-    parse: "json",
-    followRedirects: true,
-    core: { rejectUnauthorized: false },
-    headers: { "User-Agent": "Guncord-Installer/3.0", "Accept": "application/json" }
-});
+function downloadFileAsync(url, destPath, onProgress) {
+    return new Promise((resolve, reject) => {
+        const file = createWriteStream(destPath);
+        let finished = false;
+
+        function tryPowerShellFallback(origErr) {
+            if (finished) return;
+            finished = true;
+            try { file.close(); } catch {}
+            try {
+                log("⚡ Using system network stack fallback...");
+                const psCmd = `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13; Invoke-WebRequest -Uri '${url}' -OutFile '${destPath}' -UseBasicParsing`;
+                execSync(`powershell.exe -NoProfile -Command "${psCmd}"`, { timeout: 120000 });
+                resolve();
+            } catch (psErr) {
+                try {
+                    execSync(`curl.exe -skL "${url}" -o "${destPath}"`, { timeout: 120000 });
+                    resolve();
+                } catch (curlErr) {
+                    reject(origErr || psErr || curlErr);
+                }
+            }
+        }
+
+        try {
+            const client = url.startsWith("https") ? https : http;
+            const req = client.get(url, {
+                headers: { "User-Agent": "Guncord-Installer/3.0" },
+                rejectUnauthorized: false
+            }, (response) => {
+                if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307 || response.statusCode === 308) {
+                    file.close();
+                    const redirectUrl = response.headers.location;
+                    if (redirectUrl) {
+                        downloadFileAsync(redirectUrl, destPath, onProgress).then(resolve).catch(reject);
+                        return;
+                    }
+                }
+                if (response.statusCode !== 200) {
+                    tryPowerShellFallback(new Error(`Failed to download: HTTP ${response.statusCode}`));
+                    return;
+                }
+                const totalBytes = parseInt(response.headers["content-length"], 10) || 0;
+                let downloadedBytes = 0;
+
+                response.on("data", (chunk) => {
+                    downloadedBytes += chunk.length;
+                    if (totalBytes > 0 && onProgress) {
+                        const percent = (downloadedBytes / totalBytes) * 100;
+                        onProgress(percent, downloadedBytes, totalBytes);
+                    }
+                });
+
+                response.pipe(file);
+
+                file.on("finish", () => {
+                    if (!finished) {
+                        finished = true;
+                        file.close();
+                        resolve();
+                    }
+                });
+            });
+
+            req.on("error", (err) => {
+                tryPowerShellFallback(err);
+            });
+
+            req.setTimeout(15000, () => {
+                req.destroy();
+                tryPowerShellFallback(new Error("Download stream timed out"));
+            });
+        } catch (err) {
+            tryPowerShellFallback(err);
+        }
+    });
+}
 
 async function downloadDist() {
     log("Fetching latest release information from GitHub...");
     let assetUrl;
     let guncordVersion;
     try {
-        const response = await getJSON(RELEASE_API);
-        const release = response.body;
-        const asset = release && release.assets && release.assets.find(a => a.name.toLowerCase() === DIST_ZIP);
+        const release = await fetchJsonWithFallback(RELEASE_API);
+        const asset = release && release.assets && release.assets.find(a => a.name && a.name.toLowerCase() === DIST_ZIP);
         assetUrl = asset && asset.browser_download_url;
         guncordVersion = release && release.tag_name;
         if (!assetUrl) {
@@ -224,7 +323,7 @@ async function downloadDist() {
 
 async function writeLoader(appDir) {
     const patcher = path.join(distDir, "patcher.js").replace(/\\/g, "/");
-    await fs.writeFile(path.join(appDir, "package.json"), JSON.stringify({ name: "discord", main: "index.js" }));
+    await fs.writeFile(path.join(appDir, "package.json"), JSON.stringify({ name: "discord", main: "index.js" }, null, 2));
     const loaderCode = `// Guncord Injector
 "use strict";
 const fs = require('fs');
@@ -250,48 +349,6 @@ async function applyDefaultPluginsSetting() {
     }
 }
 
-async function copyAssetsToDiscord(resPath) {
-    log("Copying binaries...");
-    const appBase = path.dirname(resPath);
-
-    const filesToCopy = ["ffmpeg.exe", "ffmpeg.dll", "node.exe", "yt-dlp.exe"];
-    for (const f of filesToCopy) {
-        const src = path.join(distDir, f);
-        if (await safeExists(src)) {
-            await fs.copyFile(src, path.join(appBase, f));
-        }
-    }
-
-    log("Copying directories...");
-    const dirsToCopy = ["mac", "multi-instance-icons", "modules", "server"];
-    for (const d of dirsToCopy) {
-        const src = path.join(distDir, d);
-        if (await safeExists(src)) {
-            await copyDirectory(src, path.join(appBase, d));
-        }
-    }
-
-    log("Copying assets...");
-}
-
-async function safeMoveOrCopy(src, dest) {
-    if (await safeExists(dest)) await safeDelete(dest);
-    for (let i = 0; i < 10; i++) {
-        try {
-            await fs.rename(src, dest);
-            return true;
-        } catch (err) {
-            try {
-                await fs.copyFile(src, dest);
-                await safeDelete(src);
-                return true;
-            } catch (_) {}
-            await new Promise(r => setTimeout(r, 300));
-        }
-    }
-    return false;
-}
-
 async function injectShims(paths) {
     process.noAsar = true;
     const progressPerLoop = (INJECT_SHIM_PROGRESS - progress.value) / paths.length;
@@ -305,51 +362,59 @@ async function injectShims(paths) {
             log("Closing Discord...");
             await killDiscord(resPath, log);
 
-            log("1. Removing previous mod injection (Vencord / Equicord / OpenAsar)...");
-            if (await safeExists(appDir)) {
-                try { await fs.rm(appDir, { recursive: true, force: true }); } catch {}
+            // Equicord atomic logic:
+            // Check if already patched: _app.asar exists
+            const alreadyPatched = await safeExists(backup);
+
+            if (alreadyPatched) {
+                log("Already patched install detected. Updating loader shims...");
+                await fs.mkdir(appDir, { recursive: true });
+                await writeLoader(appDir);
+                await applyDefaultPluginsSetting();
+                log("Starting Discord...");
+                startDiscord(resPath);
+                log("✅ Injection successful!");
+                progress.set(progress.value + progressPerLoop);
+                continue;
             }
 
-            const asarStat = await safeStat(appAsar);
-            if (asarStat && asarStat.size < 2000000) {
-                await safeDelete(appAsar);
-            }
-
-            const thirdPartyBackups = ["_app.asar", "original_app.asar", "app.asar.bak"];
-            for (const bkName of thirdPartyBackups) {
-                const bkPath = path.join(resPath, bkName);
-                const bkStat = await safeStat(bkPath);
-                if (bkStat && bkStat.size > 2000000) {
-                    const curStat = await safeStat(appAsar);
-                    if (!curStat || curStat.size < 2000000) {
-                        if (await safeExists(appAsar)) await safeDelete(appAsar);
-                        await fs.copyFile(bkPath, appAsar);
-                    }
-                    break;
-                }
-            }
-
-            await cleanModulePatches(resPath);
-
-            log("2. Configuring Guncord loader...");
-            if (!(await safeExists(appAsar)) && !(await safeExists(backup))) {
+            // If not already patched, ensure app.asar exists
+            if (!(await safeExists(appAsar))) {
                 throw new Error("Critical error: no valid app.asar found. Please reinstall Discord from discord.com/download and try again.");
             }
 
-            if (await safeExists(appAsar)) {
-                const ok = await safeMoveOrCopy(appAsar, backup);
-                if (!ok) {
-                    throw new Error("Critical error: Could not process app.asar. Please close Discord manually via Task Manager and try again.");
+            const undo = [];
+            try {
+                // Step 1: rename app.asar -> _app.asar
+                await fs.rename(appAsar, backup);
+                undo.push(async () => {
+                    try { await fs.rename(backup, appAsar); } catch {}
+                });
+
+                // Step 2: create app folder
+                await fs.mkdir(appDir, { recursive: true });
+                undo.push(async () => {
+                    try {
+                        const indexPath = path.join(appDir, "index.js");
+                        const pkgPath = path.join(appDir, "package.json");
+                        await safeDelete(indexPath);
+                        await safeDelete(pkgPath);
+                        await fs.rm(appDir, { recursive: true, force: true });
+                    } catch {}
+                });
+
+                // Step 3: write loader files
+                await writeLoader(appDir);
+                await applyDefaultPluginsSetting();
+            } catch (patchErr) {
+                // Rollback in reverse order
+                for (let i = undo.length - 1; i >= 0; i--) {
+                    try { await undo[i](); } catch {}
                 }
+                throw patchErr;
             }
 
-            log("3. Creating app directory...");
-            await fs.mkdir(appDir, { recursive: true });
-            await writeLoader(appDir);
-            await applyDefaultPluginsSetting();
-            await copyAssetsToDiscord(resPath);
-
-            log("4. Starting Discord...");
+            log("Starting Discord...");
             startDiscord(resPath);
 
             log("✅ Injection successful!");

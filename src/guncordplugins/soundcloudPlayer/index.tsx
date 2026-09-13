@@ -8,7 +8,6 @@ import "./styles.css";
 
 import { HeaderBarButton } from "@api/HeaderBar";
 import { DataStore } from "@api/index";
-import { EquicordDevs } from "@utils/constants";
 import { ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { IconComponent, OptionType, PluginNative } from "@utils/types";
@@ -33,7 +32,7 @@ export const SOUNDCLOUD_LOGO_SRC = "data:image/avif;base64,AAAAHGZ0eXBhdmlmAAAAA
 
 function SoundCloudIcon(props: React.SVGProps<SVGSVGElement>) {
     return (
-        <svg aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width={20} height={20} fill="none" viewBox="0 0 24 24" {...props}>
+        <svg aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width={20} height={20} fill="none" viewBox="0 0 24 24" {...props} className={`nc-soundcord-icon ${props.className || ""}`}>
             <path fill="currentColor" d="M8.65 1.51A2 2 0 0 0 6 3.41v9.88A3.98 3.98 0 0 0 4.5 13C2.57 13 1 14.34 1 16s1.57 3 3.5 3S8 17.66 8 16V5.4l11 3.81v7.08a3.98 3.98 0 0 0-1.5-.29c-1.93 0-3.5 1.34-3.5 3s1.57 3 3.5 3 3.5-1.34 3.5-3V7.03c0-.74-.47-1.4-1.18-1.65L8.65 1.51Z" />
         </svg>
     );
@@ -1598,22 +1597,6 @@ function SoundCloudModal({ onClose }: { onClose: () => void; }) {
                                 <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
                                 <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
                             </svg>
-                        </button>
-                    </TooltipContainer>
-
-                    {/* Fullscreen / Grand écran button */}
-                    <TooltipContainer text={isFullscreen ? t("Exit Full Screen") : t("Full Screen")}>
-                        <button
-                            className={`sc-header-btn ${isFullscreen ? "sc-header-btn--active" : ""}`}
-                            onClick={() => setIsFullscreen(v => !v)}
-                        >
-                            {isFullscreen ? <IconRestore /> : <IconMaximize />}
-                        </button>
-                    </TooltipContainer>
-
-                    <TooltipContainer text={t("Close")}>
-                        <button className="sc-header-btn sc-header-btn--close" onClick={onClose}>
-                            <IconClose />
                         </button>
                     </TooltipContainer>
                 </div>
@@ -3439,7 +3422,7 @@ export const settings = definePluginSettings({
 export default definePlugin({
     name: "SoundCordPlayer",
     enabledByDefault: true,
-    description: t("Integrated SoundCord player. Client ID is automatically fetched via native Electron process — no account required."),
+    description: "Integrated SoundCord player. Client ID is automatically fetched via native Electron process — no account required.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     settings,
 

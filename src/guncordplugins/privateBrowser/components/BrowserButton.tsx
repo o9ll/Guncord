@@ -14,6 +14,14 @@ import { browserBase64 } from "../icon";
 
 type ExtensionInfo = { id: string; name: string; version: string; description: string; iconUrl: string; dir: string; };
 
+export let _urlSyncInterval: ReturnType<typeof setInterval> | null = null;
+export function cleanupBrowserInterval() {
+    if (_urlSyncInterval) {
+        clearInterval(_urlSyncInterval);
+        _urlSyncInterval = null;
+    }
+}
+
 // ─── Extension Panel ─────────────────────────────────────────────────────────
 
 let extPanelEl: HTMLDivElement | null = null;
@@ -924,7 +932,8 @@ function getOrCreateBrowserContainer(): HTMLDivElement {
         });
 
         // Periodic URL sync
-        setInterval(() => {
+        if (_urlSyncInterval) clearInterval(_urlSyncInterval);
+        _urlSyncInterval = setInterval(() => {
             if (activeTabId && el?.style.display === "flex") {
                 const wv = document.getElementById(`webview-${activeTabId}`) as HTMLIFrameElement;
                 if (wv) {
@@ -949,18 +958,6 @@ function getOrCreateBrowserContainer(): HTMLDivElement {
         const style = document.createElement("style");
         style.id = "browser-global-style";
         style.textContent = `
-            body.browser-is-open section[class^="panels_"],
-            body.browser-is-open div[class^="container_"]:has(> div[class^="nameTag_"]) {
-                display: none !important;
-            }
-            body.browser-is-open div[class*="wrapper_"][class*="overlay_"] {
-                opacity: 0 !important;
-                visibility: hidden !important;
-            }
-            body.browser-is-open #browser-button div[class*="wrapper_"][class*="overlay_"] {
-                opacity: 1 !important;
-                visibility: visible !important;
-            }
             #browser-ext-panel::-webkit-scrollbar { width: 6px; }
             #browser-ext-panel::-webkit-scrollbar-track { background: transparent; }
             #browser-ext-panel::-webkit-scrollbar-thumb { background: #404249; border-radius: 3px; }

@@ -34,6 +34,7 @@ const FORCE_DISABLED_DEFAULT_PLUGIN_KEYS = new Set([
     "fakeperm",
     "translucence",
     "rolecoloreverywhere",
+    "surveillance",
     "voicechatutilities"
 ]);
 
@@ -82,6 +83,8 @@ export interface Settings {
     disableMinSize: boolean;
     winNativeTitleBar: boolean;
     streamProof: boolean;
+    enableInAppNotifications: boolean;
+    hideNativeHeaderButtons: boolean;
     seeAllCustomProfile: boolean;
     syncOwnCustomProfile: boolean;
     syncDiscordLanguage: boolean;
@@ -144,6 +147,8 @@ const DefaultSettings: Settings = {
     disableMinSize: false,
     winNativeTitleBar: false,
     streamProof: false,
+    enableInAppNotifications: true,
+    hideNativeHeaderButtons: true,
     seeAllCustomProfile: true,
     syncOwnCustomProfile: false,
     syncDiscordLanguage: false,
@@ -175,6 +180,14 @@ const DefaultSettings: Settings = {
 
 const settings = !IS_REPORTER ? VencordNative.settings.get() : {} as Settings;
 mergeDefaults(settings, DefaultSettings);
+if ((settings.plugins as any)?.EventLogs?.persistentLogs) {
+    delete (settings.plugins as any).EventLogs.persistentLogs;
+}
+
+// Force migrate cloud URL to Guncord if it's still Equicord
+if (settings.cloud && settings.cloud.url && settings.cloud.url.includes("equicord.org")) {
+    settings.cloud.url = "https://cloud.equicord.org/";
+}
 
 // Guncord native defaults — defaultPlugins is always enabled, no external prefs file
 const GUNCORD_PREFS = { defaultPlugins: true, autoUpdate: true } as const;
@@ -265,29 +278,45 @@ export const SettingsStore = new SettingsStoreClass(settings, {
     }
 });
 
+let _saveSettingsTimer: ReturnType<typeof setTimeout> | undefined;
+
+export function flushSettings(path?: string[]) {
+    if (_saveSettingsTimer !== undefined) {
+        clearTimeout(_saveSettingsTimer);
+        _saveSettingsTimer = undefined;
+    }
+    if ((SettingsStore.plain?.plugins as any)?.EventLogs?.persistentLogs) {
+        delete (SettingsStore.plain.plugins as any).EventLogs.persistentLogs;
+    }
+    try {
+        if (typeof VencordNative !== "undefined" && VencordNative?.settings?.set) {
+            VencordNative.settings.set(SettingsStore.plain, path);
+        }
+    } catch (err) {
+        try {
+            const sanitized = JSON.parse(JSON.stringify(SettingsStore.plain, (k, v) => {
+                if (typeof v === "function" || typeof v === "symbol") return undefined;
+                if (typeof v === "bigint") return v.toString();
+                if (v instanceof Node) return undefined;
+                return v;
+            }));
+            if (typeof VencordNative !== "undefined" && VencordNative?.settings?.set) {
+                VencordNative.settings.set(sanitized, path);
+            }
+        } catch (e) {
+            console.error("[Settings] Failed to save settings to native store:", err, e);
+        }
+    }
+}
+
 if (!IS_REPORTER) {
-    let _saveSettingsTimer: ReturnType<typeof setTimeout> | undefined;
     SettingsStore.addGlobalChangeListener((_, path) => {
         SettingsStore.plain.cloud.settingsSyncVersion = Date.now();
         if (_saveSettingsTimer !== undefined) clearTimeout(_saveSettingsTimer);
         _saveSettingsTimer = setTimeout(() => {
             _saveSettingsTimer = undefined;
-            try {
-                VencordNative.settings.set(SettingsStore.plain, path);
-            } catch (err) {
-                try {
-                    const sanitized = JSON.parse(JSON.stringify(SettingsStore.plain, (k, v) => {
-                        if (typeof v === "function" || typeof v === "symbol") return undefined;
-                        if (typeof v === "bigint") return v.toString();
-                        if (v instanceof Node) return undefined;
-                        return v;
-                    }));
-                    VencordNative.settings.set(sanitized, path);
-                } catch (e) {
-                    console.error("[Settings] Failed to save settings to native store:", err, e);
-                }
-            }
-        }, 500);
+            flushSettings(path);
+        }, 300);
     });
 }
 

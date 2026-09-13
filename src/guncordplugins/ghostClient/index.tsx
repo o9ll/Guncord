@@ -7,10 +7,11 @@
 import "./styles.css";
 
 import { DataStore } from "@api/index";
-import { UserAreaButton, UserAreaButtonFactory, UserAreaRenderProps } from "@api/UserArea";
 import definePlugin, { PluginNative } from "@utils/types";
+import { UserAreaButton, UserAreaButtonFactory, UserAreaRenderProps } from "@api/UserArea";
 import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { React, ReactDOM, Toasts, useEffect, useRef,useState } from "@webpack/common";
+import { React, ReactDOM, Toasts, useState, useEffect, useRef, SettingsRouter } from "@webpack/common";
+import { t } from "../autoTranslateGuncord";
 
 const VoiceStateStore = findStoreLazy("VoiceStateStore");
 const ChannelStore = findStoreLazy("ChannelStore");
@@ -43,6 +44,14 @@ function UserIcon() { return <svg width="14" height="14" viewBox="0 0 24 24" fil
 function CheckIcon() { return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z" /></svg>; }
 function TrashIcon() { return <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2h4a1 1 0 1 1 0 2h-1.1l-.9 12.1A3 3 0 0 1 17 23H7a3 3 0 0 1-3-2.9L3.1 8H2a1 1 0 0 1 0-2h4V4Zm2 0v2h6V4H9ZM5.1 8l.9 11.9a1 1 0 0 0 1 .1h6a1 1 0 0 0 1-.1L14.9 8H5.1Z" /></svg>; }
 function VideoIcon() { return <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3.3l3.4 2.5A1 1 0 0 0 23 14V9a1 1 0 0 0-1.6-.8L18 10.7V6a2 2 0 0 0-2-2H4Z" /></svg>; }
+
+function SettingsGearIcon() {
+    return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+        </svg>
+    );
+}
 
 interface GhostAccount { token: string; userId: string; username: string; avatar: string | null; }
 interface GhostState { active: boolean; connecting: boolean; error: string | null; }
@@ -116,6 +125,8 @@ async function getAllSavedAccounts(): Promise<GhostAccount[]> {
     const combined = new Map<string, GhostAccount>();
     tiAccs.forEach(a => combined.set(a.userId, a));
     ghostAccs.forEach(a => combined.set(a.userId, a));
+    const myId = getMyId();
+    if (myId) combined.delete(myId);
 
     return Array.from(combined.values());
 }
@@ -154,25 +165,18 @@ async function ghostDeactivate(userId: string) {
 
 async function ghostDeactivateAll() {
     const ids = Array.from(ghostStates.keys());
-    // Clear local state immediately for a clean UI
     ghostStates.clear();
     notify();
-
-    // Clean disconnection in waves to avoid overloading server
-    (async () => {
-        for (let i = 0; i < ids.length; i++) {
-            Native.leaveVoice(ids[i]).catch(() => { });
-            // Progressive delay: more accounts means more spacing to let the server breathe
-            if (i % 3 === 0) await new Promise(r => setTimeout(r, 150));
-        }
-        // Final safety call to ensure EVERYTHING is stopped server-side
-        Native.leaveVoiceAll(ids).catch(() => { });
-    })();
+    if (ids.length === 0) return;
+    try {
+        await Native.leaveVoiceAll(ids);
+    } catch { }
 }
 
 let voiceUnsub: (() => void) | null = null;
 let globalAutoFollow = false;
 let myLastChannelId: string | null = null;
+let _followDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 function startFollowing() {
     if (voiceUnsub) return;
@@ -180,7 +184,7 @@ function startFollowing() {
     myLastChannelId = getMyVoiceState()?.channelId ?? null;
     console.log("[GhostClient] Suivi vocal active, salon actuel:", myLastChannelId);
 
-    const handler = async (data: any) => {
+    const handler = (data: any) => {
         if (!data) return;
         const myId = getMyId();
         let statesList: any[] = [];
@@ -192,12 +196,19 @@ function startFollowing() {
             }
         } catch { statesList = []; }
 
-        for (const s of statesList) {
-            if (s.userId !== myId) continue;
-            const newCh: string | null = s.channelId ?? null;
-            if (newCh === myLastChannelId) continue;
+        const myState = statesList.find((s: any) => s.userId === myId);
+        if (!myState) return;
+
+        // Debounce: Discord fires several Flux events in rapid succession during a VC switch.
+        // We only act on the last event after a 400ms quiet window to avoid concurrent joinVoiceAll races.
+        if (_followDebounceTimer !== null) clearTimeout(_followDebounceTimer);
+        _followDebounceTimer = setTimeout(async () => {
+            _followDebounceTimer = null;
+            const curVoice = getMyVoiceState();
+            const newCh: string | null = curVoice?.channelId ?? null;
+            if (newCh === myLastChannelId) return;
             myLastChannelId = newCh;
-            const guild: string = s.guildId ?? (newCh ? ChannelStore?.getChannel?.(newCh)?.guild_id ?? "" : "");
+            const guild: string = curVoice?.guildId ?? (newCh ? ChannelStore?.getChannel?.(newCh)?.guild_id ?? "" : "");
             const accounts: GhostAccount[] = savedAccounts.length > 0
                 ? savedAccounts
                 : (await DataStore.get(DS_KEY_TOKENS) as GhostAccount[] | null ?? []);
@@ -207,13 +218,13 @@ function startFollowing() {
                 return st?.active === true;
             });
             console.log(`[GhostClient] Suivi vocal: newCh=${newCh} guild=${guild} actives=${activeAccs.length}`);
-            if (activeAccs.length === 0) continue;
+            if (activeAccs.length === 0) return;
             if (newCh) {
                 Native.joinVoiceAll(activeAccs.map(a => a.userId), guild, newCh, ghostMicLabel).catch(() => { });
             } else {
                 Native.leaveVoiceAll(activeAccs.map(a => a.userId)).catch(() => { });
             }
-        }
+        }, 400);
     };
 
     FluxDispatcher?.subscribe?.("VOICE_STATE_UPDATES", handler);
@@ -221,6 +232,7 @@ function startFollowing() {
     voiceUnsub = () => {
         FluxDispatcher?.unsubscribe?.("VOICE_STATE_UPDATES", handler);
         FluxDispatcher?.unsubscribe?.("VOICE_STATE_UPDATE", handler);
+        if (_followDebounceTimer !== null) { clearTimeout(_followDebounceTimer); _followDebounceTimer = null; }
         myLastChannelId = null;
     };
 }
@@ -276,7 +288,7 @@ function Dropdown({ icon, label, value, options, onChange }: {
     return (
         <div className="gc-dropdown-wrap">
             <div className="gc-dropdown-label">{icon}<span>{label}</span></div>
-            <button ref={btnRef} className={`gc-dropdown-btn ${open ? "gc-dropdown-btn--open" : ""}`} onClick={e => openDropdown(e)}>
+            <button ref={btnRef} className={`gc-dropdown-btn ${open ? "gc-dropdown-btn--open" : ""}`} onClick={(e) => openDropdown(e)}>
                 <div className="gc-dropdown-selected">
                     {selected?.avatar !== undefined && (selected.avatar
                         ? <img src={avatarUrl(selected.userId!, selected.avatar)} className="gc-dropdown-avatar" alt="" />
@@ -325,14 +337,14 @@ function useStreamPoller(userId: string | null, active: boolean) {
                     body: JSON.stringify({ userId }),
                 });
                 const d = await r.json();
-                if (d.state === "resolving") setStatus("🔍 Resolving URL...");
-                else if (d.state === "starting") setStatus("⏳ Starting stream...");
+                if (d.state === "resolving") setStatus(t("Resolving stream URL..."));
+                else if (d.state === "starting") setStatus(t("Starting stream..."));
                 else if (d.state === "active") {
-                    setStatus("🎥 Stream active");
-                    // Stop polling once active
+                    setStatus(t("Stream active"));
+                    // Stop polling une fois active
                     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
                 } else if (d.state === "error") {
-                    setStatus("❌ Error: " + (d.error ?? "unknown"));
+                    setStatus(`${t("Stream error: ")}${d.error ?? "unknown"}`);
                     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
                 } else if (d.state === "idle") {
                     // Stream finished
@@ -362,8 +374,9 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
     const [streamingUserId, setStreamingUserId] = useState<string | null>(null);
     const [streamInput, setStreamInput] = useState("");
     const [isPolling, setIsPolling] = useState(false);
-    // FIX: streamStatus and polling separated — setStreamStatus can write an instant message,
-    // polling takes over once /stream-start has responded
+    const [serverInstalled, setServerInstalled] = useState<boolean>(true);
+    // FIX : streamStatus et polling séparés — setStreamStatus peut écrire un message instantané,
+    // le polling prend le relais une fois que /stream-start a répondu
     const [streamStatus, setStreamStatusDirect] = useState<string | null>(null);
     const [pollStatus, setPollStatus] = useStreamPoller(streamingUserId, isPolling);
     const states = useGhostStates();
@@ -381,7 +394,7 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
         if (!anchorRect) return { position: "fixed", bottom: 80, left: 8, zIndex: 2147483647 };
         const PW = 320, PH = 560;
         const margin = 8;
-        let { left } = anchorRect;
+        let left = anchorRect.left;
         let top = anchorRect.top - PH - 8;
         if (top < margin) top = anchorRect.bottom + 8;
         if (top + PH > window.innerHeight - margin) top = window.innerHeight - PH - margin;
@@ -391,9 +404,13 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
     }, [anchorRect]);
 
     useEffect(() => {
-        getAllSavedAccounts().then(v => { setAccounts(v); savedAccounts = v; });
+        Native.isServerInstalled().then(v => {
+            setServerInstalled(Boolean(v));
+        }).catch(() => setServerInstalled(true));
 
-        // Auto-follow enabled by default (true if no value in DataStore yet)
+        getAllSavedAccounts().then((v) => { setAccounts(v); savedAccounts = v; });
+
+        // Auto-follow activé par défaut (true si pas encore de valeur dans le DataStore)
         DataStore.get(DS_KEY_AUTO_FOLLOW).then((v: boolean | null) => {
             const shouldFollow = v ?? true;
             setAutoFollowState(shouldFollow);
@@ -409,23 +426,24 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                 setDshowDevices(names);
 
                 const savedMic = await DataStore.get(DS_KEY_MIC_DEVICE);
-                // If user has NEVER chosen a mic (first time)
-                if (savedMic === null || savedMic === undefined) {
+                if (!savedMic || savedMic === "default") {
                     const virtualMic = names.find(n =>
                         n.toLowerCase().includes("cable output") ||
-                        n.toLowerCase().includes("vb-audio virtual cable")
+                        n.toLowerCase().includes("vb-audio virtual cable") ||
+                        n.toLowerCase().includes("cable")
                     );
                     if (virtualMic) {
                         setMicLabel(virtualMic);
                         ghostMicLabel = virtualMic;
                         DataStore.set(DS_KEY_MIC_DEVICE, virtualMic);
-                        console.log("[GhostClient] First launch: Virtual cable detected and selected by default.");
+                        Native.setMicDevice(virtualMic).catch(() => { });
+                        console.log("[GhostClient] Cable virtuel détecté et sélectionné par défaut:", virtualMic);
                     }
                 } else {
-                    // Otherwise scrupulously respect user choice
                     setMicLabel(savedMic as string);
                     ghostMicLabel = savedMic as string;
-                    console.log("[GhostClient] Loading user's preferred microphone:", savedMic);
+                    console.log("[GhostClient] Chargement du micro préféré de l'utilisateur :", savedMic);
+                    Native.setMicDevice(savedMic as string).catch(() => { });
                 }
             }
         }).catch(() => { });
@@ -447,7 +465,7 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
         }
         if (added > 0) {
             await saveAccounts(updated);
-            Toasts.show({ message: `${added} account${added > 1 ? "s" : ""} added${failed > 0 ? `, ${failed} failed` : ""}`, type: Toasts.Type.SUCCESS, id: Toasts.genId() });
+            Toasts.show({ message: `${added} account${added > 1 ? "s" : ""} ajouté${added > 1 ? "s" : ""}${failed > 0 ? `, ${failed} failed` : ""}`, type: Toasts.Type.SUCCESS, id: Toasts.genId() });
         } else {
             Toasts.show({ message: `All tokens invalid (${failed})`, type: Toasts.Type.FAILURE, id: Toasts.genId() });
         }
@@ -465,7 +483,7 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
     // useStreamPoller polling takes over and displays progress.
     async function startStream(url: string, userId: string) {
         if (!url.trim()) return;
-        setStreamStatus("Sending request...");
+        setStreamStatus(t("Sending stream request..."));
         setIsPolling(false);
         try {
             const r = await fetch("http://127.0.0.1:47821/stream-start", {
@@ -476,7 +494,7 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
             });
             const d = await r.json();
             if (!d.ok) {
-                setStreamStatus("❌ Error: " + (d.error ?? "unknown"));
+                setStreamStatus(`${t("Stream error: ")}${d.error ?? "unknown"}`);
                 setIsPolling(false);
             } else {
                 // Server accepted request and is processing in background
@@ -485,17 +503,17 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                 setIsPolling(true);
             }
         } catch (e: any) {
-            setStreamStatus("❌ server unreachable: " + (e?.message ?? String(e)));
+            setStreamStatus(`${t("Companion server unreachable: ")}${e?.message ?? String(e)}`);
             setIsPolling(false);
         }
     }
 
     const accountOptions = [
-        { value: "all", label: "All accounts", avatar: undefined },
+        { value: "all", label: t("All accounts"), avatar: undefined },
         ...accounts.map(a => ({ value: a.userId, label: a.username, avatar: a.avatar, userId: a.userId }))
     ];
     const micOptions = [
-        { value: "default", label: "Default mic" },
+        { value: "default", label: t("Default microphone") },
         ...dshowDevices.map(d => ({ value: d, label: d }))
     ];
 
@@ -503,13 +521,40 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
         <div ref={popoverRef} className="gc-popover" style={style}>
             <div className="gc-popover-header">
                 <GhostIcon width={16} height={16} />
-                <span className="gc-popover-title">Ghost Accounts</span>
-                <button className="gc-popover-close" onClick={onClose}>
+                <span className="gc-popover-title">{t("Ghost Accounts")}</span>
+                <button
+                    className="gc-header-action"
+                    title={t("Open GhostInstaller")}
+                    onClick={() => {
+                        onClose();
+                        SettingsRouter.openUserSettings("guncord_ghost_client_installer_panel");
+                    }}
+                >
+                    <SettingsGearIcon />
+                </button>
+                <button className="gc-popover-close" onClick={onClose} title={t("Close")}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>
                 </button>
             </div>
             <div className="gc-popover-body">
-                <Dropdown icon={<UserIcon />} label="Active account" value={selectedId} options={accountOptions}
+                {!serverInstalled && (
+                    <div className="gc-server-alert">
+                        <div className="gc-server-alert-title">{t("Companion Server Required")}</div>
+                        <div className="gc-server-alert-desc">
+                            {t("The background server is required to connect voice and stream audio.")}
+                        </div>
+                        <button
+                            className="gc-server-install-btn"
+                            onClick={() => {
+                                onClose();
+                                SettingsRouter.openUserSettings("guncord_ghost_client_installer_panel");
+                            }}
+                        >
+                            {t("Open Installer")}
+                        </button>
+                    </div>
+                )}
+                <Dropdown icon={<UserIcon />} label={t("Active account")} value={selectedId} options={accountOptions}
                     onChange={v => {
                         if (v !== "all" && v === getMyId()) {
                             Toasts.show({ message: "You cannot use your own account as a ghost!", type: Toasts.Type.FAILURE, id: Toasts.genId() });
@@ -518,20 +563,27 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                         setSelectedId(v);
                         DataStore.set(DS_KEY_SELECTED, v);
                     }} />
-                <Dropdown icon={<MicIcon />} label="Source mic" value={micLabel} options={micOptions}
-                    onChange={v => { setMicLabel(v); ghostMicLabel = v; DataStore.set(DS_KEY_MIC_DEVICE, v); }} />
+                <Dropdown icon={<MicIcon />} label={t("Source microphone")} value={micLabel} options={micOptions}
+                    onChange={v => {
+                        setMicLabel(v);
+                        ghostMicLabel = v;
+                        DataStore.set(DS_KEY_MIC_DEVICE, v);
+                        Native.setMicDevice(v).catch(() => { });
+                    }} />
+
+
                 <div className="gc-popover-divider" />
                 <div className="gc-follow-row" onClick={() => toggleAutoFollow(!autoFollow)}>
                     <div className="gc-follow-info">
-                        <span className="gc-follow-title">Automatic voice tracking</span>
-                        <span className="gc-follow-sub">Ghosts join your channel in real time</span>
+                        <span className="gc-follow-title">{t("Automatic voice tracking")}</span>
+                        <span className="gc-follow-sub">{t("Ghosts join your channel in real time")}</span>
                     </div>
                     <div className={`gc-toggle ${autoFollow ? "gc-toggle--on" : ""}`}><div className="gc-toggle-thumb" /></div>
                 </div>
                 <div className="gc-popover-divider" />
-                <div className="gc-section-label">Accounts (Native + Imported)</div>
+                <div className="gc-section-label">{t("Accounts (Native + Imported)")}</div>
                 <div className="gc-accounts" style={{ maxHeight: 160, overflowY: "auto", scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) rgba(255,255,255,0.04)" }}>
-                    {accounts.length === 0 && <div className="gc-empty">No accounts — add a token below</div>}
+                    {accounts.length === 0 && <div className="gc-empty">{t("No accounts — add a token below")}</div>}
                     {accounts.map(acc => {
                         const state = states.get(acc.userId);
                         const isActive = state?.active === true;
@@ -547,7 +599,15 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                                     <div className="gc-account-info">
                                         <span className="gc-account-name">{acc.username}</span>
                                         <span className="gc-account-status">
-                                            {isConnecting ? "⏳ Connecting to voice..." : isStreaming ? "🎥 Stream active" : isActive ? "✅ Active · In voice" : state?.error ? "❌ " + state.error.slice(0, 35) : "⚪ Disconnected"}
+                                            {isConnecting
+                                                ? t("Connecting to voice...")
+                                                : isStreaming
+                                                    ? t("Stream active")
+                                                    : isActive
+                                                        ? t("Active in voice")
+                                                        : state?.error
+                                                            ? `${t("Error: ")}${state.error.slice(0, 35)}`
+                                                            : t("Disconnected")}
                                         </span>
                                     </div>
                                 </div>
@@ -555,11 +615,11 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                                     {isActive && (
                                         <button
                                             className={`gc-btn-video ${isStreaming ? "gc-btn-video--on" : ""}`}
-                                            title={isStreaming ? "Stop stream" : "Start video stream"}
+                                            title={isStreaming ? t("Stop stream") : t("Start video stream")}
                                             onClick={async () => {
                                                 if (isStreaming) {
                                                     setIsPolling(false);
-                                                    setStreamStatus("Stopping...");
+                                                    setStreamStatus(t("Stopping..."));
                                                     await fetch("http://127.0.0.1:47821/stream-stop", {
                                                         method: "POST",
                                                         headers: { "Content-Type": "application/json" },
@@ -578,7 +638,7 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                                             <VideoIcon />
                                         </button>
                                     )}
-                                    <button className="gc-btn-del" onClick={async () => { await ghostDeactivate(acc.userId); await saveAccounts(accounts.filter(a => a.userId !== acc.userId)); }}>
+                                    <button className="gc-btn-del" title={t("Delete account")} onClick={async () => { await ghostDeactivate(acc.userId); await saveAccounts(accounts.filter(a => a.userId !== acc.userId)); }}>
                                         <TrashIcon />
                                     </button>
                                 </div>
@@ -594,13 +654,13 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                     return (
                         <div style={{ padding: "8px 12px", borderTop: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column" as const, gap: 6 }}>
                             <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" as const, letterSpacing: ".06em" }}>
-                                🎥 Stream for {acc.username}
+                                {t("Stream for")} {acc.username}
                             </div>
                             <div style={{ display: "flex", gap: 6 }}>
                                 <input
                                     className="gc-input"
                                     style={{ flex: 1, fontSize: 12, fontFamily: "monospace" }}
-                                    placeholder="YouTube, MP4, M3U8..."
+                                    placeholder={t("YouTube, MP4, M3U8...")}
                                     value={streamInput}
                                     onChange={e => setStreamInput(e.target.value)}
                                     onKeyDown={e => {
@@ -615,36 +675,39 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                                     disabled={!streamInput.trim() || isPolling}
                                     onClick={() => startStream(streamInput, streamingUserId)}
                                 >
-                                    {isPolling ? "⏳" : "Start"}
+                                    {isPolling ? t("Starting...") : t("Start")}
                                 </button>
                                 <button
                                     style={{ background: "rgba(237,66,69,.1)", border: "none", borderRadius: 6, color: "#ed4245", padding: "4px 8px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}
                                     onClick={() => { setStreamingUserId(null); setIsPolling(false); setStreamStatus(null); }}
-                                >✕</button>
+                                    title={t("Close")}
+                                >
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>
+                                </button>
                             </div>
                             {displayStatus && (
-                                <div style={{ fontSize: 11, color: displayStatus.startsWith("❌") ? "#ed4245" : displayStatus.startsWith("🎥") ? "#3ba55c" : "rgba(255,255,255,0.6)" }}>
+                                <div style={{ fontSize: 11, color: displayStatus.toLowerCase().includes("error") || displayStatus.toLowerCase().includes("unreachable") ? "#ed4245" : displayStatus.toLowerCase().includes("active") ? "#3ba55c" : "rgba(255,255,255,0.6)" }}>
                                     {displayStatus}
                                 </div>
                             )}
-                            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.28)" }}>YouTube, MP4 direct, M3U8, Twitch… (requires yt-dlp)</div>
+                            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.28)" }}>{t("YouTube, MP4 direct, M3U8, Twitch (requires yt-dlp)")}</div>
                         </div>
                     );
                 })()}
 
-                <div className="gc-section-label" style={{ marginTop: 4 }}>Add one or more accounts</div>
+                <div className="gc-section-label" style={{ marginTop: 4 }}>{t("Add one or more accounts")}</div>
                 <div className="gc-add-row" style={{ flexDirection: "column" as const, gap: 6 }}>
                     <textarea className="gc-input"
-                        placeholder="Discord Token... (one per line to add multiple)"
+                        placeholder={t("Discord Token... (one per line to add multiple)")}
                         value={tokenInput}
                         rows={2}
                         style={{ resize: "none", fontFamily: "monospace", fontSize: 11 }}
                         onChange={e => setTokenInput(e.target.value)} />
                     <button className="gc-add-btn" style={{ width: "100%" }} onClick={addAccount} disabled={adding || !tokenInput.trim()}>
-                        {adding ? "Adding..." : "Add"}
+                        {adding ? t("Adding...") : t("Add")}
                     </button>
                 </div>
-                <div className="gc-note">Use a secondary account — selfbots are against Discord TOS.</div>
+                <div className="gc-note">{t("Use a secondary account — selfbots are against Discord TOS.")}</div>
             </div>
         </div>
     );
@@ -671,7 +734,18 @@ const GhostUserAreaButton: UserAreaButtonFactory = ({ iconForeground, hideToolti
     }, [showPopover]);
 
     async function handleLeftClick() {
-        // Retrieve ALL accounts (Native + Imported) for left-click
+        const isInstalled = await Native.isServerInstalled().catch(() => true);
+        if (!isInstalled) {
+            Toasts.show({
+                message: t("GhostClient companion server is not installed. Open GhostInstaller to install it."),
+                type: Toasts.Type.FAILURE,
+                id: Toasts.genId()
+            });
+            openPopover();
+            return;
+        }
+
+        // On récupère TOUS les comptes (Native + Imported) pour le clic gauche
         const storedAccounts = await getAllSavedAccounts();
         const storedSelected = await DataStore.get(DS_KEY_SELECTED) as string | null ?? "all";
         const myId = getMyId();
@@ -682,7 +756,7 @@ const GhostUserAreaButton: UserAreaButtonFactory = ({ iconForeground, hideToolti
 
         if (targets.length === 0) {
             if (storedSelected !== "all" && storedSelected === myId) {
-                Toasts.show({ message: "You cannot connect your own account as a ghost", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+                Toasts.show({ message: t("You cannot connect your own account as a ghost"), type: Toasts.Type.FAILURE, id: Toasts.genId() });
             }
             openPopover();
             return;
@@ -695,25 +769,26 @@ const GhostUserAreaButton: UserAreaButtonFactory = ({ iconForeground, hideToolti
             await ghostDeactivateAll();
         } else {
             if (!vs?.channelId) {
-                Toasts.show({ message: "Join a voice channel first", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+                Toasts.show({ message: t("Join a voice channel first"), type: Toasts.Type.FAILURE, id: Toasts.genId() });
                 return;
             }
-            for (const acc of targets) {
-                ghostStates.set(acc.userId, { active: false, connecting: true, error: null });
-            }
-            notify();
-            // Parallel connection
-            await Promise.all(targets.map(async acc => {
+            for (let i = 0; i < targets.length; i++) {
+                const acc = targets[i];
                 ghostStates.set(acc.userId, { active: false, connecting: true, error: null });
                 notify();
-                try {
-                    const result = await Native.connectGhost(acc.userId, acc.token, vs.guildId, vs.channelId, ghostMicLabel);
-                    ghostStates.set(acc.userId, { active: result.ok, connecting: false, error: result.ok ? null : (result.error ?? "Error") });
-                } catch (e: any) {
-                    ghostStates.set(acc.userId, { active: false, connecting: false, error: String(e) });
+                Native.connectGhost(acc.userId, acc.token, vs.guildId, vs.channelId, ghostMicLabel)
+                    .then(result => {
+                        ghostStates.set(acc.userId, { active: result.ok, connecting: false, error: result.ok ? null : (result.error ?? "Error") });
+                        notify();
+                    })
+                    .catch(e => {
+                        ghostStates.set(acc.userId, { active: false, connecting: false, error: String(e) });
+                        notify();
+                    });
+                if (i < targets.length - 1) {
+                    await new Promise(r => setTimeout(r, 200));
                 }
-                notify();
-            }));
+            }
         }
     }
 
@@ -726,7 +801,7 @@ const GhostUserAreaButton: UserAreaButtonFactory = ({ iconForeground, hideToolti
     return (
         <div ref={btnRef} style={{ position: "relative" }}>
             <UserAreaButton
-                tooltipText={hideTooltips ? undefined : "Ghost Accounts — left click: toggle | right click: config"}
+                tooltipText={hideTooltips ? undefined : t("Ghost Accounts — left click: toggle | right click: config")}
                 icon={<GhostIcon className={`${iconForeground} ${anyActive ? "gc-icon--active" : ""}`} />}
                 plated={nameplate != null}
                 redGlow={false}
@@ -755,7 +830,23 @@ export default definePlugin({
         const autoFollow = await DataStore.get(DS_KEY_AUTO_FOLLOW);
         if (autoFollow === true) startFollowing();
         const mic = await DataStore.get(DS_KEY_MIC_DEVICE);
-        if (mic) ghostMicLabel = mic;
+        if (mic && mic !== "default") {
+            ghostMicLabel = mic;
+        } else {
+            Native.listAudioInputDevices().then(devs => {
+                const names = (devs as any[])?.map((d: any) => d.dshowName ?? d.name ?? d.label ?? "").filter(Boolean) ?? [];
+                const virtualMic = names.find(n =>
+                    n.toLowerCase().includes("cable output") ||
+                    n.toLowerCase().includes("vb-audio virtual cable") ||
+                    n.toLowerCase().includes("cable")
+                );
+                if (virtualMic) {
+                    ghostMicLabel = virtualMic;
+                    DataStore.set(DS_KEY_MIC_DEVICE, virtualMic);
+                    console.log("[GhostClient] Startup: Virtual cable auto-selected:", virtualMic);
+                }
+            }).catch(() => { });
+        }
         const allAccs = await getAllSavedAccounts();
         if (allAccs.length > 0) savedAccounts = allAccs;
 

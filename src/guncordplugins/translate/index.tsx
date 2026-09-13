@@ -13,9 +13,10 @@ import { Message } from "@vencord/discord-types";
 import { ChannelStore, FluxDispatcher, Menu, MessageStore, SelectedChannelStore, UserStore } from "@webpack/common";
 
 import { settings, setOnAutoTranslateReceivedToggled } from "./settings";
-import { setShouldShowTranslateEnabledTooltip, TranslateChatBarIcon, TranslateIcon } from "./TranslateIcon";
+import { TranslateChatBarIcon, TranslateIcon } from "./TranslateIcon";
 import { handleTranslate, TranslationAccessory } from "./TranslationAccessory";
 import { translate } from "./utils";
+import { initTranslateOnSpace, stopTranslateOnSpace } from "./wordTranslate";
 import { t } from "../autoTranslateGuncord";
 
 import { iconsModule } from "@plugins/_core/concatenatedModules";
@@ -53,7 +54,6 @@ function getMessageContent(message: Message) {
         || message.embeds?.find(embed => embed.type === "auto_moderation_message")?.rawDescription || "";
 }
 
-let tooltipTimeout: any;
 
 // Tracks which messages have already been auto-translated
 const translatedMessageIds = new Set<string>();
@@ -161,6 +161,7 @@ export default definePlugin({
     name: "Translate",
     enabledByDefault: true,
     description: "Translate messages with Google Translate or DeepL",
+    dependencies: ["MessageEventsAPI", "MessageAccessoriesAPI", "MessagePopoverAPI", "ChatInputButtonAPI"],
     authors: [Devs.Ven, Devs.AshtonMemer],
     settings,
     contextMenus: {
@@ -198,32 +199,41 @@ export default definePlugin({
     },
 
     start() {
-        // Force disable outgoing auto-translate — only incoming is supported
-        settings.store.autoTranslate = false;
+        initTranslateOnSpace();
 
         setOnAutoTranslateReceivedToggled((enabled) => {
             if (enabled) {
+                // Start listening for channel navigation so we auto-translate existing messages
+                FluxDispatcher.subscribe("CHANNEL_SELECT", onChannelSelect);
+                FluxDispatcher.subscribe("LOAD_MESSAGES_SUCCESS", onLoadMessagesSuccess);
                 const channelId = SelectedChannelStore.getChannelId();
                 if (channelId) {
                     translateChannelMessages(channelId);
                 }
             } else {
+                // No longer needed — stop iterating messages on every navigation
+                FluxDispatcher.unsubscribe("CHANNEL_SELECT", onChannelSelect);
+                FluxDispatcher.unsubscribe("LOAD_MESSAGES_SUCCESS", onLoadMessagesSuccess);
                 revertAllTranslations();
             }
         });
 
-        // Subscribe only to new incoming messages
+        // Always subscribe to incoming messages (gate is inside the handler)
         FluxDispatcher.subscribe("MESSAGE_CREATE", onMessageCreate);
-        FluxDispatcher.subscribe("CHANNEL_SELECT", onChannelSelect);
-        FluxDispatcher.subscribe("LOAD_MESSAGES_SUCCESS", onLoadMessagesSuccess);
 
-        const startChannelId = SelectedChannelStore.getChannelId();
-        if (startChannelId) {
-            translateChannelMessages(startChannelId);
+        // Only subscribe to channel navigation events if autoTranslateReceived is already on
+        if (settings.store.autoTranslateReceived) {
+            FluxDispatcher.subscribe("CHANNEL_SELECT", onChannelSelect);
+            FluxDispatcher.subscribe("LOAD_MESSAGES_SUCCESS", onLoadMessagesSuccess);
+            const startChannelId = SelectedChannelStore.getChannelId();
+            if (startChannelId) {
+                translateChannelMessages(startChannelId);
+            }
         }
     },
 
     stop() {
+        stopTranslateOnSpace();
         FluxDispatcher.unsubscribe("MESSAGE_CREATE", onMessageCreate);
         FluxDispatcher.unsubscribe("CHANNEL_SELECT", onChannelSelect);
         FluxDispatcher.unsubscribe("LOAD_MESSAGES_SUCCESS", onLoadMessagesSuccess);
@@ -255,15 +265,20 @@ export default definePlugin({
         }
     },
 
-    async onBeforeMessageSend(_, message) {
+    async onBeforeMessageSend(_, message, options) {
         if (!settings.store.autoTranslate) return;
-        if (!message.content) return;
+        if (!message?.content?.trim()) return;
 
-        setShouldShowTranslateEnabledTooltip?.(true);
-        clearTimeout(tooltipTimeout);
-        tooltipTimeout = setTimeout(() => setShouldShowTranslateEnabledTooltip?.(false), 2000);
-
-        const trans = await translate("sent", message.content);
-        message.content = trans.text;
+        try {
+            const trans = await translate("sent", message.content);
+            if (trans?.text) {
+                message.content = trans.text;
+                if (options && typeof options.content === "string") {
+                    options.content = trans.text;
+                }
+            }
+        } catch (e) {
+            console.error("[Translate] onBeforeMessageSend error:", e);
+        }
     }
 });

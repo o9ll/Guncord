@@ -16,7 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { ConstEnumToRuntimeEnum } from "@utils/types";
 import * as t from "@vencord/discord-types";
+import * as enums from "@vencord/discord-types/enums";
 import { findByCodeLazy, findByPropsLazy } from "@webpack";
 
 import { waitForStore } from "./internal";
@@ -25,17 +27,16 @@ export const Flux: t.Flux = findByPropsLazy("connectStores");
 
 export type GenericStore = t.FluxStore & Record<string, any>;
 
-export const DraftType = findByPropsLazy("ChannelMessage", "SlashCommand");
+export const DraftType: ConstEnumToRuntimeEnum<typeof enums.DraftType> = findByPropsLazy("ChannelMessage", "SlashCommand");
 
-export let MessageStore: Omit<t.MessageStore, "getMessages"> & GenericStore & {
-    getMessages(chanId: string): any;
-};
+export let MessageStore: t.MessageStore;
 
 export let PermissionStore: t.PermissionStore;
 export let GuildChannelStore: t.GuildChannelStore;
 export let ReadStateStore: t.ReadStateStore;
 export let PresenceStore: t.PresenceStore;
 export let AccessibilityStore: t.AccessibilityStore;
+export let PendingReplyStore: t.PendingReplyStore;
 
 export let GuildStore: t.GuildStore;
 export let GuildRoleStore: t.GuildRoleStore;
@@ -82,10 +83,10 @@ export let PopoutWindowStore: t.PopoutWindowStore;
 export let ApplicationCommandIndexStore: t.ApplicationCommandIndexStore;
 export let EditMessageStore: t.EditMessageStore;
 export let QuestStore: t.QuestStore;
-export let PendingReplyStore: t.PendingReplyStore;
-export let ExperimentStore: GenericStore;
-export let UserAffinitiesStore: GenericStore;
-export let BasicGuildStore: t.BasicGuildStore;
+export let ExperimentStore: t.ExperimentStore;
+export let UserAffinitiesStore: t.UserAffinitiesStore;
+export let ApplicationStreamingStore: t.ApplicationStreamingStore;
+export let ApplicationStreamPreviewStore: t.ApplicationStreamPreviewStore;
 
 export let SortedGuildStore: t.SortedGuildStore;
 export let JoinedThreadsStore: t.JoinedThreadsStore;
@@ -106,6 +107,7 @@ export let ReferencedMessageStore: t.ReferencedMessageStore;
 export let SessionsStore: t.SessionsStore;
 export let GuildAvailabilityStore: t.GuildAvailabilityStore;
 export let UserGuildJoinRequestStore: t.UserGuildJoinRequestStore;
+export let BasicGuildStore: t.BasicGuildStore;
 
 /**
  * @see jsdoc of {@link t.useStateFromStores}
@@ -157,12 +159,14 @@ waitForStore("LocaleStore", m => LocaleStore = m);
 waitForStore("RTCConnectionStore", m => RTCConnectionStore = m);
 waitForStore("SoundboardStore", m => SoundboardStore = m);
 waitForStore("PopoutWindowStore", m => PopoutWindowStore = m);
+waitForStore("PendingReplyStore", m => PendingReplyStore = m);
 waitForStore("ApplicationCommandIndexStore", m => ApplicationCommandIndexStore = m);
 waitForStore("EditMessageStore", m => EditMessageStore = m);
-waitForStore("PendingReplyStore", m => PendingReplyStore = m);
 waitForStore("ExperimentStore", m => ExperimentStore = m);
 waitForStore("QuestStore", m => QuestStore = m);
 waitForStore("UserAffinitiesV2Store", m => UserAffinitiesStore = m);
+waitForStore("ApplicationStreamingStore", m => ApplicationStreamingStore = m);
+waitForStore("ApplicationStreamPreviewStore", m => ApplicationStreamPreviewStore = m);
 waitForStore("SortedGuildStore", m => SortedGuildStore = m);
 waitForStore("JoinedThreadsStore", m => JoinedThreadsStore = m);
 waitForStore("SafetyHubStore", m => SafetyHubStore = m);
@@ -185,5 +189,7 @@ waitForStore("UserGuildJoinRequestStore", m => UserGuildJoinRequestStore = m);
 waitForStore("BasicGuildStore", m => BasicGuildStore = m);
 waitForStore("ThemeStore", m => {
     ThemeStore = m;
-    import("@api/Themes").then(({ initQuickCssThemeStore }) => initQuickCssThemeStore(m));
+    // Importing this directly causes all webpack commons to be imported, which can easily cause circular dependencies.
+    // For this reason, use a non import access here.
+    Vencord.Api.Themes.initQuickCssThemeStore(m);
 });

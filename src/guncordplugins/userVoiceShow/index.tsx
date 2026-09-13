@@ -17,19 +17,19 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Show a user's Voice Channel indicator in their profile next to the name",
         default: true,
-        restartNeeded: true
+        restartNeeded: false
     },
     showInMemberList: {
         type: OptionType.BOOLEAN,
         description: "Show a user's Voice Channel indicator in the member and DMs list",
         default: true,
-        restartNeeded: true
+        restartNeeded: false
     },
     showInMessages: {
         type: OptionType.BOOLEAN,
         description: "Show a user's Voice Channel indicator in messages",
         default: true,
-        restartNeeded: true
+        restartNeeded: false
     }
 });
 
@@ -37,7 +37,6 @@ export default definePlugin({
     name: "UserVoiceShow",
     enabledByDefault: true,
     description: "Shows an indicator when a user is in a Voice Channel",
-    tags: ["Voice", "Appearance", "Friends"],
     authors: [Devs.Nuckyz, Devs.LordElias, EquicordDevs.omaw],
     settings,
     renderNicknameIcon({ userId }) {

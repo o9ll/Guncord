@@ -16,70 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Global console filter to clear normal, expected but noisy startup logs & warnings
-try {
-    const skipLogs = [
-        "Sentry successfully disabled",
-        "had no effect (Module id is",
-        "errored (Module id is",
-        "found no module",
-        "Error while filtering or firing callback",
-        "Failed to render header bar button",
-        "Failed to render channel toolbar button",
-        "Starting plugin",
-        "Starting plugins",
-        "Undoing patch group",
-        "Disabling Sentry by erroring its WebpackInstance",
-        "Default overlay keybind is unsupported",
-        "Spellchecker",
-        "NowPlayingViewStore",
-        "RPCServer",
-        "libdiscore",
-        "L.createContext is not a function",
-        "webpack.find"
-    ];
-
-    const shouldSkip = (args: any[]) => {
-        try {
-            const str = args.map(a => {
-                if (a == null) return "";
-                if (a instanceof Error) return a.message + "\n" + a.stack;
-                if (typeof a === "object") {
-                    try { return JSON.stringify(a); } catch { return String(a); }
-                }
-                return String(a);
-            }).join(" ");
-
-            return skipLogs.some(pat => str.includes(pat));
-        } catch {
-            return false;
-        }
-    };
-
-    const wrap = (level: "log" | "error" | "warn" | "info" | "debug") => {
-        const orig = console[level];
-        console[level] = function (...args: any[]) {
-            if (shouldSkip(args)) return;
-            orig.apply(console, args);
-        };
-    };
-
-    wrap("log");
-    wrap("error");
-    wrap("warn");
-    wrap("info");
-    wrap("debug");
-
-    window.addEventListener("error", (e) => {
-        if (e.error?.message?.includes("Sentry successfully disabled") || e.message?.includes("Sentry successfully disabled")) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-    }, true);
-} catch { }
-
 // DO NOT REMOVE UNLESS YOU WISH TO FACE THE WRATH OF THE CIRCULAR DEPENDENCY DEMON!!!!!!!
 import "~plugins";
+import "./fixWeirdAppRegionBug.css";
 
 export * as Api from "./api";
 export * as DataStore from "./api/DataStore";
@@ -104,6 +43,7 @@ import { get as dsGet } from "./api/DataStore";
 import { popNotice, showNotice } from "./api/Notices";
 import { showNotification } from "./api/Notifications";
 import { initPluginManager, PMLogger, startAllPlugins } from "./api/PluginManager";
+import { initUserPluginsEngine } from "./api/UserPlugins";
 import { PlainSettings, Settings, SettingsStore } from "./api/Settings";
 import { getCloudSettings, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
 import { localStorage } from "./utils/localStorage";
@@ -187,6 +127,8 @@ async function syncSettings() {
     });
 }
 
+const GUNCORD_LOGO_URI = "data:image/png;base64,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";
+
 let stagedThisSession = false;
 
 /**
@@ -204,6 +146,22 @@ async function silentlyStageUpdate() {
         // So we call rebuild() (= stageUpdate) directly — no redundant API call needed.
         await rebuild(); // downloads zip to %temp%, extracts to staging dir, writes marker — no locked files touched
         UpdateLogger.info("Update staged successfully. Will be applied on next Discord restart.");
+
+        // Notify user in the top-right corner that the update is ready to be applied on restart
+        showNotification({
+            id: "guncord-update-downloaded",
+            title: "Update Downloaded",
+            body: "A new update has been downloaded. Restart your client to apply and discover what's new.",
+            icon: "guncord",
+            type: "info",
+            duration: 9000,
+            actions: [
+                {
+                    label: "Restart Now",
+                    onClick: () => relaunch()
+                }
+            ]
+        });
     } catch (e) {
         UpdateLogger.error("Silent update staging failed", e);
         stagedThisSession = false; // allow retry on next check interval
@@ -262,14 +220,44 @@ async function init() {
     await onceReady;
 
     startAllPlugins(StartAt.WebpackReady);
+    initUserPluginsEngine();
 
     syncSettings();
     initTrayIpc();
 
     if (!IS_WEB && !IS_UPDATER_DISABLED) {
-        runUpdateCheck();
+        setTimeout(runUpdateCheck, 8000);
         setInterval(runUpdateCheck, 1000 * 60 * 30); // 30 minutes
     }
+
+    // Only notify when an update has actually been applied / on new version
+    try {
+        const currentVersion = `v1.27.4`;
+        const LS_KEY = "guncord_installed_version";
+        const lastVersion = localStorage.getItem(LS_KEY);
+
+        if (lastVersion !== currentVersion) {
+            localStorage.setItem(LS_KEY, currentVersion);
+            setTimeout(() => {
+                showNotification({
+                    id: "guncord-update-notify",
+                    title: "Guncord Updated",
+                    body: `Guncord updated to ${currentVersion}. Open settings to discover what's new.`,
+                    icon: "guncord",
+                    type: "success",
+                    duration: 6000,
+                    actions: [
+                        {
+                            label: "Settings",
+                            onClick: () => {
+                                try { SettingsRouter.open("equicord_general"); } catch {}
+                            }
+                        }
+                    ]
+                });
+            }, 1200);
+        }
+    } catch {}
 
     if (IS_DEV) {
         const pendingPatches = patches.filter(p => !p.all && p.predicate?.() !== false);
@@ -285,30 +273,28 @@ async function init() {
     }
 }
 
-initPluginManager();
-initStyles();
-startAllPlugins(StartAt.Init);
-init();
+if ((window as any).__GUNCORD_INITIALIZED__) {
+    console.warn("[Guncord] Renderer already initialized — skipping duplicate execution.");
+} else {
+    (window as any).__GUNCORD_INITIALIZED__ = true;
 
-document.addEventListener("DOMContentLoaded", () => {
-    startAllPlugins(StartAt.DOMContentLoaded);
+    try {
+        const g: any = typeof window !== "undefined" ? window : globalThis;
+        g.Equicord = g.Vencord;
+        g.Guncord = g.Vencord;
+        g.VencordNative ??= g.EquicordNative ?? g.GuncordNative;
+        g.EquicordNative ??= g.VencordNative;
+        g.GuncordNative ??= g.VencordNative;
+    } catch {}
 
-    // Reposition Discord's titlebar to the left by default (90px)
-    // When stealth mode or compact mode is enabled, it falls back to Discord's default center position.
-    createAndAppendStyle("guncord-titlebar-position", coreStyleRootNode).textContent = `
-        body:not(.guncord-stealth):not(.guncord-compact) [class*="title_c38"] {
-            position: absolute !important;
-            left: 90px !important;
-            right: auto !important;
-            top: 50% !important;
-            transform: translateY(-50%) !important;
-            text-align: left !important;
-            margin: 0 !important;
-        }
-    `;
+    initPluginManager();
+    initStyles();
+    startAllPlugins(StartAt.Init);
+    init();
 
-    // FIXME
-    if (IS_DISCORD_DESKTOP && Settings.winNativeTitleBar && IS_WINDOWS) {
-        createAndAppendStyle("vencord-native-titlebar-style", coreStyleRootNode).textContent = "[class*=titleBar]{display: none!important}";
-    }
-}, { once: true });
+    document.addEventListener("DOMContentLoaded", () => {
+        startAllPlugins(StartAt.DOMContentLoaded);
+    }, { once: true });
+}
+
+

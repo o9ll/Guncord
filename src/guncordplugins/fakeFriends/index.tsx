@@ -686,6 +686,20 @@ function patchMessageRequestStore() {
     }
 }
 
+function unpatchMessageRequestStore() {
+    if (MessageRequestStore) {
+        if (origGetRequests) {
+            MessageRequestStore.getRequests = origGetRequests;
+            origGetRequests = null;
+        }
+        if (origHasRequest) {
+            MessageRequestStore.hasRequest = origHasRequest;
+            origHasRequest = null;
+        }
+        MessageRequestStore = null;
+    }
+}
+
 async function sendIncomingMessageRequest(user: any) {
     const ChannelClass = getChannelClass();
     const msgId = makeSnowflake();
@@ -910,5 +924,6 @@ export default definePlugin({
         // To reset: click Reset in plugin or "Remove fake friend requests"
         unpatchStore();
         unpatchChannelStore();
+        unpatchMessageRequestStore();
     },
 });

@@ -5,10 +5,11 @@
  */
 
 import { app, dialog, IpcMainInvokeEvent } from "electron";
-import { createWriteStream, WriteStream } from "node:fs";
+import { createWriteStream, existsSync, WriteStream } from "node:fs";
 import { copyFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import fixWebmDuration from "fix-webm-duration";
+import { patchWebmSeekable } from "./webmFixer";
 
 // Polyfill FileReader side-effect for Node.js main process environment
 if (typeof globalThis.FileReader === "undefined") {
@@ -26,6 +27,22 @@ if (typeof globalThis.FileReader === "undefined") {
 
 let activeStream: WriteStream | null = null;
 let activeTempPath: string | null = null;
+
+function getDefaultSaveFolder(): string {
+    try {
+        const p = app.getPath("downloads");
+        if (p && p.trim()) return p.trim();
+    } catch { }
+    try {
+        const home = app.getPath("home");
+        if (home && home.trim()) return path.join(home.trim(), "Downloads");
+    } catch { }
+    try {
+        const docs = app.getPath("documents");
+        if (docs && docs.trim()) return docs.trim();
+    } catch { }
+    return process.cwd();
+}
 
 /**
  * Opens a native folder picker via Electron dialog.
@@ -109,24 +126,38 @@ export async function finalizeStreamRecording(
         const sourcePath = activeTempPath;
         activeTempPath = null;
 
-        // Patche la durée EBML avec fixWebmDuration AVANT de déplacer le fichier
-        if (durationMs > 0 && /\.(webm|mkv)$/i.test(filename)) {
+        // Patches the EBML duration and generates the Cues seek index for free seeking.
+        if (durationMs > 0 && /\.(webm|mkv|ogg)$/i.test(filename)) {
             try {
                 const rawBuf = await readFile(sourcePath);
-                const blob = new Blob([rawBuf], { type: "video/webm" });
-                const fixedBlob = await fixWebmDuration(blob, durationMs);
-                const arrayBuffer = await fixedBlob.arrayBuffer();
-                await writeFile(sourcePath, Buffer.from(arrayBuffer));
+                let finalBuf = rawBuf;
+                try {
+                    const blob = new Blob([rawBuf], { type: "video/webm" });
+                    const fixedBlob = await fixWebmDuration(blob, durationMs);
+                    const arrayBuffer = await fixedBlob.arrayBuffer();
+                    finalBuf = Buffer.from(arrayBuffer);
+                } catch { }
+                const seekable = patchWebmSeekable(finalBuf, durationMs);
+                await writeFile(sourcePath, Buffer.from(seekable));
             } catch (err) {
                 console.warn("[AutoCallRecorder] fixWebmDuration failed:", err);
             }
         }
 
-        const defaultFolder = app.getPath("downloads");
-        const targetFolder = folderPath && folderPath.trim() ? folderPath.trim() : defaultFolder;
+        const defaultFolder = getDefaultSaveFolder();
+        const targetFolder = folderPath && folderPath.trim() ? path.resolve(folderPath.trim()) : defaultFolder;
         await mkdir(targetFolder, { recursive: true });
 
-        const destPath = path.join(targetFolder, filename);
+        let finalFilename = filename;
+        const fileExt = path.extname(filename);
+        const fileBase = path.basename(filename, fileExt);
+        let counter = 1;
+        while (existsSync(path.join(targetFolder, finalFilename))) {
+            counter++;
+            finalFilename = `${fileBase} (${counter})${fileExt}`;
+        }
+
+        const destPath = path.join(targetFolder, finalFilename);
         try {
             await rename(sourcePath, destPath);
         } catch {
@@ -149,18 +180,29 @@ export async function finalizeStreamRecording(
  */
 export async function saveRecording(_event: IpcMainInvokeEvent, buffer: Uint8Array, folderPath: string, filename: string): Promise<boolean> {
     try {
-        const defaultFolder = app.getPath("downloads");
-        const targetFolder = folderPath && folderPath.trim() ? folderPath.trim() : defaultFolder;
+        const defaultFolder = getDefaultSaveFolder();
+        const targetFolder = folderPath && folderPath.trim() ? path.resolve(folderPath.trim()) : defaultFolder;
         await mkdir(targetFolder, { recursive: true });
-        const dest = path.join(targetFolder, filename);
-        await writeFile(dest, buffer);
+
+        let finalFilename = filename;
+        const fileExt = path.extname(filename);
+        const fileBase = path.basename(filename, fileExt);
+        let counter = 1;
+        while (existsSync(path.join(targetFolder, finalFilename))) {
+            counter++;
+            finalFilename = `${fileBase} (${counter})${fileExt}`;
+        }
+
+        const dest = path.join(targetFolder, finalFilename);
+        const seekable = patchWebmSeekable(buffer, 0);
+        const buf = Buffer.from(seekable.buffer, seekable.byteOffset, seekable.byteLength);
+        await writeFile(dest, buf);
         return true;
     } catch (e) {
         console.error("Failed to save recording natively:", e);
         return false;
     }
 }
-
 /**
  * Prompts the user with a Save As dialog, then saves the buffer.
  */
@@ -176,8 +218,9 @@ export async function promptSaveRecording(_event: IpcMainInvokeEvent, buffer: Ui
         });
 
         if (res.canceled || !res.filePath) return false;
-
-        await writeFile(res.filePath, buffer);
+        
+        const buf = Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+        await writeFile(res.filePath, buf);
         return true;
     } catch (e) {
         console.error("Failed to prompt save recording natively:", e);

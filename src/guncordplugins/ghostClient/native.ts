@@ -4,18 +4,19 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { app, shell, ipcMain } from "electron";
 import * as childProcess from "child_process";
-import { app, ipcMain,shell } from "electron";
 import * as fs from "fs";
-import * as http from "http";
 import * as path from "path";
+import * as http from "http";
 
-// IPC handler to open external URLs (used by GuncordUpdater)
-ipcMain.handle("GUNCORD_OPEN_URL", (_event, url: string) => {
-    if (typeof url === "string" && url.startsWith("https://")) {
-        shell.openExternal(url);
-    }
-});
+try {
+    ipcMain.handle("GUNCORD_OPEN_URL", (_event, url: string) => {
+        if (typeof url === "string" && url.startsWith("https://")) {
+            shell.openExternal(url);
+        }
+    });
+} catch {}
 
 const PORT = 47821;
 let serverProc: childProcess.ChildProcess | null = null;
@@ -25,70 +26,42 @@ let startPromise: Promise<boolean> | null = null;
 // ── Find server/server.js ────────────────────────────────────────────
 function findServerScript(): string | null {
     const execDir = path.dirname(process.execPath);
-    const resPath = (process as any).resourcesPath ?? "";
+    const resPath = process.resourcesPath;
+    let userData = "";
+    try { userData = app.getPath("userData"); } catch {}
+
     const candidates = [
-        // Electron Production: resources/server/server.js
+        ...(userData ? [path.join(userData, "server", "server.js")] : []),
         path.join(resPath, "server", "server.js"),
-        // Electron Production (with unpacked app.asar): resources/app/server/server.js
-        path.join(resPath, "app", "server", "server.js"),
-        // Production: exe + resources/ subdirectory
         path.join(execDir, "resources", "server", "server.js"),
-        path.join(execDir, "resources", "app", "server", "server.js"),
-        // Portable (extracted dist/desktop): exe in dist/desktop, server alongside
+        path.join(resPath, "..", "server", "server.js"),
         path.join(execDir, "server", "server.js"),
-        // dev-inject : __dirname = dist/desktop/renderer
-        path.join(__dirname, "..", "..", "server", "server.js"),
         path.join(__dirname, "..", "..", "..", "server", "server.js"),
         path.join(__dirname, "..", "..", "..", "..", "server", "server.js"),
-    // Repo root in dev
-    path.join(resPath, "..", "server", "server.js"),
-    // Dev: current working directory (dev-inject, npm run dev)
-    path.join(process.cwd(), "server", "server.js"),
-    // Dev: upward from main bundle directory
-    path.join(__dirname, "..", "..", "..", "..", "..", "server", "server.js"),
-    path.join(__dirname, "..", "..", "..", "..", "..", "..", "server", "server.js"),
+        path.join(__dirname, "..", "..", "server", "server.js"),
     ];
-    console.log("[GhostNative] execPath:", process.execPath);
-    console.log("[GhostNative] resourcesPath:", resPath);
-    console.log("[GhostNative] __dirname:", __dirname);
     for (const c of candidates) {
-        console.log("[GhostNative] test:", c, fs.existsSync(c) ? "✓" : "✗");
-        if (fs.existsSync(c)) { console.log("[GhostNative] server.js found:", c); return c; }
+        if (fs.existsSync(c)) { return c; }
     }
-    console.error("[GhostNative] server.js not found! Tested candidates:", candidates.length);
     return null;
 }
 
 function findNode(): string {
     const execDir = path.dirname(process.execPath);
-    const resPath = (process as any).resourcesPath ?? "";
+    const resPath = process.resourcesPath;
+    let userData = "";
+    try { userData = app.getPath("userData"); } catch {}
+
     const candidates = [
-        // Electron Production: node.exe copied alongside Discord .exe
+        ...(userData ? [path.join(userData, "server", "node.exe")] : []),
         path.join(execDir, "node.exe"),
-        // Production: in resources/ (collect-assets copies there)
-        path.join(resPath, "node.exe"),
         path.join(resPath, "..", "node.exe"),
-        path.join(resPath, "app", "node.exe"),
-        // Inside resources/ subdirectory
+        path.join(resPath, "node.exe"),
         path.join(execDir, "resources", "node.exe"),
-        path.join(execDir, "resources", "app", "node.exe"),
-        // Portable: dist/desktop contains node.exe, __dirname goes up to dist/desktop
-        path.join(__dirname, "..", "..", "node.exe"),
-        path.join(__dirname, "..", "..", "..", "node.exe"),
-        // NVM for Windows
-        path.join(process.env.LOCALAPPDATA ?? "", "nvm", "nodejs", "node.exe"),
-        "C:\\nvm4w\\nodejs\\node.exe",
-        "C:\\Program Files\\nodejs\\node.exe",
-        "C:\\Program Files (x86)\\nodejs\\node.exe",
-        path.join(process.env.LOCALAPPDATA ?? "", "Programs", "nodejs", "node.exe"),
-        // Dev: cwd + node_modules/.bin or root
-        path.join(process.cwd(), "node.exe"),
-        path.join(process.cwd(), "node_modules", ".bin", "node.exe"),
     ];
     for (const c of candidates) {
-        if (fs.existsSync(c)) { console.log("[GhostNative] node.exe found:", c); return c; }
+        if (fs.existsSync(c)) { return c; }
     }
-    console.warn("[GhostNative] Bundled node.exe not found, falling back to PATH 'node'");
     return "node";
 }
 
@@ -103,43 +76,78 @@ function ping(): Promise<boolean> {
 }
 
 async function killZombieServer(): Promise<void> {
-    // If a zombie server is running from a previous crash, kill it cleanly
     try {
-        const res = await Promise.race([
-            ping(),
-            new Promise<boolean>(r => setTimeout(() => r(false), 500))
-        ]);
-        if (res) {
-            // A server responds — check if it's ours or a zombie
-            if (!serverProc) {
-                // Not our process — it's a zombie from the previous crash
-                // Try stopping it via HTTP API
+        if (await ping()) {
+            // Demander l'arrêt propre
+            try {
+                await new Promise<void>((resolve) => {
+                    const req = http.request({ hostname: "127.0.0.1", port: PORT, path: "/shutdown", method: "POST" }, () => resolve());
+                    req.setTimeout(800, () => { req.destroy(); resolve(); });
+                    req.on("error", () => resolve());
+                    req.end();
+                });
+            } catch { }
+            await new Promise(r => setTimeout(r, 400));
+            // Si toujours en vie sur Windows, trouver le PID sur le port 47821 et le tuer
+            if (process.platform === "win32" && await ping()) {
                 try {
-                    await new Promise<void>(resolve => {
-                        const req = http.request({ hostname: "127.0.0.1", port: PORT, path: "/shutdown", method: "POST" }, () => resolve());
-                        req.setTimeout(1000, () => { req.destroy(); resolve(); });
-                        req.on("error", () => resolve());
-                        req.end();
-                    });
+                    const out = childProcess.execSync(`netstat -ano | findstr :${PORT}`, { encoding: "utf-8" });
+                    for (const line of out.split("\n")) {
+                        const parts = line.trim().split(/\s+/);
+                        const pid = parts[parts.length - 1];
+                        if (pid && !isNaN(Number(pid)) && Number(pid) > 0 && Number(pid) !== process.pid) {
+                            childProcess.execSync(`taskkill /F /PID ${pid}`, { stdio: "ignore" });
+                        }
+                    }
                 } catch { }
-                // Fallback: taskkill
-                try {
-                    childProcess.execSync('taskkill /F /IM node.exe /FI "WINDOWTITLE eq server"', { stdio: "ignore" });
-                } catch { }
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(r => setTimeout(r, 400));
             }
         }
     } catch { }
 }
 
+function syncServerScriptIfOutdated(): void {
+    try {
+        let userData = "";
+        try { userData = app.getPath("userData"); } catch {}
+        if (!userData) return;
+        const targetPath = path.join(userData, "server", "server.js");
+
+        const execDir = path.dirname(process.execPath);
+        const resPath = process.resourcesPath;
+        const sources = [
+            path.join(__dirname, "..", "..", "..", "server", "server.js"),
+            path.join(__dirname, "..", "..", "..", "..", "server", "server.js"),
+            path.join(__dirname, "..", "..", "server", "server.js"),
+            path.join(resPath, "server", "server.js"),
+            path.join(execDir, "resources", "server", "server.js"),
+        ];
+        for (const src of sources) {
+            if (fs.existsSync(src) && src !== targetPath) {
+                const srcBuf = fs.readFileSync(src);
+                const targetBuf = fs.existsSync(targetPath) ? fs.readFileSync(targetPath) : null;
+                if (!targetBuf || !srcBuf.equals(targetBuf)) {
+                    fs.writeFileSync(targetPath, srcBuf);
+                    console.log(`[GhostNative] Synced updated server.js to ${targetPath}`);
+                }
+                break;
+            }
+        }
+    } catch (e) {
+        console.warn("[GhostNative] syncServerScript error:", e);
+    }
+}
+
 async function ensureServer(): Promise<boolean> {
-    if (serverReady && await ping()) return true;
+    if (serverReady && serverProc && await ping()) return true;
     if (startPromise) return startPromise;
 
     startPromise = (async () => {
         // Kill zombies before starting
         await killZombieServer();
-        if (await ping()) { serverReady = true; return true; }
+
+        // Mettre à jour automatiquement server.js s'il y a une version plus récente
+        syncServerScriptIfOutdated();
 
         const script = findServerScript();
         if (!script) {
@@ -165,22 +173,10 @@ async function ensureServer(): Promise<boolean> {
             }
         });
 
-        // Limit server logs in Electron main process
-        // Too many logs = I/O on main thread = freezes
-        // But write them to a log file for debugging
-        const logPath = path.join(app.getPath("userData"), "server.log");
-        let logStream: fs.WriteStream | null = null;
-        try {
-            logStream = fs.createWriteStream(logPath, { flags: "w" });
-            logStream.write(`=== GHOST SERVER LOGS STARTED AT ${new Date().toISOString()} ===\n`);
-            console.log("[GhostNative] Log file created at:", logPath);
-        } catch (e: any) {
-            console.error("[GhostNative] Unable to create log file:", e.message);
-        }
-
+        // Limiter les logs du server dans le main process Electron
+        // Trop de logs = I/O sur le thread principal = freezes
         let logBuffer = "";
         serverProc.stdout?.on("data", (d: Buffer) => {
-            if (logStream) logStream.write(d);
             logBuffer += d.toString();
             const lines = logBuffer.split("\n");
             logBuffer = lines.pop() ?? "";
@@ -189,24 +185,16 @@ async function ensureServer(): Promise<boolean> {
             }
         });
         serverProc.stderr?.on("data", (d: Buffer) => {
-            if (logStream) logStream.write(d);
             const msg = d.toString().trim();
             if (msg) console.error("[GhostServer ERR]", msg);
         });
         serverProc.on("exit", (code: number | null) => {
             console.log("[GhostNative] server exit:", code);
-            if (logStream) {
-                logStream.write(`\n=== GHOST SERVER EXITED WITH CODE ${code} ===\n`);
-                logStream.end();
-            }
             serverProc = null;
             serverReady = false;
         });
         serverProc.on("error", (e: Error) => {
             console.error("[GhostNative] spawn error:", e.message);
-            if (logStream) {
-                logStream.write(`\n=== GHOST SERVER SPAWN ERROR: ${e.message} ===\n`);
-            }
         });
 
         // Poll every 200ms for 60s max
@@ -287,8 +275,17 @@ export async function listAudioInputDevices(_: any): Promise<{ label: string; ds
 
     // Direct ffmpeg fallback — timeout reduced to 5s (instead of 8s)
     return new Promise(resolve => {
-        const ghostServerNodeModules = path.join(process.resourcesPath ?? "", "server", "node_modules");
+        let userData = "";
+        try { userData = app.getPath("userData"); } catch {}
+        const ghostServerNodeModules = userData
+            ? path.join(userData, "server", "node_modules")
+            : path.join(process.resourcesPath ?? "", "server", "node_modules");
+
         const ffmpegCandidates = [
+            ...(userData ? [
+                path.join(userData, "server", "ffmpeg.exe"),
+                path.join(userData, "server", "node_modules", "node-av", "binary", "ffmpeg.exe"),
+            ] : []),
             path.join(path.dirname(process.execPath), "ffmpeg.exe"),
             path.join(process.resourcesPath ?? "", "..", "ffmpeg.exe"),
             // Bundled via node-av in server/node_modules (already in installer)
@@ -377,6 +374,26 @@ export async function disconnectGhost(_: any, userId: string): Promise<void> {
     try { await api("/disconnect", { userId }); } catch { }
 }
 
+export async function setMicDevice(_: any, micDevice: string): Promise<void> {
+    try { await api("/set-mic", { micDevice }); } catch { }
+}
+
+export async function fakeMute(_: any, userIds: string[], muted: boolean): Promise<void> {
+    try { await api("/fake-mute", { userIds, muted }); } catch { }
+}
+
+export async function fakeDeafen(_: any, userIds: string[], deafened: boolean): Promise<void> {
+    try { await api("/fake-deafen", { userIds, deafened }); } catch { }
+}
+
+export async function fakeStream(_: any, userIds: string[], streaming: boolean): Promise<void> {
+    try { await api("/fake-stream", { userIds, streaming }); } catch { }
+}
+
+export async function fakeCam(_: any, userIds: string[], camera: boolean): Promise<void> {
+    try { await api("/fake-cam", { userIds, camera }); } catch { }
+}
+
 export async function init(_: any): Promise<void> {
     const script = findServerScript();
     console.log("[GhostNative] init — server.js:", script ?? "NOT FOUND");
@@ -387,7 +404,15 @@ export async function init(_: any): Promise<void> {
         console.error("[GhostNative] server failed");
         return;
     }
-    console.log("[GhostNative] server HTTP ready ✓");
+    console.log("[GhostNative] server HTTP prêt ✓");
+}
+
+export async function isServerOnline(_: any): Promise<boolean> {
+    return await ping();
+}
+
+export async function isServerInstalled(_: any): Promise<boolean> {
+    return findServerScript() !== null;
 }
 
 // ── Cleanup ───────────────────────────────────────────────────────────────────

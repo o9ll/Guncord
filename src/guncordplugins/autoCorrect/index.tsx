@@ -129,12 +129,12 @@ function AutoCorrectIcon({ enabled }: { enabled: boolean; }) {
 }
 
 const AutoCorrectChatBarButton: ChatBarButtonFactory = ({ type }) => {
-    const [enabled, setEnabled] = React.useState(settings.store.isActive);
+    const { isActive } = settings.use(["isActive"]);
     const validChat = ["normal", "sidebar"].some(x => type.analyticsName === x);
     if (!validChat) return null;
 
     const toggle = async () => {
-        if (!enabled) {
+        if (!isActive) {
             // Check that API key is configured before enabling
             const key = await getGroqKey();
             if (!key) {
@@ -143,11 +143,9 @@ const AutoCorrectChatBarButton: ChatBarButtonFactory = ({ type }) => {
             }
         }
         settings.store.isActive = !settings.store.isActive;
-
-        setEnabled(settings.store.isActive);
     };
 
-    const tooltip = enabled
+    const tooltip = isActive
         ? t("AutoCorrect: enabled — click to disable")
         : t("AutoCorrect: disabled — click to enable");
 
@@ -160,7 +158,7 @@ const AutoCorrectChatBarButton: ChatBarButtonFactory = ({ type }) => {
                 openPluginModal(plugins["AutoCorrect"] ?? plugins["autoCorrect"]);
             }}
         >
-            <AutoCorrectIcon enabled={enabled} />
+            <AutoCorrectIcon enabled={isActive} />
         </ChatBarButton>
     );
 };
@@ -171,6 +169,7 @@ export default definePlugin({
     enabledByDefault: true,
     description: "Automatically corrects spelling and grammar before sending. Requires a free Groq API key configured in GuncordAI.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
+    dependencies: ["MessageEventsAPI", "ChatInputButtonAPI"],
     settings,
 
     start() { },
@@ -180,13 +179,16 @@ export default definePlugin({
         render: AutoCorrectChatBarButton,
     },
 
-    async onBeforeMessageSend(_channelId: string, message: { content: string; }) {
+    async onBeforeMessageSend(_channelId: string, message: { content: string; }, options?: any) {
         if (!settings.store.isActive) return;
-        if (!message.content || message.content.trim().length < 3) return;
+        if (!message?.content || message.content.trim().length < 3) return;
 
         const corrected = await correctText(message.content);
         if (corrected && corrected !== message.content) {
             message.content = corrected;
+            if (options && typeof options.content === "string") {
+                options.content = corrected;
+            }
         }
     },
 });

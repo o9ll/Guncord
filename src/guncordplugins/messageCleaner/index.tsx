@@ -14,9 +14,9 @@ import { t } from "../autoTranslateGuncord";
 // ─── Icons ───────────────────────────────────────────────────────────────────
 function CleanerIcon(props: any) {
     return (
-        <svg class="vc-ic-save-icon" aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} fill="none" viewBox="0 0 24 24" {...props}>
-            <path fill="currentColor" d="M14.25 1c.41 0 .75.34.75.75V3h5.25c.41 0 .75.34.75.75v.5c0 .41-.34.75-.75.75H3.75A.75.75 0 0 1 3 4.25v-.5c0-.41.34-.75.75-.75H9V1.75c0-.41.34-.75.75-.75h4.5Z"></path>
-            <path fill="currentColor" fill-rule="evenodd" d="M5.06 7a1 1 0 0 0-1 1.06l.76 12.13a3 3 0 0 0 3 2.81h8.36a3 3 0 0 0 3-2.81l.75-12.13a1 1 0 0 0-1-1.06H5.07ZM11 12a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0v-6Zm3-1a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1Z" clip-rule="evenodd"></path>
+        <svg className="nc-cleaner-icon" aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width={props.width || 20} height={props.height || 20} fill="none" viewBox="0 0 24 24" {...props}>
+            <path className="nc-trash-lid" fill="currentColor" d="M14.25 1c.41 0 .75.34.75.75V3h5.25c.41 0 .75.34.75.75v.5c0 .41-.34.75-.75.75H3.75A.75.75 0 0 1 3 4.25v-.5c0-.41.34-.75.75-.75H9V1.75c0-.41.34-.75.75-.75h4.5Z" />
+            <path className="nc-trash-body" fill="currentColor" fillRule="evenodd" d="M5.06 7a1 1 0 0 0-1 1.06l.76 12.13a3 3 0 0 0 3 2.81h8.36a3 3 0 0 0 3-2.81l.75-12.13a1 1 0 0 0-1-1.06H5.07ZM11 12a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0v-6Zm3-1a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1Z" clipRule="evenodd" />
         </svg>
     );
 }
@@ -48,16 +48,56 @@ let isQueueRunning = false;
 let shouldStop = false;
 let currentTask: { name: string; progress: string; percentage: number } | null = null;
 
+let deleteDelay = 800;
+try {
+    const saved = localStorage.getItem("guncord_mc_delay");
+    if (saved) deleteDelay = Math.max(50, Math.min(5000, parseInt(saved, 10) || 800));
+} catch { }
+
+let useSilentDelete = false;
+try {
+    const saved = localStorage.getItem("guncord_mc_silent_delete");
+    if (saved !== null) useSilentDelete = saved === "true";
+} catch { }
+
+export function getDeleteDelay(): number {
+    return deleteDelay;
+}
+
+export function setDeleteDelay(val: number) {
+    deleteDelay = Math.max(50, Math.min(5000, val));
+    try {
+        localStorage.setItem("guncord_mc_delay", deleteDelay.toString());
+    } catch { }
+}
+
+export function getUseSilentDelete(): boolean {
+    return useSilentDelete;
+}
+
+export function setUseSilentDelete(val: boolean) {
+    useSilentDelete = val;
+    try {
+        localStorage.setItem("guncord_mc_silent_delete", val.toString());
+    } catch { }
+}
+
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(l => l());
 
 // ─── Core Logic ───────────────────────────────────────────────────────────────
 
+function isCallMessage(message: any): boolean {
+    return message?.type === 3 || !!message?.call;
+}
+
 function canDeleteMessage(message: any, currentUserId: string): boolean {
     try {
         if (message.author?.id !== currentUserId) return false;
-        if (message.type !== 0 && message.type !== 19) return false;
-        return true;
+        // Text messages (0), replies (19), and calls initiated by the user (3)
+        if (message.type === 0 || message.type === 19) return true;
+        if (message.type === 3 || isCallMessage(message)) return true;
+        return false;
     } catch {
         return false;
     }
@@ -76,6 +116,45 @@ async function deleteMessage(channelId: string, messageId: string, retryCount = 
         }
         return false;
     }
+}
+
+async function silentDeleteMessage(channelId: string, messageId: string, retryCount = 0): Promise<boolean> {
+    try {
+        const response = await RestAPI.post({
+            url: `/channels/${channelId}/messages`,
+            body: {
+                content: "** **",
+                flags: 4096, // suppress notifications
+                mobile_network_type: "unknown",
+                nonce: messageId,
+                tts: false
+            }
+        });
+
+        await new Promise(r => setTimeout(r, 150));
+        if (response?.body?.id) {
+            await RestAPI.del({ url: `/channels/${channelId}/messages/${response.body.id}` }).catch(() => {});
+        }
+        await new Promise(r => setTimeout(r, 100));
+        await RestAPI.del({ url: `/channels/${channelId}/messages/${messageId}` }).catch(() => {});
+        return true;
+    } catch (error: any) {
+        const statusCode = error?.status || error?.statusCode;
+        if (statusCode === 429 && retryCount < 3) {
+            const retryAfter = error?.body?.retry_after ?? 5;
+            await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+            return silentDeleteMessage(channelId, messageId, retryCount + 1);
+        }
+        return deleteMessage(channelId, messageId);
+    }
+}
+
+async function deleteTargetMessage(channelId: string, message: any): Promise<boolean> {
+    const isCall = isCallMessage(message);
+    if (useSilentDelete || isCall) {
+        return silentDeleteMessage(channelId, message.id);
+    }
+    return deleteMessage(channelId, message.id);
 }
 
 async function getChannelMessages(channelId: string, before?: string): Promise<any[]> {
@@ -123,7 +202,7 @@ async function cleanChannel(channelId: string, logEntry: LogEntry, taskName: str
             for (const message of validMessages) {
                 if (shouldStop) break;
 
-                const success = await deleteMessage(channelId, message.id);
+                const success = await deleteTargetMessage(channelId, message);
                 if (success) {
                     logEntry.deleted++;
                     logEntry.messages.push(`[${message.timestamp}] ${message.content || "<attachment/embed>"}`);
@@ -140,7 +219,7 @@ async function cleanChannel(channelId: string, logEntry: LogEntry, taskName: str
                 };
                 emit();
 
-                await new Promise(resolve => setTimeout(resolve, 800)); // Rate limit safety
+                await new Promise(resolve => setTimeout(resolve, getDeleteDelay())); // User-configured deletion speed
             }
 
             logEntry.skipped += messages.length - validMessages.length;
@@ -216,7 +295,7 @@ async function cleanGuild(guildId: string, logEntry: LogEntry, taskName: string)
                 if (shouldStop) break;
                 if (!message.channel_id) continue;
 
-                const success = await deleteMessage(message.channel_id, message.id);
+                const success = await deleteTargetMessage(message.channel_id, message);
                 if (success) {
                     logEntry.deleted++;
                     logEntry.messages.push(`[${message.timestamp}] ${message.content || "<attachment/embed>"}`);
@@ -234,7 +313,7 @@ async function cleanGuild(guildId: string, logEntry: LogEntry, taskName: string)
                 };
                 emit();
 
-                await new Promise(resolve => setTimeout(resolve, 800));
+                await new Promise(resolve => setTimeout(resolve, getDeleteDelay())); // User-configured deletion speed
             }
         } catch (e: any) {
             if (e?.status === 429) {
@@ -493,6 +572,86 @@ const MODAL_STYLES = `
     background: #1a1b1e;
     border-radius: 3px;
 }
+.mcv2-select-all-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 14px;
+    border-radius: 8px;
+    background: #2b2d31;
+    color: #949ba4;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+    user-select: none;
+    white-space: nowrap;
+}
+.mcv2-select-all-btn:hover {
+    background: #383a40;
+    color: #dbdee1;
+}
+.mcv2-select-all-btn.active {
+    background: rgba(237, 66, 69, 0.15);
+    color: #ffffff;
+    border-color: #ed4245;
+}
+.mcv2-select-all-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #80848e;
+    transition: all 0.2s;
+}
+.mcv2-select-all-btn.active .mcv2-select-all-dot {
+    background: #ed4245;
+    box-shadow: 0 0 6px rgba(237, 66, 69, 0.8);
+}
+.mcv2-setting-card {
+    background: #2b2d31;
+    border-radius: 8px;
+    padding: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.mcv2-speed-slider {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #1e1f22;
+    outline: none;
+    cursor: pointer;
+    accent-color: #ed4245;
+    margin: 12px 0;
+}
+.mcv2-switch-btn {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    border-radius: 12px;
+    background: #4e5058;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    padding: 2px;
+    flex-shrink: 0;
+}
+.mcv2-switch-btn.active {
+    background: #23a55a;
+}
+.mcv2-switch-knob {
+    display: block;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #ffffff;
+    transition: transform 0.2s ease;
+    transform: translateX(0);
+}
+.mcv2-switch-btn.active .mcv2-switch-knob {
+    transform: translateX(20px);
+}
 `;
 
 function useForceUpdate() {
@@ -568,6 +727,16 @@ function MessageCleanerTab() {
         });
     }, [search]);
 
+    const allSelected = channels.length > 0 && selected.length === channels.length;
+
+    const toggleSelectAll = () => {
+        if (allSelected) {
+            setSelected([]);
+        } else {
+            setSelected(channels.map((c: any) => c.id));
+        }
+    };
+
     const toggle = (id: string) => {
         if (selected.includes(id)) setSelected(selected.filter(x => x !== id));
         else setSelected([...selected, id]);
@@ -585,12 +754,23 @@ function MessageCleanerTab() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <div style={{ flex: "0 0 auto", marginBottom: "15px" }}>
-                <TextInput
-                    placeholder="Search DMs..."
-                    value={search}
-                    onChange={setSearch}
-                />
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: "0 0 auto", marginBottom: "15px" }}>
+                <div style={{ flex: 1 }}>
+                    <TextInput
+                        placeholder={t("Search DMs...")}
+                        value={search}
+                        onChange={setSearch}
+                    />
+                </div>
+                <button
+                    className={`mcv2-select-all-btn ${allSelected ? "active" : ""}`}
+                    onClick={toggleSelectAll}
+                    type="button"
+                    title={allSelected ? t("Deselect All") : t("Select All")}
+                >
+                    <span className="mcv2-select-all-dot" />
+                    {allSelected ? t("Deselect All") : t("Select All")}
+                </button>
             </div>
             <div className="mcv2-scroller" style={{ flex: 1, overflowY: "auto", paddingRight: "8px" }}>
                 {channels.length === 0 ? <div style={{ textAlign: "center", color: "#b5bac1", padding: "20px" }}>{t("No DMs or Friends found.")}</div> : channels.map((ch: any) => (
@@ -627,6 +807,16 @@ function ServersCleanerTab() {
         return gs.filter((g: any) => g.name.toLowerCase().includes(search.toLowerCase()));
     }, [search]);
 
+    const allSelected = guilds.length > 0 && selected.length === guilds.length;
+
+    const toggleSelectAll = () => {
+        if (allSelected) {
+            setSelected([]);
+        } else {
+            setSelected(guilds.map((g: any) => g.id));
+        }
+    };
+
     const toggle = (id: string) => {
         if (selected.includes(id)) setSelected(selected.filter(x => x !== id));
         else setSelected([...selected, id]);
@@ -644,12 +834,23 @@ function ServersCleanerTab() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <div style={{ flex: "0 0 auto", marginBottom: "15px" }}>
-                <TextInput
-                    placeholder="Search Servers..."
-                    value={search}
-                    onChange={setSearch}
-                />
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: "0 0 auto", marginBottom: "15px" }}>
+                <div style={{ flex: 1 }}>
+                    <TextInput
+                        placeholder={t("Search Servers...")}
+                        value={search}
+                        onChange={setSearch}
+                    />
+                </div>
+                <button
+                    className={`mcv2-select-all-btn ${allSelected ? "active" : ""}`}
+                    onClick={toggleSelectAll}
+                    type="button"
+                    title={allSelected ? t("Deselect All") : t("Select All")}
+                >
+                    <span className="mcv2-select-all-dot" />
+                    {allSelected ? t("Deselect All") : t("Select All")}
+                </button>
             </div>
             <div className="mcv2-scroller" style={{ flex: 1, overflowY: "auto", paddingRight: "8px" }}>
                 {guilds.map((g: any) => (
@@ -704,11 +905,90 @@ function ChannelsCleanerTab() {
     );
 }
 
+function SettingsTab() {
+    const [delay, setDelay] = React.useState(getDeleteDelay);
+    const [silent, setSilent] = React.useState(getUseSilentDelete);
+
+    const handleDelayChange = (val: number) => {
+        setDelay(val);
+        setDeleteDelay(val);
+    };
+
+    const handleSilentToggle = (val: boolean) => {
+        setSilent(val);
+        setUseSilentDelete(val);
+    };
+
+    const getSpeedLabel = (ms: number) => {
+        if (ms <= 300) return `${ms}ms — ${t("Ultra Fast (Caution: high rate limits)")}`;
+        if (ms <= 600) return `${ms}ms — ${t("Fast")}`;
+        if (ms <= 1200) return `${ms}ms — ${t("Balanced / Recommended")}`;
+        return `${ms}ms — ${t("Safe / Stealth (Low rate limit risk)")}`;
+    };
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px", height: "100%" }}>
+            <div className="mcv2-setting-card">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+                    <div>
+                        <div style={{ fontSize: "15px", fontWeight: 600, color: "#ffffff" }}>
+                            {t("Deletion Speed & Delay")}
+                        </div>
+                        <div style={{ fontSize: "13px", color: "#949ba4", marginTop: "4px" }}>
+                            {t("Configure the time interval between each deleted message. Lower values delete faster.")}
+                        </div>
+                    </div>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: delay <= 400 ? "#f0b232" : "#23a55a", background: "rgba(255,255,255,0.06)", padding: "4px 10px", borderRadius: "6px", whiteSpace: "nowrap" }}>
+                        {delay} ms
+                    </span>
+                </div>
+
+                <input
+                    type="range"
+                    min={50}
+                    max={2500}
+                    step={50}
+                    value={delay}
+                    onChange={e => handleDelayChange(Number(e.target.value))}
+                    className="mcv2-speed-slider"
+                />
+
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "10px", fontSize: "12px", color: "#949ba4" }}>
+                    <span>50ms ({t("Fast")})</span>
+                    <span style={{ color: "#dbdee1", fontWeight: 600 }}>{getSpeedLabel(delay)}</span>
+                    <span>2500ms ({t("Safe")})</span>
+                </div>
+            </div>
+
+            <div className="mcv2-setting-card">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ paddingRight: "16px" }}>
+                        <div style={{ fontSize: "15px", fontWeight: 600, color: "#ffffff" }}>
+                            {t("Silent Delete Mode")}
+                        </div>
+                        <div style={{ fontSize: "13px", color: "#949ba4", marginTop: "4px" }}>
+                            {t("When enabled, all messages are deleted using the SilentDelete technique (bypassing loggers). When disabled, regular messages are deleted normally and calls launched by you are silently deleted.")}
+                        </div>
+                    </div>
+                    <button
+                        className={`mcv2-switch-btn ${silent ? "active" : ""}`}
+                        onClick={() => handleSilentToggle(!silent)}
+                        type="button"
+                        title={silent ? t("Enabled") : t("Disabled")}
+                    >
+                        <span className="mcv2-switch-knob" />
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function LogsTab() {
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div className="mcv2-scroller" style={{ flex: 1, overflowY: "auto", paddingRight: "8px", marginBottom: "15px" }}>
-                {logs.length === 0 ? <div style={{ textAlign: "center", color: "#b5bac1", padding: "20px" }}>No logs yet.</div> : logs.map(l => (
+                {logs.length === 0 ? <div style={{ textAlign: "center", color: "#b5bac1", padding: "20px" }}>{t("No logs yet.")}</div> : logs.map(l => (
                     <div key={l.id} className="mcv2-log-item">
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                             <strong style={{ color: "#dbdee1" }}>{l.type.toUpperCase()}: {l.targetName}</strong>
@@ -742,6 +1022,7 @@ function CleanerModal({ rootProps }: { rootProps: any }) {
         { id: "dms", label: t("Message Cleaner") },
         { id: "servers", label: t("Servers Cleaner") },
         { id: "channels", label: t("Channels Cleaner") },
+        { id: "settings", label: t("Settings") },
         { id: "logs", label: t("Logs") }
     ];
 
@@ -778,6 +1059,7 @@ function CleanerModal({ rootProps }: { rootProps: any }) {
                 {activeTab === "dms" && <MessageCleanerTab />}
                 {activeTab === "servers" && <ServersCleanerTab />}
                 {activeTab === "channels" && <ChannelsCleanerTab />}
+                {activeTab === "settings" && <SettingsTab />}
                 {activeTab === "logs" && <LogsTab />}
             </ModalContent>
         </ModalRoot>
@@ -949,10 +1231,7 @@ const MessageContextMenuPatch: NavContextMenuPatchCallback = (children, ctx: { c
 export default definePlugin({
     name: "MessageCleaner",
     description: "An advanced UI for cleaning messages across DMs, Servers, and Channels. Includes context menu options.",
-    authors: [
-        { name: "Guncord", id: 0n },
-        { name: "Bash", id: 1327483363518582784n }
-    ],
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
     enabledByDefault: true,
     dependencies: ["HeaderBarAPI", "ContextMenuAPI"],
 

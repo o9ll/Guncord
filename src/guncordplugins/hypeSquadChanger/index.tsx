@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { React, ReactDOM, RestAPI, showToast, Toasts, UserStore } from "@webpack/common";
 
@@ -297,13 +296,22 @@ function injectHypeSquadChangerIntoNativePanel() {
     }
 }
 
+let isHypeSquadThrottled = false;
+
 function startDomObserver() {
     stopDomObserver();
     if (!isPluginStarted) return;
-    injectHypeSquadChangerIntoNativePanel();
-    domObserver = new MutationObserver(() => {
-        if (!isPluginStarted) return;
+    if (document.querySelector("#user-profile-editing-panel, [class*='editingPanel_'], [class*='standardSidebarView_']")) {
         injectHypeSquadChangerIntoNativePanel();
+    }
+    domObserver = new MutationObserver(() => {
+        if (!isPluginStarted || isHypeSquadThrottled) return;
+        if (!document.querySelector("#user-profile-editing-panel, [class*='editingPanel_'], [class*='standardSidebarView_']")) return;
+        isHypeSquadThrottled = true;
+        requestAnimationFrame(() => {
+            isHypeSquadThrottled = false;
+            if (isPluginStarted) injectHypeSquadChangerIntoNativePanel();
+        });
     });
     domObserver.observe(document.body, { childList: true, subtree: true });
 }
@@ -326,7 +334,7 @@ function stopDomObserver() {
 
 export default definePlugin({
     name: "HypeSquadChanger",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Allows changing your HypeSquad house (Bravery, Brilliance, Balance) or leaving HypeSquad directly from Discord user profile settings panel or plugin settings.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     settingsAboutComponent: HypeSquadSelectComponent,

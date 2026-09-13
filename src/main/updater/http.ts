@@ -9,9 +9,10 @@ import { IpcEvents } from "@shared/IpcEvents";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { exec } from "child_process";
 import { app, ipcMain } from "electron";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "original-fs";
+import { existsSync, mkdirSync, promises as fsp, readFileSync, rmSync, writeFileSync } from "original-fs";
 import { join } from "path";
 import { serializeErrors } from "./common";
+import { copyDirectorySync } from "./pendingUpdate";
 
 const RELEASES_REPO = "o9ll/Guncord";
 const API_BASE = `https://api.github.com/repos/${RELEASES_REPO}`;
@@ -106,17 +107,18 @@ async function stageUpdate(): Promise<boolean> {
 
         // Save zip to temp
         const zipPath = join(app.getPath("temp"), `guncord-update-${Date.now()}.zip`);
-        writeFileSync(zipPath, data, { flush: true });
+        await fsp.writeFile(zipPath, data);
 
         // Clean any stale staging dir first
         try { rmSync(STAGING_DIR, { recursive: true, force: true }); } catch { }
         mkdirSync(STAGING_DIR, { recursive: true });
 
-        // Extract zip into STAGING_DIR (no running files touched)
-        const psExtract = `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${STAGING_DIR}' -Force`;
-
         return await new Promise<boolean>((resolve, reject) => {
-            exec(`powershell -NoProfile -NonInteractive -Command "${psExtract}"`, err => {
+            const extractCmd = process.platform === "win32"
+                ? `powershell -NoProfile -NonInteractive -Command "Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${STAGING_DIR}' -Force"`
+                : `unzip -o -q "${zipPath}" -d "${STAGING_DIR}"`;
+
+            exec(extractCmd, async err => {
                 // Cleanup zip regardless
                 try { rmSync(zipPath, { force: true }); } catch { }
 
@@ -124,13 +126,20 @@ async function stageUpdate(): Promise<boolean> {
                     return reject(new Error("ZIP extraction failed: " + err.message));
                 }
 
-                // Write marker so guncord-index.js knows to apply on next boot
-                writeFileSync(PENDING_UPDATE_MARKER, JSON.stringify({
-                    version: pendingVersion,
-                    stagingDir: STAGING_DIR,
-                    destDir: __dirname,
-                    createdAt: Date.now()
-                }));
+                // Attempt immediate copy for non-locked files (renderer, css, preload)
+                copyDirectorySync(STAGING_DIR, __dirname);
+
+                // Write marker so patcher.ts double-checks and finalizes on next boot
+                try {
+                    await fsp.writeFile(PENDING_UPDATE_MARKER, JSON.stringify({
+                        version: pendingVersion,
+                        stagingDir: STAGING_DIR,
+                        destDir: __dirname,
+                        createdAt: Date.now()
+                    }));
+                } catch (markerErr) {
+                    return reject(markerErr);
+                }
 
                 pendingDownloadUrl = null;
                 pendingVersion = null;

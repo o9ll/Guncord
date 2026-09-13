@@ -45,7 +45,6 @@ export default definePlugin({
     name: "HideMedia",
     enabledByDefault: false,
     description: "Hide attachments and embeds for individual messages via hover button",
-    tags: ["Chat", "Appearance"],
     authors: [Devs.Ven],
     dependencies: ["MessageUpdaterAPI"],
 

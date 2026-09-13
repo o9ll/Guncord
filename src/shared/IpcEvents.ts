@@ -73,7 +73,10 @@ export const enum IpcEvents {
     CHECK_VB_CABLE = "GuncordCheckVBCable",
     INSTALL_VB_CABLE = "GuncordInstallVBCable",
 
-    // Relaunch the Electron app
+    // Net fetch via main process to bypass renderer CORS restrictions
+    GUNCORD_NET_FETCH = "GuncordNetFetch",
+
+    // Relaunch de l'app Electron
     RELAUNCH_APP = "GuncordRelaunchApp",
 
     // WorldBomb — Native Keyboard/Mouse Simulation
@@ -95,4 +98,11 @@ export const enum IpcEvents {
     WORLD_BOMB_RESIZE_WINDOW = "WorldBombResizeWindow",
     // Updates global content protection
     SET_CONTENT_PROTECTION = "GuncordSetContentProtection",
+
+    // Dynamic Runtime UserPlugins
+    GET_USERPLUGINS = "GuncordGetUserPlugins",
+    COMPILE_USERPLUGIN = "GuncordCompileUserPlugin",
+    COMPILE_ALL_USERPLUGINS = "GuncordCompileAllUserPlugins",
+    OPEN_USERPLUGINS_FOLDER = "GuncordOpenUserPluginsFolder",
+    USERPLUGINS_CHANGED = "GuncordUserPluginsChanged"
 }

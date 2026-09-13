@@ -13,13 +13,13 @@ const settings = definePluginSettings({
         description: "Disable Spotify auto-pause",
         type: OptionType.BOOLEAN,
         default: true,
-        restartNeeded: true
+        restartNeeded: false
     },
     keepSpotifyActivityOnIdle: {
         description: "Keep Spotify activity playing when idling",
         type: OptionType.BOOLEAN,
         default: true,
-        restartNeeded: true
+        restartNeeded: false
     }
 });
 
@@ -27,7 +27,6 @@ export default definePlugin({
     name: "SpotifyCrack",
     enabledByDefault: true,
     description: "Free listen along, no auto-pausing in voice chat, and allows activity to continue playing when idling",
-    tags: ["Media", "Utility", "Activity"],
     authors: [Devs.Cyn, Devs.Nuckyz],
     settings,
 

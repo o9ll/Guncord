@@ -9,20 +9,29 @@ import { existsSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 
 import { CommandLine } from "./cli";
+
+const isDiscordHost =
+    process.execPath.toLowerCase().includes("discord") ||
+    (Boolean(process.resourcesPath) && process.resourcesPath.toLowerCase().includes("discord"));
+
 const GuncordDir = dirname(process.execPath);
 
 export const PORTABLE =
+    !isDiscordHost &&
     process.platform === "win32" &&
     !process.execPath.toLowerCase().endsWith("electron.exe") &&
     !existsSync(join(GuncordDir, "Uninstall Guncord.exe"));
 
 export const DATA_DIR =
-    process.env.Guncord_USER_DATA_DIR || (PORTABLE ? join(GuncordDir, "Data") : join(app.getPath("userData")));
+    process.env.Guncord_USER_DATA_DIR ||
+    (PORTABLE ? join(GuncordDir, "Data") : isDiscordHost ? join(app.getPath("userData"), "..", "Guncord") : join(app.getPath("userData")));
 
 mkdirSync(DATA_DIR, { recursive: true });
 
 export const SESSION_DATA_DIR = join(DATA_DIR, "sessionData");
-app.setPath("sessionData", SESSION_DATA_DIR);
+if (!isDiscordHost) {
+    app.setPath("sessionData", SESSION_DATA_DIR);
+}
 
 export const VENCORD_SETTINGS_DIR = join(DATA_DIR, "settings");
 mkdirSync(VENCORD_SETTINGS_DIR, { recursive: true });

@@ -137,7 +137,7 @@ export function update<T = any>(
             // that use a promise polyfill (IE10/11).
             new Promise((resolve, reject) => {
                 const req = store.get(key);
-				req.onsuccess = function () {
+                req.onsuccess = function () {
                     try {
                         store.put(updater(this.result), key);
                         resolve(promisifyRequest(store.transaction));
@@ -145,7 +145,7 @@ export function update<T = any>(
                         reject(err);
                     }
                 };
-				req.onerror = function () { reject(this.error); };
+                req.onerror = function () { reject(this.error); };
             }),
     );
 }

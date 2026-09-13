@@ -5,53 +5,64 @@
 #  Usage: Right-click → "Run with PowerShell"
 # ==============================================================================
 
-$ErrorActionPreference = "Stop"
-
-$InstallDir    = Join-Path $env:LOCALAPPDATA "Guncord-Client"
-$DistDir       = Join-Path $InstallDir "dist\desktop"
-$InstallerDir  = Join-Path $InstallDir "installer"
-$EquilotlExe   = Join-Path $InstallerDir "EquilotlCli.exe"
+$ErrorActionPreference = "SilentlyContinue"
 
 Clear-Host
 Write-Host ""
-Write-Host "  ╔══════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "  ║      GUNCORD — Uninstaller             ║" -ForegroundColor Cyan
-Write-Host "  ╚══════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host "  =======================================================" -ForegroundColor Cyan
+Write-Host "            GUNCORD - DESINSTALLATION & REPARATION     " -ForegroundColor White
+Write-Host "  =======================================================" -ForegroundColor Cyan
 Write-Host ""
 
-if (-not (Test-Path $EquilotlExe)) {
-    Write-Host "  [INFO] EquilotlCli.exe not found." -ForegroundColor Yellow
-    Write-Host "         Downloading the uninstall tool..." -ForegroundColor Yellow
-    Write-Host ""
-    New-Item -ItemType Directory -Force -Path $InstallerDir | Out-Null
-    $EquilotlUrl = "https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli.exe"
-    Invoke-WebRequest -Uri $EquilotlUrl `
-        -Headers @{ "User-Agent" = "Guncord-Installer/2.0" } `
-        -OutFile $EquilotlExe -UseBasicParsing
+# Fermer les processus Discord en cours
+Get-Process -Name "Discord", "DiscordCanary", "DiscordPTB", "DiscordDevelopment" -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Milliseconds 500
+
+$discordPaths = @(
+    "$env:LOCALAPPDATA\Discord",
+    "$env:LOCALAPPDATA\DiscordCanary",
+    "$env:LOCALAPPDATA\DiscordPTB",
+    "$env:LOCALAPPDATA\DiscordDevelopment"
+)
+
+$restoredCount = 0
+
+foreach ($disc in $discordPaths) {
+    if (Test-Path $disc) {
+        $appDirs = Get-ChildItem -Path $disc -Directory -Filter "app-*"
+        foreach ($appDir in $appDirs) {
+            $resourcesDir = Join-Path $appDir.FullName "resources"
+            if (Test-Path $resourcesDir) {
+                # 1. Supprimer le dossier injecté "app"
+                $appFolder = Join-Path $resourcesDir "app"
+                if (Test-Path $appFolder) {
+                    Remove-Item $appFolder -Recurse -Force
+                    Write-Host "  [✓] Dossier d'injection supprime dans $($appDir.Name)" -ForegroundColor Yellow
+                }
+
+                # 2. Restaurer app.asar depuis discord_app.asar ou _app.asar si nécessaire
+                $appAsar = Join-Path $resourcesDir "app.asar"
+                $backupPrimary = Join-Path $resourcesDir "discord_app.asar"
+                $backupSecondary = Join-Path $resourcesDir "_app.asar"
+
+                if (Test-Path $backupPrimary) {
+                    Copy-Item $backupPrimary $appAsar -Force
+                    Write-Host "  [✓] Archive originale Discord restauree dans $($appDir.Name)" -ForegroundColor Green
+                    $restoredCount++
+                } elseif (Test-Path $backupSecondary) {
+                    Copy-Item $backupSecondary $appAsar -Force
+                    Write-Host "  [✓] Archive originale Discord restauree dans $($appDir.Name)" -ForegroundColor Green
+                    $restoredCount++
+                }
+            }
+        }
+    }
 }
 
-Write-Host "  Launching the graphical uninstaller..." -ForegroundColor Yellow
-Write-Host "  A window will open to choose your target Discord." -ForegroundColor Yellow
 Write-Host ""
-
-$env:EQUICORD_USER_DATA_DIR = $InstallDir
-$env:EQUICORD_DIRECTORY     = $DistDir
-$env:EQUICORD_DEV_INSTALL   = "1"
-
-try {
-    & $EquilotlExe "--uninstall"
-} catch {
-    Write-Host "  [ERROR] Uninstall failed: $_" -ForegroundColor Red
-    Write-Host "  Press any key to exit..."
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-    exit 1
-}
-
-Write-Host ""
-Write-Host "  ┌──────────────────────────────────────────────────────┐" -ForegroundColor Green
-Write-Host "  │  Guncord uninstalled successfully!                 │" -ForegroundColor Green
-Write-Host "  │  Restart Discord to apply the changes.               │" -ForegroundColor Green
-Write-Host "  └──────────────────────────────────────────────────────┘" -ForegroundColor Green
+Write-Host "  =======================================================" -ForegroundColor Green
+Write-Host "    Discord a ete nettoye et restaure avec succes !      " -ForegroundColor Green
+Write-Host "  =======================================================" -ForegroundColor Green
 Write-Host ""
 Start-Sleep -Seconds 3
 

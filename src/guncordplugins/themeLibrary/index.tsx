@@ -15,10 +15,9 @@ import { settings } from "./utils/settings";
 
 export default definePlugin({
     name: "ThemeLibrary",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "A library of themes for Vencord.",
     authors: [EquicordDevs.Fafa],
-    required: true,
     settings,
     toolboxActions: {
         "Open Theme Library": () => {
@@ -27,11 +26,13 @@ export default definePlugin({
     },
 
     start() {
-        console.log("ThemeLibrary start, SettingsPlugin is:", SettingsPlugin, "Keys:", SettingsPlugin ? Object.keys(SettingsPlugin) : []);
         SettingsPlugin.customEntries.push({
             key: "equicord_theme_library",
-            title: "Library",
-            Component: require("./components/ThemeTab").default,
+            title: "Theme Library",
+            Component: (props: any) => {
+                const ThemeTab = require("./components/ThemeTab").default;
+                return <ThemeTab {...props} />;
+            },
             Icon: ColorPaletteIcon
         });
 

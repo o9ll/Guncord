@@ -11,20 +11,20 @@
     pointer-events: all;
 }
 
-/* Active icon = green */
+/* Icône active = verte */
 .gc-icon--active {
     color: #3ba55c !important;
     filter: drop-shadow(0 0 4px rgba(59,165,92,0.6));
 }
 
-/* ── Main popover ── */
+/* ── Popover principal ── */
 .gc-popover {
     width: 320px;
     background: #2b2d31;
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 10px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    overflow: visible;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     max-height: calc(100vh - 32px);
@@ -67,12 +67,13 @@
     flex-direction: column;
     gap: 10px;
     overflow-y: auto;
-    overflow-x: visible;
+    overflow-x: hidden;
     scrollbar-width: thin;
     scrollbar-color: rgba(255,255,255,0.15) rgba(255,255,255,0.04);
-    /* Laisse de l'espace pour les dropdowns absolus */
-    overflow: visible;
-    max-height: calc(100vh - 100px);
+    /* max-height accounts for popover header (~48px) + top/bottom margin (16px) */
+    max-height: calc(100vh - 64px - 48px);
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .gc-popover-divider {
@@ -331,3 +332,57 @@
 /* Dot stream */
 .gc-dot--stream { background: #ed4245; box-shadow: 0 0 0 2px rgba(237,66,69,0.3); animation: gc-pulse 1.5s infinite; }
 @keyframes gc-pulse { 0%,100% { opacity:1; } 50% { opacity:.5; } }
+
+/* Companion Server Alert Banner */
+.gc-server-alert {
+    background: rgba(237, 66, 69, 0.1);
+    border: 1px solid rgba(237, 66, 69, 0.25);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.gc-server-alert-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #f23f43;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.gc-server-alert-desc {
+    font-size: 11px;
+    color: var(--text-muted, #949ba4);
+    line-height: 1.4;
+}
+.gc-server-install-btn {
+    align-self: flex-start;
+    background: var(--brand-500, #5865f2);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s;
+    font-family: inherit;
+}
+.gc-server-install-btn:hover {
+    background: var(--brand-560, #4752c4);
+}
+
+.gc-header-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.4);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.1s;
+}
+.gc-header-action:hover { color: #fff; }
+

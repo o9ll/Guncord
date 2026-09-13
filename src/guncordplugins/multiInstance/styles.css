@@ -70,12 +70,11 @@
     border-color: rgba(88,101,242,0.4);
 }
 .mi-account-row--no-token {
-    opacity: 0.4;
-    cursor: not-allowed;
+    opacity: 0.65;
 }
 .mi-account-row--no-token:hover {
-    background: rgba(255,255,255,0.04) !important;
-    border-color: transparent !important;
+    background: rgba(255,255,255,0.06) !important;
+    border-color: rgba(255,255,255,0.15) !important;
 }
 
 /* ── Avatar ── */
@@ -148,6 +147,12 @@
     flex-shrink: 0;
     line-height: 1;
 }
+.mi-badge-lock {
+    display: flex;
+    align-items: center;
+    color: rgba(255,255,255,0.35);
+    flex-shrink: 0;
+}
 
 /* ── Context menu ── */
 
@@ -191,6 +196,13 @@
     height: 1px;
     background: rgba(255,255,255,0.07);
     margin: 3px 0;
+}
+
+.mi-ctx-hint {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--text-muted, #949ba4);
+    line-height: 1.4;
 }
 
 .mi-ctx-item {
@@ -237,4 +249,33 @@
     padding: 18px 0;
     line-height: 1.6;
 }
+
+/* ── MultiInstance HeaderBar Button Fast Fluid Continuous Spin ── */
+.nc-multi-instance-icon {
+    transform-origin: 50% 50%;
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+:hover > .nc-multi-instance-icon,
+[class*="iconWrapper"]:hover .nc-multi-instance-icon,
+[class*="clickable"]:hover .nc-multi-instance-icon,
+.guncord-header-btn:hover .nc-multi-instance-icon,
+button:hover .nc-multi-instance-icon,
+.nc-multi-instance-icon:hover {
+    animation: nc-multi-instance-spin 0.42s cubic-bezier(0.25, 0.1, 0.25, 1) 1;
+}
+
+@keyframes nc-multi-instance-spin {
+    from {
+        transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+    to {
+        transform: translate3d(0, 0, 0) rotate(360deg);
+    }
+}
+
+
+
 

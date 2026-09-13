@@ -6,20 +6,25 @@
 
 import { React } from "@webpack/common";
 const { useState, useRef, useEffect } = React;
-import { Language,LANGUAGE_FLAGS, LANGUAGES, t } from "@api/i18n";
-import { plugins } from "@api/PluginManager";
-import { SettingsStore,useSettings } from "@api/Settings";
-import { authorizeCloud, deauthorizeCloud } from "@api/SettingsSync/cloudSetup";
-import { FormSwitch } from "@components/FormSwitch";
-import { SafeSearchableSelect } from "@components/SafeSearchableSelect";
-import { ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize,openModal } from "@utils/modal";
 import type { UIEvent } from "react";
+
+import { t, LANGUAGES, LANGUAGE_FLAGS, Language } from "@api/i18n";
+import { useSettings, SettingsStore } from "@api/Settings";
+import { plugins } from "@api/PluginManager";
+import { SafeSearchableSelect } from "@components/SafeSearchableSelect";
+import { FormSwitch } from "@components/FormSwitch";
+import { openModal, ModalRoot, ModalHeader, ModalContent, ModalFooter, ModalSize } from "@utils/modal";
+import { authorizeCloud, deauthorizeCloud } from "@api/SettingsSync/cloudSetup";
+
+// VencordNative is exposed as a global by the preload script, see globals.d.ts.
 
 import { Button } from "./Button";
 import { Flex } from "./Flex";
 import { Heading } from "./Heading";
-import { Link } from "./Link";
 import { Paragraph } from "./Paragraph";
+import { Link } from "./Link";
+import { DiscordIcon } from "./Icons";
+
 
 export const MELLOWTEL_ONBOARDING_VERSION = "1";
 
@@ -126,7 +131,7 @@ function MellowtelOnboardingContent({ onClose }: { onClose: () => void }) {
                     <div style={{ marginTop: "8px" }}>
                         <FormSwitch
                             value={settings.cloud?.settingsSync || false}
-                            onChange={async (v) v{
+                            onChange={async (v) => {
                                 if (v) {
                                     try {
                                         await deauthorizeCloud();
@@ -190,7 +195,8 @@ function MellowtelOnboardingContent({ onClose }: { onClose: () => void }) {
                     <Paragraph style={{ color: "#dbdee1", fontSize: "14px", lineHeight: "1.5", marginBottom: "24px" }}>
                         {t("Choose your preferred language for Guncord UI. This setting will immediately apply to all menus and settings within Guncord.")}
                     </Paragraph>
-                     <div style={{ marginTop: "16px" }}>
+                    
+                    <div style={{ marginTop: "16px" }}>
                         <SafeSearchableSelect
                             options={Object.entries(LANGUAGES).map(([key, name]) => ({
                                 label: name,
@@ -270,15 +276,16 @@ function MellowtelOnboardingContent({ onClose }: { onClose: () => void }) {
                         "messages, or Discord activity - it only relays network requests in the background."
                      )}
                 </Paragraph>
-                 <Paragraph style={{ marginTop: "12px", color: "#949ba4", fontSize: "13px" }}>
+                
+                <Paragraph style={{ marginTop: "12px", color: "#949ba4", fontSize: "13px" }}>
                     {t("You can change this choice at any time from Guncord's settings.")}
                 </Paragraph>
 
                 {!showAdvanced && (
                     <div style={{ marginTop: "20px", textAlign: "right" }}>
                         <Link 
-                           onClick={() => setShowAdvanced(true)} 
-                           style={{ cursor: "pointer", fontSize: "12px", color: "#00a8fc", textDecoration: "none", opacity: 0.9 }}
+                            onClick={() => setShowAdvanced(true)} 
+                            style={{ cursor: "pointer", fontSize: "12px", color: "#00a8fc", textDecoration: "none", opacity: 0.9 }}
                         >
                             {t("Show advanced settings / Opt-out")}
                         </Link>
@@ -290,15 +297,16 @@ function MellowtelOnboardingContent({ onClose }: { onClose: () => void }) {
                         <Paragraph style={{ fontSize: "12px", fontWeight: 600, marginBottom: "8px", color: "#dbdee1" }}>
                             {t("You must read the following agreement to the end to manage your choices:")}
                         </Paragraph>
-                         <div 
-                           ref={scrollRef}
+                        
+                        <div 
+                            ref={scrollRef}
                             onScroll={handleScroll}
                             className="mellowtel-terms-scroller"
                             style={{ 
-                               height: "130px", 
-                               overflowY: "auto",
+                                height: "130px", 
+                                overflowY: "auto",
                                 border: "1px solid rgba(255, 255, 255, 0.08)", 
-                               borderRadius: "4px",
+                                borderRadius: "4px",
                                 backgroundColor: "rgba(0, 0, 0, 0.24)",
                                 padding: "10px",
                             }}

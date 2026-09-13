@@ -55,6 +55,7 @@ test-userdata/
 test-app/
 
 # Environment & credentials
+.github_token
 .env
 .env.*
 *.env
@@ -65,3 +66,11 @@ certs/
 # System files
 Thumbs.db
 Desktop.ini
+
+# Ignored local scripts
+publish-release.bat
+buildextension.bat
+
+# server — distributed via GhostClient installer, not bundled in repo
+# Contains heavy binaries (ffmpeg.exe, node.exe, yt-dlp.exe) — optional feature
+server/

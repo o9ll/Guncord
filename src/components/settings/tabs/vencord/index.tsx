@@ -18,7 +18,7 @@ import { Divider } from "@components/Divider";
 import { Flex } from "@components/Flex";
 import { FormSwitch } from "@components/FormSwitch";
 import { Heading } from "@components/Heading";
-import { HeartIcon, GithubIcon, LogIcon, OwnerCrownIcon, PaintbrushIcon, PlanetIcon, RestartIcon } from "@components/Icons";
+import { HeartIcon, GithubIcon, LogIcon, OwnerCrownIcon, PaintbrushIcon, DiscordIcon, RestartIcon } from "@components/Icons";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
 import { openPluginModal, SettingsTab, wrapTab } from "@components/settings";
@@ -34,29 +34,25 @@ import { Avatar, OAuth2AuthorizeModal, React, Select, UserStore, showToast, Toas
 import { ContributeModal } from "../../../../guncord/renderer/components/ContributeModal";
 import { copyToClipboard } from "@utils/clipboard";
 import { openNotificationSettingsModal } from "./NotificationSettings";
+import { updateNativeButtonsVisibility } from "../../../../plugins/_core/hideNativeButtons";
 
 const cl = classNameFactory("vc-vencord-tab-");
 
 const DEV_TEAM_IDS = [
     {
         id: "1020801845490356245",
-        role: "Creator",
-        description: "Manager of app, site visuals, communication & ads"
-    },
-    {
-        id: "1138447342119440404",
-        role: "Admin",
-        description: "Manager of infrastructure, API, bot & network hosting"
+        role: "Creator"
     }
 ];
 
 function useDiscordUser(userId: string) {
-    const [user, setUser] = React.useState<{ name: string; pfp: string; } | null>(null);
+    const [user, setUser] = React.useState<{ name: string; username: string; pfp: string; } | null>(null);
     React.useEffect(() => {
         const cached = UserStore?.getUser(userId);
         if (cached) {
             setUser({
                 name: (cached as any).globalName || (cached as any).global_name || cached.username,
+                username: cached.username ? `@${cached.username}` : "",
                 pfp: cached.avatar
                     ? `https://cdn.discordapp.com/avatars/${userId}/${cached.avatar}.webp?size=128`
                     : `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(userId) >> 22n) % 6}.png`
@@ -68,31 +64,19 @@ function useDiscordUser(userId: string) {
         })
             .then(r => r.json())
             .then(u => setUser({
-                name: u.global_name || u.username || userId,
+                name: u.global_name || u.username || "Guncord",
+                username: u.username ? `@${u.username}` : "",
                 pfp: u.avatar
                     ? `https://cdn.discordapp.com/avatars/${userId}/${u.avatar}.webp?size=128`
                     : `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(userId) >> 22n) % 6}.png`
             }))
-            .catch(() => setUser({ name: userId, pfp: `https://cdn.discordapp.com/embed/avatars/0.png` }));
+            .catch(() => setUser({ name: "Guncord", username: "", pfp: `https://cdn.discordapp.com/embed/avatars/0.png` }));
     }, [userId]);
     return user;
 }
 
-function DevCard({ id, role, description }: { id: string; role: string; description: string; }) {
+function DevCard({ id, role }: { id: string; role: string; }) {
     const user = useDiscordUser(id);
-    const [copied, setCopied] = React.useState(false);
-
-    const handleCopy = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        try {
-            copyToClipboard(id);
-        } catch {
-            navigator.clipboard.writeText(id);
-        }
-        setCopied(true);
-        try { showToast("ID Copy !", Toasts.Type.SUCCESS); } catch {}
-        setTimeout(() => setCopied(false), 1500);
-    };
 
     return (
         <Card variant="primary" outline style={{ padding: "12px" }}>
@@ -104,41 +88,12 @@ function DevCard({ id, role, description }: { id: string; role: string; descript
                 <Flex direction={Flex.Direction.VERTICAL} style={{ flex: 1, gap: "2px" }}>
                     <Flex align={Flex.Align.CENTER} justify={Flex.Justify.BETWEEN} style={{ width: "100%" }}>
                         <Heading tag="h3" style={{ marginBottom: "0px", fontSize: "14px", fontWeight: "bold" }}>{user?.name ?? "..."}</Heading>
-                        <Heading tag="h4" style={{ color: "var(--brand-experiment)", fontWeight: "bold", fontSize: "12px" }}>{role}</Heading>
+                        <Heading tag="h4" style={{ color: "var(--header-primary, #ffffff)", fontWeight: "bold", fontSize: "12px" }}>{role}</Heading>
                     </Flex>
 
-                    <div
-                        onClick={handleCopy}
-                        title="Cliquer pour copier l'ID"
-                        style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            cursor: "pointer",
-                            fontSize: "11px",
-                            color: "var(--text-muted)",
-                            background: "var(--background-secondary-alt, rgba(0,0,0,0.2))",
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                            width: "fit-content",
-                            marginTop: "2px",
-                            marginBottom: "4px",
-                            userSelect: "none",
-                            transition: "all 0.15s ease"
-                        }}
-                    >
-                        <span>{id}</span>
-                        {copied ? (
-                            <span style={{ color: "var(--status-positive, #43b581)", fontWeight: "bold", fontSize: "10px" }}>✓ Copy</span>
-                        ) : (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                            </svg>
-                        )}
-                    </div>
-
-                    <Paragraph size="xs" color="text-muted" style={{ fontSize: "12px", lineHeight: "1.3" }}>{description}</Paragraph>
+                    <span style={{ fontSize: "12px", color: "var(--text-muted, #949ba4)" }}>
+                        {user?.username || (user?.name ? `@${user.name}` : "...")}
+                    </span>
                 </Flex>
             </Flex>
         </Card>
@@ -194,7 +149,7 @@ function DevTeamSection() {
                         }
                     `}</style>
                     {DEV_TEAM_IDS.map(dev => (
-                        <DevCard key={dev.id} id={dev.id} role={dev.role} description={dev.description} />
+                        <DevCard key={dev.id} id={dev.id} role={dev.role} />
                     ))}
                 </div>
             )}
@@ -358,6 +313,20 @@ function EquicordSettings() {
                 restartRequired: false,
                 warning: { enabled: false },
             },
+            {
+                key: "enableInAppNotifications",
+                title: t("Enable Guncord In-App Notifications"),
+                description: t("Show custom toast notifications in the top-right corner for updates, shortcuts (Stealth Mode, StreamProof), and status changes. Disable to silence all Guncord notifications."),
+                restartRequired: false,
+                warning: { enabled: false },
+            },
+            {
+                key: "hideNativeHeaderButtons",
+                title: t("Hide Native Header Buttons (Inbox)"),
+                description: t("Hides native Discord header buttons like the notification inbox. Turn OFF to show the notification inbox button again."),
+                restartRequired: false,
+                warning: { enabled: false },
+            },
         ];
 
     return (
@@ -400,6 +369,9 @@ function EquicordSettings() {
                                  settings[s.key] = v;
                                  if (s.key === "streamProof" && typeof VencordNative !== "undefined") {
                                      VencordNative?.setContentProtection?.(v);
+                                 }
+                                 if (s.key === "hideNativeHeaderButtons") {
+                                     updateNativeButtonsVisibility(v);
                                  }
                              }}
                             title={s.title}

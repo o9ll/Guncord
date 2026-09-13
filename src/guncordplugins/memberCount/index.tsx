@@ -28,13 +28,13 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Show member count on the server tooltip",
         default: true,
-        restartNeeded: true
+        restartNeeded: false
     },
     memberList: {
         type: OptionType.BOOLEAN,
         description: "Show member count in the member list",
         default: false,
-        restartNeeded: true
+        restartNeeded: false
     },
     voiceActivity: {
         type: OptionType.BOOLEAN,

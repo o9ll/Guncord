@@ -16,16 +16,26 @@ export function invoke<T = any>(event: IpcEvents, ...args: any[]) {
 }
 
 export function sendSync<T = any>(event: IpcEvents, ...args: any[]) {
-    return ipcRenderer.sendSync(event, ...args) as T;
+    try {
+        return ipcRenderer.sendSync(event, ...args) as T;
+    } catch {
+        return null as unknown as T;
+    }
 }
 
 const PluginHelpers = {} as Record<string, Record<string, (...args: any[]) => Promise<any>>>;
-const pluginIpcMap = sendSync<PluginIpcMappings>(IpcEvents.GET_PLUGIN_IPC_METHOD_MAP);
+let pluginIpcMap: PluginIpcMappings = {} as any;
+try {
+    pluginIpcMap = sendSync<PluginIpcMappings>(IpcEvents.GET_PLUGIN_IPC_METHOD_MAP) || ({} as any);
+} catch {}
 
-for (const [plugin, methods] of Object.entries(pluginIpcMap)) {
-    const map = PluginHelpers[plugin] = {};
-    for (const [methodName, method] of Object.entries(methods)) {
-        map[methodName] = (...args: any[]) => invoke(method as IpcEvents, ...args);
+if (pluginIpcMap && typeof pluginIpcMap === "object") {
+    for (const [plugin, methods] of Object.entries(pluginIpcMap)) {
+        if (!methods || typeof methods !== "object") continue;
+        const map = (PluginHelpers[plugin] = {} as Record<string, (...args: any[]) => Promise<any>>);
+        for (const [methodName, method] of Object.entries(methods)) {
+            map[methodName] = (...args: any[]) => invoke(method as IpcEvents, ...args);
+        }
     }
 }
 
@@ -39,7 +49,6 @@ export default {
         getThemesList: () => invoke<Array<{ fileName: string; content: string; }>>(IpcEvents.GET_THEMES_LIST),
         getThemeData: (fileName: string) => invoke<string | undefined>(IpcEvents.GET_THEME_DATA, fileName),
         getSystemValues: () => invoke<Record<string, string>>(IpcEvents.GET_THEME_SYSTEM_VALUES),
-
         openFolder: () => invoke<void>(IpcEvents.OPEN_THEMES_FOLDER),
     },
 
@@ -52,10 +61,9 @@ export default {
     },
 
     settings: {
-        get: () => sendSync<Settings>(IpcEvents.GET_SETTINGS),
+        get: () => sendSync<Settings>(IpcEvents.GET_SETTINGS) || ({ plugins: {} } as Settings),
         set: (settings: Settings, pathToNotify?: string) => invoke<void>(IpcEvents.SET_SETTINGS, settings, pathToNotify),
         getSettingsDir: () => invoke<string>(IpcEvents.GET_SETTINGS_DIR),
-
         openFolder: () => invoke<void>(IpcEvents.OPEN_SETTINGS_FOLDER),
     },
 
@@ -66,14 +74,12 @@ export default {
         addChangeListener(cb: (newCss: string) => void) {
             ipcRenderer.on(IpcEvents.QUICK_CSS_UPDATE, (_, css) => cb(css));
         },
-
         addThemeChangeListener(cb: () => void) {
             ipcRenderer.on(IpcEvents.THEME_UPDATE, () => cb());
         },
-
         openFile: () => invoke<void>(IpcEvents.OPEN_QUICKCSS),
         openEditor: () => invoke<void>(IpcEvents.OPEN_MONACO_EDITOR),
-        getEditorTheme: () => sendSync<string>(IpcEvents.GET_MONACO_THEME),
+        getEditorTheme: () => sendSync<string>(IpcEvents.GET_MONACO_THEME) || "vs-dark",
     },
 
     native: {
@@ -82,17 +88,11 @@ export default {
         getRendererCss: () => invoke<string>(IpcEvents.GET_RENDERER_CSS),
         onRendererCssUpdate: (cb: (newCss: string) => void) => {
             if (!IS_DEV) return;
-
             ipcRenderer.on(IpcEvents.RENDERER_CSS_UPDATE, (_e, newCss: string) => cb(newCss));
         }
     },
 
     csp: {
-        /**
-         * Note: Only supports full explicit matches, not wildcards.
-         *
-         * If `*.example.com` is allowed, `isDomainAllowed("https://sub.example.com")` will return false.
-         */
         isDomainAllowed: (url: string, directives: string[]) => invoke<boolean>(IpcEvents.CSP_IS_DOMAIN_ALLOWED, url, directives),
         removeOverride: (url: string) => invoke<boolean>(IpcEvents.CSP_REMOVE_OVERRIDE, url),
         requestAddOverride: (url: string, directives: string[], callerName: string) =>
@@ -110,7 +110,7 @@ export default {
     },
 
     guncord: {
-        getInstallerPrefs: () => sendSync<{defaultPlugins: boolean, autoUpdate: boolean}>(IpcEvents.GET_INSTALLER_PREFS),
+        getInstallerPrefs: () => sendSync<{defaultPlugins: boolean, autoUpdate: boolean}>(IpcEvents.GET_INSTALLER_PREFS) || { defaultPlugins: true, autoUpdate: true },
         checkVBCable: () => invoke<{ installed: boolean; }>(IpcEvents.CHECK_VB_CABLE),
         installVBCable: () => invoke<{ success: boolean; error?: string; }>(IpcEvents.INSTALL_VB_CABLE),
 
@@ -136,17 +136,25 @@ export default {
         type: (text: string, delay: number) => invoke(IpcEvents.WORLD_BOMB_TYPE, text, delay),
         pressEnter: () => invoke(IpcEvents.WORLD_BOMB_PRESS_ENTER),
         pressBackspace: () => invoke(IpcEvents.WORLD_BOMB_PRESS_BACKSPACE),
-        // Full sequence in a single native call (auto-center click + type + enter)
-        // targetX/targetY: calibrated click position (-1 = default window center)
         sequence: (word: string, lps: number, humanChance: number, targetX: number = -1, targetY: number = -1) =>
             invoke(IpcEvents.WORLD_BOMB_SEQUENCE, word, lps, humanChance, targetX, targetY),
-        // Opens the external Stream Proof window
         openWindow: (lps: number, humanChance: number, safeMode: boolean, theme: string, playMode: string, noSpace: boolean, groqKey: string, words: string[], streamProof: boolean) => invoke(IpcEvents.WORLD_BOMB_OPEN_WINDOW, lps, humanChance, safeMode, theme, playMode, noSpace, groqKey, words, streamProof),
-        // Closes the external Stream Proof window
         closeWindow: () => invoke(IpcEvents.WORLD_BOMB_CLOSE_WINDOW),
-        // Returns the current cursor position (no longer used but kept just in case)
         getCursorPos: (): Promise<{ x: number; y: number; }> => invoke(IpcEvents.WORLD_BOMB_GET_CURSOR_POS),
     },
     setContentProtection: (enabled: boolean) =>
         invoke<boolean>(IpcEvents.SET_CONTENT_PROTECTION, enabled),
+
+    userplugins: {
+        list: () => invoke<any[]>(IpcEvents.GET_USERPLUGINS),
+        compile: (name: string) => invoke<any>(IpcEvents.COMPILE_USERPLUGIN, name),
+        compileAll: () => invoke<any[]>(IpcEvents.COMPILE_ALL_USERPLUGINS),
+        openFolder: () => invoke<boolean>(IpcEvents.OPEN_USERPLUGINS_FOLDER),
+        addChangeListener: (cb: () => void) => {
+            ipcRenderer.on(IpcEvents.USERPLUGINS_CHANGED, () => cb());
+        },
+        removeChangeListener: () => {
+            ipcRenderer.removeAllListeners(IpcEvents.USERPLUGINS_CHANGED);
+        }
+    },
 };

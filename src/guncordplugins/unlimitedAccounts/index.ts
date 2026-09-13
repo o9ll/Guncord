@@ -13,7 +13,7 @@ const settings = definePluginSettings({
         description: "Number of accounts that can be added, or 0 for no limit",
         default: 0,
         type: OptionType.NUMBER,
-        restartNeeded: true,
+        restartNeeded: false,
     },
 });
 
@@ -21,7 +21,6 @@ export default definePlugin({
     name: "UnlimitedAccounts",
     enabledByDefault: true,
     description: "Increases the amount of accounts you can add.",
-    tags: ["Utility"],
     authors: [Devs.thororen],
     settings,
     patches: [

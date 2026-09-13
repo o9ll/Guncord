@@ -11,10 +11,10 @@
 
 import "./checkNodeVersion.js";
 
-import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "fs";
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "fs";
 import { join } from "path";
 
-// ── Locate Discord installations (same logic as inject.mjs) ─────────────────
+// ── Locate Discord installations ─────────────────────────────────────────────
 function findAllDiscordResources() {
     const platform = process.platform;
     const candidates = [];
@@ -36,22 +36,70 @@ function findAllDiscordResources() {
             } catch { }
         }
     } else if (platform === "darwin") {
-        candidates.push(
-            "/Applications/Discord.app/Contents/Resources",
-            "/Applications/Discord PTB.app/Contents/Resources",
-            "/Applications/Discord Canary.app/Contents/Resources"
-        );
+        const home = process.env.HOME || "";
+        const appBases = [
+            "/Applications",
+            join(home, "Applications")
+        ];
+        const appNames = [
+            "Discord.app",
+            "Discord PTB.app",
+            "Discord Canary.app",
+            "Discord Development.app"
+        ];
+
+        for (const base of appBases) {
+            for (const app of appNames) {
+                candidates.push(join(base, app, "Contents", "Resources"));
+            }
+        }
     } else if (platform === "linux") {
-        candidates.push(
-            "/usr/share/discord/resources",
-            "/usr/lib/discord/resources",
-            "/opt/discord/resources",
-            "/opt/Discord/resources"
-        );
+        const home = process.env.HOME || "";
+
+        const channels = ["discord", "discord-ptb", "discord-canary", "discord-development", "Discord", "DiscordPTB", "DiscordCanary", "DiscordDevelopment"];
+        for (const prefix of ["/usr/share", "/usr/lib", "/usr/lib64", "/opt"]) {
+            for (const ch of channels) {
+                candidates.push(join(prefix, ch, "resources"));
+            }
+        }
+
+        for (const ch of channels) {
+            candidates.push(join(home, ".local/share", ch, "resources"));
+            candidates.push(join(home, ".local/bin", ch, "resources"));
+        }
+
+        const flatpakAppIds = [
+            "com.discordapp.Discord",
+            "com.discordapp.DiscordCanary",
+            "com.discordapp.DiscordPTB",
+            "com.discordapp.DiscordDevelopment"
+        ];
+        for (const appId of flatpakAppIds) {
+            const discordFolder = appId.replace("com.discordapp.", "").toLowerCase();
+            candidates.push(join(home, ".local/share/flatpak/app", appId, "current/active/files", discordFolder, "resources"));
+            candidates.push(join("/var/lib/flatpak/app", appId, "current/active/files", discordFolder, "resources"));
+            candidates.push(join(home, ".var/app", appId, "data", discordFolder, "resources"));
+        }
+
+        for (const ch of ["discord", "discord-canary", "discord-ptb"]) {
+            candidates.push(join("/snap", ch, "current/usr/share", ch, "resources"));
+        }
+
+        for (const base of ["/opt/discord", "/opt/Discord", join(home, ".local/share/discord"), join(home, ".dvm")]) {
+            if (existsSync(base)) {
+                try {
+                    const entries = readdirSync(base);
+                    for (const entry of entries) {
+                        if (entry.startsWith("app-")) {
+                            candidates.push(join(base, entry, "resources"));
+                        }
+                    }
+                } catch { }
+            }
+        }
     }
 
-    // Filter only paths with an existing Guncord injection
-    return candidates.filter(p => {
+    return [...new Set(candidates)].filter(p => {
         if (!existsSync(p)) return false;
         return existsSync(join(p, "app")) || existsSync(join(p, "_app.asar"));
     });
@@ -63,36 +111,30 @@ function uninject(resourcesDir) {
     const backupPath = join(resourcesDir, "_app.asar");
     const appAsarPath = join(resourcesDir, "app.asar");
 
-    // Verify the app/ folder was created by Guncord
+    // Delete app/
     if (existsSync(appDirPath)) {
         try {
-            if (existsSync(join(appDirPath, "index.js"))) {
-                const indexContent = readFileSync(join(appDirPath, "index.js"), "utf-8");
-                if (!indexContent.includes("Guncord Injector") && !indexContent.includes("Guncord")) {
-                    console.warn(`\x1b[33m[Guncord] The app/ folder exists but does not appear to have been created by Guncord.\x1b[0m`);
-                    console.warn("\x1b[33m            Aborting to avoid breaking another mod.\x1b[0m");
-                    return false;
-                }
+            rmSync(appDirPath, { recursive: true, force: true });
+            console.log(`[Guncord] Dossier app/ supprimé dans : ${resourcesDir}`);
+        } catch (e) {
+            console.warn(`[Guncord] Erreur suppression app/ : ${e.message}`);
+        }
+    }
+
+    // Restore the backup _app.asar → app.asar
+    if (existsSync(backupPath)) {
+        try {
+            if (existsSync(appAsarPath)) {
+                rmSync(appAsarPath, { force: true });
             }
-        } catch { }
-
-        console.log("[Guncord] Removing injected app/ folder...");
-        rmSync(appDirPath, { recursive: true, force: true });
-    } else {
-        console.log("\x1b[33m[Guncord] No injected app/ folder found.\x1b[0m");
+            console.log("[Guncord] Restauration _app.asar → app.asar...");
+            renameSync(backupPath, appAsarPath);
+        } catch (e) {
+            console.warn(`[Guncord] Erreur restauration asar : ${e.message}`);
+        }
     }
 
-    // Restaurer le backup
-    if (existsSync(backupPath) && !existsSync(appAsarPath)) {
-        console.log("[Guncord] Restoring _app.asar → app.asar...");
-        renameSync(backupPath, appAsarPath);
-    } else if (existsSync(backupPath) && existsSync(appAsarPath)) {
-        console.log("[Guncord] app.asar already present, cleaning up backup...");
-        rmSync(backupPath, { force: true });
-    }
-
-    console.log(`\x1b[32m[Guncord] Successfully uninjected from: ${resourcesDir}\x1b[0m`);
-    console.log("\x1b[36m[Guncord] Restart Discord to apply changes.\x1b[0m");
+    console.log(`\x1b[32m[Guncord] Désinjection réussie depuis : ${resourcesDir}\x1b[0m`);
     return true;
 }
 
@@ -100,9 +142,8 @@ function uninject(resourcesDir) {
 const allResources = findAllDiscordResources();
 
 if (allResources.length === 0) {
-    console.error("\x1b[31m[Guncord] No Discord installation with Guncord injected found.\x1b[0m");
-    console.error("\x1b[33m           Make sure Guncord was injected via 'pnpm inject'.\x1b[0m");
-    process.exit(1);
+    console.log("\x1b[33m[Guncord] Aucune injection active à désinjecter.\x1b[0m");
+    process.exit(0);
 }
 
 let uninjectCount = 0;
@@ -111,10 +152,6 @@ for (const res of allResources) {
     if (uninject(res)) uninjectCount++;
 }
 
-if (uninjectCount === 0) {
-    console.error("\x1b[31m[Guncord] No successful uninjection.\x1b[0m");
-    process.exit(1);
-}
-
-console.log(`\n\x1b[32m[Guncord] ${uninjectCount}/${allResources.length} uninjection(s) successful.\x1b[0m`);
+console.log(`\n\x1b[32m[Guncord] ${uninjectCount}/${allResources.length} installation(s) désinjectée(s) avec succès.\x1b[0m`);
+console.log("\x1b[36m[Guncord] Redémarrez Discord pour appliquer les changements.\x1b[0m");
 

@@ -23,64 +23,22 @@ import { contextBridge, webFrame } from "electron/renderer";
 import VencordNative, { invoke, sendSync } from "./VencordNative";
 
 contextBridge.exposeInMainWorld("VencordNative", VencordNative);
+contextBridge.exposeInMainWorld("EquicordNative", VencordNative);
+contextBridge.exposeInMainWorld("GuncordNative", VencordNative);
 
 // Discord
 if (location.protocol !== "data:") {
     invoke(IpcEvents.INIT_FILE_WATCHERS);
 
     if (IS_DISCORD_DESKTOP) {
-        // Intercepte les AbortError non catchées (ex: video.play() interrompue au scroll)
-        // Ces erreurs uncaught peuvent crasher le renderer Electron au scroll rapide
-        webFrame.executeJavaScript(`
-            window.addEventListener('unhandledrejection', function(event) {
-                const reason = event.reason;
-                if (reason && (
-                    (reason.name === 'AbortError') ||
-                    (reason instanceof DOMException && reason.name === 'AbortError') ||
-                    (typeof reason.message === 'string' && reason.message.includes('play() request was interrupted'))
-                )) {
-                    event.preventDefault();
-                }
-            });
-        `);
-
         webFrame.executeJavaScript(sendSync<string>(IpcEvents.PRELOAD_GET_RENDERER_JS));
-        // Not supported in sandboxed preload scripts but Discord doesn't support it either so who cares
-        require(process.env.DISCORD_PRELOAD!);
-
-        // Remplace "Discord" par "Guncord" dans le titre de la fenêtre (document.title)
-        // Discord change le titre dynamiquement depuis le renderer — on intercepte ça ici
-        webFrame.executeJavaScript(`
-            (function() {
-                function patchTitle(t) {
-                    return t ? t.replace(/Discord/g, 'Guncord') : t;
-                }
-                // Patch initial
-                if (document.title) document.title = patchTitle(document.title);
-                // Observe les changements futurs
-                const titleEl = document.querySelector('title');
-                if (titleEl) {
-                    new MutationObserver(() => {
-                        const cur = document.title;
-                        const patched = patchTitle(cur);
-                        if (cur !== patched) document.title = patched;
-                    }).observe(titleEl, { childList: true });
-                } else {
-                    // Si <title> n'existe pas encore, attend le DOM
-                    new MutationObserver((_, obs) => {
-                        const el = document.querySelector('title');
-                        if (!el) return;
-                        obs.disconnect();
-                        if (document.title) document.title = patchTitle(document.title);
-                        new MutationObserver(() => {
-                            const cur = document.title;
-                            const patched = patchTitle(cur);
-                            if (cur !== patched) document.title = patched;
-                        }).observe(el, { childList: true });
-                    }).observe(document.documentElement || document, { childList: true, subtree: true });
-                }
-            })()
-        `);
+        if (process.env.DISCORD_PRELOAD) {
+            try {
+                require(process.env.DISCORD_PRELOAD);
+            } catch (e) {
+                console.error("[Guncord] Error loading original Discord preload:", e);
+            }
+        }
     }
 } // Monaco popout
 else {

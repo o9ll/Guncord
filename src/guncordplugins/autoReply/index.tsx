@@ -270,5 +270,6 @@ export default definePlugin({
     stop() {
         _pendingReplyTimers.forEach(clearTimeout);
         _pendingReplyTimers.clear();
+        lastReplied.clear();
     },
 });

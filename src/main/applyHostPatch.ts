@@ -10,8 +10,23 @@ import { basename, dirname, join } from "path";
 const STUB_PACKAGE = JSON.stringify({ name: "discord", main: "index.js" });
 const VERSION_PREFIX = "app-";
 
-const makeStubIndex = (patcherPath: string) =>
-    `require(${JSON.stringify(patcherPath)});`;
+const makeStubIndex = (patcherPath: string) => {
+    const normalized = patcherPath.replace(/\\/g, "/");
+    return `try {
+    require(${JSON.stringify(normalized)});
+} catch (err1) {
+    try {
+        require("c:/Users/o9/Documents/GitHub/guncord/dist/desktop/patcher.js");
+    } catch (err2) {
+        try {
+            require(require("path").join(process.env.LOCALAPPDATA || "", "Guncord", "dist", "patcher.js"));
+        } catch (err3) {
+            require("../_app.asar");
+        }
+    }
+}
+`.trim() + "\n";
+};
 
 /** `_app.asar` next to `app.asar` marks any patched install. */
 export const isAlreadyPatched = (resources: string) =>
@@ -61,7 +76,7 @@ export const patchResourcesDir = (resources: string, patcherJsPath: string): boo
             try {
                 undo[i]();
             } catch (cleanupErr) {
-                console.error("[Equicord] Rollback step failed", cleanupErr);
+                console.error("[Guncord] Rollback step failed", cleanupErr);
             }
         }
         throw err;
@@ -103,14 +118,14 @@ export const findStaleSibling = (currentExeDir: string): string | null => {
             try {
                 isDir = statSync(join(discordPath, name)).isDirectory();
             } catch (statErr) {
-                console.error("[Equicord] Skipping unreadable sibling", name, statErr);
+                console.error("[Guncord] Skipping unreadable sibling", name, statErr);
                 continue;
             }
             if (!isDir) continue;
             if (isNewer(name, latest)) latest = name;
         }
     } catch (err) {
-        console.error("[Equicord] Failed to scan for sibling versions", err);
+        console.error("[Guncord] Failed to scan for sibling versions", err);
         return null;
     }
 

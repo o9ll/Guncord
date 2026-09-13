@@ -1,4 +1,10 @@
-/* Stealth Mode - hide Guncord plugin UI (but NOT settings access) */
+/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+/* Stealth Mode - hide Guncord plugin UI and settings */
 
 /* Plugin buttons: header bar, channel toolbar, chat bar, user area */
 body.guncord-stealth .vc-header-bar-btns,
@@ -11,6 +17,31 @@ body.guncord-stealth #guncord-titlebar-btn,
 body.guncord-stealth #guncord-titlebar-link-style,
 
 /* GuncordAI nav button */
-body.guncord-stealth .nai-nav-item {
+body.guncord-stealth .nai-nav-item,
+
+/* Modern Discord settings sidebar: complete Guncord section wrapper and items */
+body.guncord-stealth li:has([data-settings-sidebar-item*="equicord"]),
+body.guncord-stealth li:has([data-settings-sidebar-item*="guncord"]),
+body.guncord-stealth li:has([data-list-item-id*="settings-sidebar___equicord"]),
+body.guncord-stealth li:has([data-list-item-id*="settings-sidebar___guncord"]),
+body.guncord-stealth [data-settings-sidebar-item*="equicord"],
+body.guncord-stealth [data-settings-sidebar-item*="guncord"],
+body.guncord-stealth [data-list-item-id*="settings-sidebar___equicord"],
+body.guncord-stealth [data-list-item-id*="settings-sidebar___guncord"],
+
+/* Fallback tab attributes */
+body.guncord-stealth [data-tab-id*="equicord" i],
+body.guncord-stealth [data-tab-id*="guncord" i],
+body.guncord-stealth [data-tab-id*="vencord" i],
+body.guncord-stealth [data-tab-id="ThemeLibrary"],
+body.guncord-stealth [data-tab-id="StereoInstaller"],
+body.guncord-stealth [aria-controls*="equicord" i],
+body.guncord-stealth [aria-controls*="guncord" i],
+body.guncord-stealth [aria-controls*="vencord" i],
+body.guncord-stealth [id*="equicord" i],
+body.guncord-stealth [id*="guncord" i],
+body.guncord-stealth [id*="vencord" i],
+body.guncord-stealth .nc-modal-root,
+body.guncord-stealth .nc-settings-tab {
     display: none !important;
 }

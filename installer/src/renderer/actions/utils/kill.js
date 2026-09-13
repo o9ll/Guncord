@@ -35,6 +35,31 @@ export async function killDiscord(resPath, log) {
 
     if (log) log(`Closing ${procName}...`);
 
+    // ── Step 1: Graceful shutdown via Squirrel (Update.exe --processStop) ─────
+    // Gives Discord time to flush its session data (localStorage,
+    // cookies, Preferences) before we touch the resources/.
+    // Without this, taskkill /F kills the process without flushing → token lost → logout.
+    try {
+        const appVersionDir = path.join(resPath, "..");
+        const channelDir    = path.join(appVersionDir, "..");
+        const updateExe     = path.join(channelDir, "Update.exe");
+        if (fs.existsSync(updateExe)) {
+            if (log) log(`Discretionary stay via Update.exe --processStop ${exeName}...`);
+            exec(`"${updateExe}" --processStop ${exeName}`);
+            // Wait up to 4 seconds for Discord to close cleanly
+            const exitedGracefully = await waitForExit(exeName, 4000);
+            if (exitedGracefully) {
+                // Wait an additional 600ms to ensure the flush
+                // of the Electron session (LevelDB / Preferences) is complete
+                await new Promise(r => setTimeout(r, 600));
+                if (log) log(`${procName} cleanly closed.`);
+                return;
+            }
+            if (log) log(`Graceful closure expired, brute force kill...`);
+        }
+    } catch (_) {}
+
+    // ── Stage 2 : Force kill (only if graceful shutdown failed) ───────
     killByName(exeName);
 
     const helperVariants = [
@@ -54,10 +79,11 @@ export async function killDiscord(resPath, log) {
         }
     } catch (_) {}
 
-    await waitForExit(exeName, 3000);
-    await new Promise(r => setTimeout(r, 400));
+    // Wait for the process to disappear (max 4s) + 800ms post-kill flush.
+    await waitForExit(exeName, 4000);
+    await new Promise(r => setTimeout(r, 800));
 
-    if (log) log(`✅ ${procName} closed.`);
+    if (log) log(`${procName} closed.`);
 }
 
 export function startDiscord(resPath) {

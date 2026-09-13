@@ -142,9 +142,15 @@ export default definePlugin({
                     match: /alt:" ","aria-hidden":!0,src:.{0,50}(\i).iconSrc/,
                     replace: "...$1.props,$&"
                 },
+                // Path with 2026-04-badge-discovery OFF
                 {
-                    match: /(?<=forceOpen:.{0,40}?\i\((\i)\.id\).{0,100}?)children:/,
-                    replace: "children:$1.component?$self.renderBadgeComponent({...$1}) :"
+                    match: /(?<=forceOpen:.{0,40}?ariaHidden:!0,)children:(?=.{0,50}?(\i)\.id)/,
+                    replace: "children:$1.component?$self.renderBadgeComponent({...$1}):"
+                },
+                // Path with 2026-04-badge-discovery ON
+                {
+                    match: /(?<=fallbackIconSrc:.{0,50}?)children:(?=.{0,50}?(\i)\.id)/,
+                    replace: "children:$1.component?$self.renderBadgeComponent({...$1}):"
                 },
                 // handle onClick and onContextMenu
                 {
@@ -157,7 +163,7 @@ export default definePlugin({
             find: "getLegacyUsername(){",
             replacement: {
                 match: /getBadges\(\)\{.{0,100}?return\[/,
-                replace: "getBadges(){return $self.dedupeBadges([...$self.getBadges(this),"
+                replace: "$&...$self.getBadges(this),"
             }
         }
     ],
@@ -223,44 +229,44 @@ export default definePlugin({
         return badges.filter(b => {
             if (!b) return false;
 
-            const id = (b.id || b.key || "").toString().toLowerCase();
+            const id = (b.id || b.key || b.uuid || "").toString().toLowerCase();
             const normId = id
                 .replace("hypesquad_online_house_", "hypesquad_house_")
                 .replace("premium_early_supporter", "early_supporter")
                 .replace("moderator_programs_alumni", "certified_moderator");
 
-            const icon = (b.iconSrc || b.icon || "").toString();
+            const icon = (b.iconSrc || b.icon || b.badge || "").toString();
             let iconHash = "";
             if (icon) {
                 try {
                     const parts = icon.split("/");
                     const last = parts.pop() || icon;
-                    iconHash = last.split("?")[0].replace(/\.(png|webp|jpg|svg)$/i, "");
+                    iconHash = last.split("?")[0].replace(/\.(png|webp|jpg|svg|gif)$/i, "");
                 } catch {
                     iconHash = icon;
                 }
             }
 
-            const desc = (b.description || "").toString().trim().toLowerCase();
-
-            const primaryKey = normId || iconHash || desc;
+            const primaryKey = icon || iconHash || (normId && !normId.startsWith("guncord") ? normId : "");
             if (!primaryKey) return true;
 
             if (seenKeys.has(primaryKey)) return false;
 
             seenKeys.add(primaryKey);
-            if (normId) seenKeys.add(normId);
+            if (normId && !normId.startsWith("guncord") && !normId.startsWith("nc-")) seenKeys.add(normId);
             if (iconHash) seenKeys.add(iconHash);
 
             return true;
         });
     },
 
-    getBadges(profile: { userId: string; guildId: string; }) {
+    getBadges(profile: any) {
         if (!profile) return [];
 
         try {
-            return _getBadges(profile);
+            const userId = profile.userId || profile.id || profile.user?.id || profile.author?.id || (typeof profile.getId === "function" ? profile.getId() : "");
+            const guildId = profile.guildId || profile.guild_id || "";
+            return _getBadges({ ...profile, userId: String(userId || ""), guildId: String(guildId || "") });
         } catch (e) {
             new Logger("BadgeAPI#getBadges").error(e);
             return [];
@@ -290,6 +296,7 @@ export default definePlugin({
     },
 
     getDonorBadges(userId: string) {
+        if (!userId) return [];
         return DonorBadges[userId]?.map(badge => ({
             iconSrc: badge.badge,
             description: badge.tooltip,
@@ -311,6 +318,7 @@ export default definePlugin({
     },
 
     getEquicordDonorBadges(userId: string) {
+        if (!userId) return [];
         return EquicordDonorBadges[userId]?.map(badge => ({
             iconSrc: badge.badge,
             description: badge.tooltip,
@@ -333,29 +341,44 @@ export default definePlugin({
 
     getGuncordBadges(userId: string) {
         try {
-            const userBadges = GuncordBadges[userId];
+            if (!userId) return [];
+            const userBadges = GuncordBadges[userId] || GuncordBadges[String(userId)];
             if (!userBadges || !Array.isArray(userBadges)) return [];
 
             return userBadges
-                .filter(badge => badge && badge.icon)
-                .map(badge => ({
-                    iconSrc: badge.icon,
-                    description: badge.placeholder ?? "Guncord Badge",
-                    position: BadgePosition.START,
-                    props: {
-                        style: {
-                            borderRadius: "50%",
-                            maxHeight: "22px",
-                            maxWidth: "22px"
+                .filter(badge => badge && (badge.icon || badge.badge) && badge.visible !== false)
+                .map(badge => {
+                    const iconSrc = badge.icon || badge.badge;
+                    const description = badge.placeholder || badge.description || badge.tooltip || "Guncord Badge";
+                    const badgeId = badge.uuid || badge.id || `guncord-${description}-${userId}`;
+
+                    return {
+                        id: badgeId,
+                        key: badgeId,
+                        iconSrc,
+                        description,
+                        position: BadgePosition.START,
+                        props: {
+                            style: {
+                                borderRadius: "50%",
+                                maxHeight: "22px",
+                                maxWidth: "22px"
+                            }
+                        },
+                        onContextMenu(event, b) {
+                            ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={b as any} />);
+                        },
+                        onClick() {
+                            return GenericBadgeModal({
+                                iconSrc,
+                                icon: iconSrc,
+                                description,
+                                placeholder: description,
+                                ...badge
+                            }, "Guncord");
                         }
-                    },
-                    onContextMenu(event, b) {
-                        ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={b as any} />);
-                    },
-                    onClick() {
-                        return GenericBadgeModal(badge, "Guncord");
-                    }
-                } satisfies ProfileBadge));
+                    } satisfies ProfileBadge;
+                });
         } catch (e) {
             console.error("[BadgeAPI] Error processing guncord badges for", userId, e);
             return [];
