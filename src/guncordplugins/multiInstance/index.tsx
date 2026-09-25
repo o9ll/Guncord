@@ -12,7 +12,7 @@ import { definePluginSettings } from "@api/Settings";
 import { ModalCloseButton, ModalContent, ModalHeader, ModalRoot, openModal } from "@utils/modal";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { findByProps, waitFor } from "@webpack";
-import { AuthenticationStore, FluxDispatcher, Forms, IconUtils, React, ReactDOM, UserStore } from "@webpack/common";
+import { AuthenticationStore, FluxDispatcher, Forms, IconUtils, MediaEngineStore, React, ReactDOM, UserStore } from "@webpack/common";
 
 import { t } from "../autoTranslateGuncord";
 
@@ -25,6 +25,11 @@ const settings = definePluginSettings({
             { label: "Discord PTB", value: "ptb.discord.com" },
             { label: "Discord Canary", value: "canary.discord.com" }
         ]
+    },
+    syncAudioSettings: {
+        type: OptionType.BOOLEAN,
+        description: "Audio Settings Sync: Automatically inherit audio devices, volume, and Krisp from your main Discord window.",
+        default: true
     },
     blockExternalTokenAccess: {
         type: OptionType.BOOLEAN,
@@ -52,13 +57,28 @@ let encryptHooked = false;
 
 async function loadTokenCache(): Promise<void> {
     if (tokenCacheLoaded) return;
-    tokenCache = (await DataStore.get<Record<string, string>>(MI_TOKEN_CACHE_KEY)) ?? {};
+    let local: Record<string, string> = {};
+    try {
+        local = (await DataStore.get<Record<string, string>>(MI_TOKEN_CACHE_KEY)) ?? {};
+    } catch {}
+
+    let shared: Record<string, string> = {};
+    try {
+        if (typeof Native?.getSharedTokenCache === "function") {
+            shared = (await Native.getSharedTokenCache()) ?? {};
+        }
+    } catch {}
+
+    tokenCache = { ...shared, ...local, ...tokenCache };
     tokenCacheLoaded = true;
 
     // Purge any corrupted or cross-account tokens
     const curUser = UserStore.getCurrentUser();
     const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
     const curTok = tokenMod?.getToken?.();
+    if (curUser?.id && curTok) {
+        tokenCache[curUser.id] = curTok;
+    }
 
     let dirty = false;
     for (const [id, tok] of Object.entries(tokenCache)) {
@@ -89,8 +109,8 @@ async function loadTokenCache(): Promise<void> {
             dirty = true;
         }
     }
-    if (dirty) {
-        await saveTokenCache();
+    if (dirty || Object.keys(tokenCache).length > Object.keys(local).length) {
+        saveTokenCache();
     }
 }
 
@@ -100,6 +120,9 @@ function saveTokenCache(): void {
     _saveTokenTimer = setTimeout(() => {
         _saveTokenTimer = undefined;
         DataStore.set(MI_TOKEN_CACHE_KEY, tokenCache).catch(() => {});
+        if (typeof Native?.saveSharedTokenCache === "function") {
+            Native.saveSharedTokenCache(tokenCache).catch(() => {});
+        }
     }, 1000);
 }
 
@@ -149,6 +172,9 @@ function captureCurrentToken(): void {
         if (token && user?.id && typeof token === "string") {
             const changed = cacheToken(user.id, token);
             if (changed) saveTokenCache();
+            if (typeof fetchAllAccounts === "function") {
+                fetchAllAccounts().catch(() => {});
+            }
         }
     } catch { }
 }
@@ -190,6 +216,301 @@ function hookFluxDispatcher(): (() => void) | null {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Synchronisation des réglages audio (Krisp, volume, micros, casques)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function isCurrentInstanceWindow(): boolean {
+    return !!((window as any).__guncord_token || (window as any).__guncord_user_id);
+}
+
+function captureMasterAudioSettings(): Record<string, any> | null {
+    try {
+        const rawLs = window.localStorage.getItem("MediaEngineStore");
+        let parsedLs: any = null;
+        if (rawLs) {
+            try {
+                parsedLs = JSON.parse(rawLs);
+            } catch {}
+        }
+
+        let storeSettings: any = null;
+        try {
+            if (MediaEngineStore) {
+                // Read all voice settings — handle both boolean and string noiseSuppression
+                // (Discord stores it as boolean in older builds, string enum in newer builds)
+                const rawNoiseSuppression = MediaEngineStore.getNoiseSuppression?.();
+                const rawState = MediaEngineStore.getState?.()?.settingsByContext?.default ?? {};
+                storeSettings = {
+                    // 1. Spread rawState FIRST to pick up extra flags (vadSensitivity, inputProfile, soundshare, etc.)
+                    ...rawState,
+                    // 2. Override with live getter values — these are authoritative and always accurate
+                    noiseSuppression2: rawState.noiseSuppression2 ?? rawState.noiseSuppressionType ?? undefined,
+                    noiseCancellation: MediaEngineStore.getNoiseCancellation?.(),
+                    noiseSuppression: rawNoiseSuppression,
+                    echoCancellation: MediaEngineStore.getEchoCancellation?.(),
+                    automaticGainControl: MediaEngineStore.getAutomaticGainControl?.(),
+                    inputVolume: MediaEngineStore.getInputVolume?.(),
+                    outputVolume: MediaEngineStore.getOutputVolume?.(),
+                    inputDeviceId: MediaEngineStore.getInputDeviceId?.(),
+                    outputDeviceId: MediaEngineStore.getOutputDeviceId?.(),
+                    mode: MediaEngineStore.getMode?.(),
+                    modeOptions: MediaEngineStore.getModeOptions?.(),
+                    attenuation: MediaEngineStore.getAttenuation?.(),
+                    attenuateWhileSpeakingSelf: MediaEngineStore.getAttenuateWhileSpeakingSelf?.(),
+                    attenuateWhileSpeakingOthers: MediaEngineStore.getAttenuateWhileSpeakingOthers?.(),
+                    qos: MediaEngineStore.getQoS?.(),
+                };
+            }
+        } catch {}
+
+        const defaultSettings = {
+            ...(parsedLs?.default || {}),
+            ...(storeSettings || {})
+        };
+
+        // Always rebuild rawMediaEngineStore from the live-merged defaultSettings
+        // so the snapshot written to disk reflects the current voice settings exactly,
+        // not the potentially stale localStorage blob.
+        const mergedFullState = {
+            ...(parsedLs || {}),
+            default: {
+                ...(parsedLs?.default || {}),
+                ...(storeSettings || {})
+            }
+        };
+
+        return {
+            rawMediaEngineStore: JSON.stringify(mergedFullState),
+            defaultSettings,
+            fullState: mergedFullState
+        };
+    } catch {
+        return null;
+    }
+}
+
+let _audioSaveTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleMasterAudioSave(): void {
+    if (isCurrentInstanceWindow()) return;
+    if (_audioSaveTimer !== undefined) clearTimeout(_audioSaveTimer);
+    _audioSaveTimer = setTimeout(() => {
+        _audioSaveTimer = undefined;
+        const audio = captureMasterAudioSettings();
+        if (audio && typeof Native?.saveMasterAudioSettings === "function") {
+            Native.saveMasterAudioSettings(audio).catch(() => {});
+        }
+    }, 500);
+}
+
+function applyAudioSettings(audio: any): void {
+    if (!audio) return;
+    const def = audio.defaultSettings || audio;
+    if (!def || typeof def !== "object") return;
+
+    // 1. Output Volume
+    if (typeof def.outputVolume === "number") {
+        try {
+            FluxDispatcher?.dispatch?.({
+                type: "AUDIO_SET_OUTPUT_VOLUME",
+                volume: def.outputVolume
+            });
+        } catch {}
+    }
+
+    // 2. Input Volume
+    if (typeof def.inputVolume === "number") {
+        try {
+            FluxDispatcher?.dispatch?.({
+                type: "AUDIO_SET_INPUT_VOLUME",
+                volume: def.inputVolume
+            });
+        } catch {}
+    }
+
+    // 3. Output Device
+    if (def.outputDeviceId && typeof def.outputDeviceId === "string") {
+        try {
+            FluxDispatcher?.dispatch?.({
+                type: "AUDIO_SET_OUTPUT_DEVICE",
+                id: def.outputDeviceId
+            });
+        } catch {}
+    }
+
+    // 4. Input Device
+    if (def.inputDeviceId && typeof def.inputDeviceId === "string") {
+        try {
+            FluxDispatcher?.dispatch?.({
+                type: "AUDIO_SET_INPUT_DEVICE",
+                id: def.inputDeviceId
+            });
+        } catch {}
+    }
+
+    // 5. Krisp (noiseCancellation) & Noise Suppression
+    const meActions = findByProps("setNoiseCancellation", "setNoiseSuppression") || findByProps("setNoiseCancellation");
+    if (typeof def.noiseCancellation === "boolean") {
+        try {
+            meActions?.setNoiseCancellation?.(def.noiseCancellation);
+        } catch {}
+        try {
+            MediaEngineStore?.getMediaEngine?.()?.setNoiseCancellation?.(def.noiseCancellation);
+        } catch {}
+    }
+    // noiseSuppression may be boolean (legacy) or string enum ("none","standard","krisp") in modern Discord
+    if (def.noiseSuppression !== undefined && def.noiseSuppression !== null) {
+        try {
+            meActions?.setNoiseSuppression?.(def.noiseSuppression);
+        } catch {}
+        try {
+            MediaEngineStore?.getMediaEngine?.()?.setNoiseSuppression?.(def.noiseSuppression);
+        } catch {}
+    }
+
+    // 6. Echo Cancellation & Automatic Gain Control
+    if (typeof def.echoCancellation === "boolean") {
+        try {
+            meActions?.setEchoCancellation?.(def.echoCancellation);
+        } catch {}
+        try {
+            MediaEngineStore?.getMediaEngine?.()?.setEchoCancellation?.(def.echoCancellation);
+        } catch {}
+    }
+    if (typeof def.automaticGainControl === "boolean") {
+        try {
+            meActions?.setAutomaticGainControl?.(def.automaticGainControl);
+        } catch {}
+        try {
+            MediaEngineStore?.getMediaEngine?.()?.setAutomaticGainControl?.(def.automaticGainControl);
+        } catch {}
+    }
+
+    // 7. Voice Mode & Sensitivity / Options
+    // Apply mode even when modeOptions is absent (voice activity vs push to talk)
+    if (def.mode) {
+        try {
+            const modeActions = findByProps("setMode") || meActions;
+            modeActions?.setMode?.(def.mode, def.modeOptions ?? {});
+        } catch {}
+    }
+
+    // 8. Attenuation
+    if (typeof def.attenuation === "number") {
+        try {
+            const attActions = findByProps("setAttenuation") || meActions;
+            attActions?.setAttenuation?.(
+                def.attenuation,
+                Boolean(def.attenuateWhileSpeakingSelf),
+                Boolean(def.attenuateWhileSpeakingOthers)
+            );
+        } catch {}
+    }
+
+    // 8b. Quality of Service
+    if (typeof def.qos === "boolean") {
+        try {
+            meActions?.setQoS?.(def.qos);
+        } catch {}
+    }
+
+    // 9. Direct MediaEngineStore state sync — copies ALL captured fields at once
+    try {
+        if (MediaEngineStore) {
+            const state = MediaEngineStore.getState?.();
+            if (state?.settingsByContext?.default) {
+                Object.assign(state.settingsByContext.default, def);
+                MediaEngineStore.emitChange?.();
+            }
+        }
+    } catch {}
+
+    // 10. Persist to localStorage
+    if (audio.rawMediaEngineStore && typeof audio.rawMediaEngineStore === "string") {
+        try {
+            window.localStorage.setItem("MediaEngineStore", audio.rawMediaEngineStore);
+        } catch {}
+    }
+}
+
+async function syncInstanceAudioSettings(): Promise<void> {
+    try {
+        if (typeof Native?.getMasterAudioSettings !== "function") return;
+        const masterAudio = await Native.getMasterAudioSettings();
+        if (!masterAudio) return;
+
+        if (masterAudio.rawMediaEngineStore && typeof masterAudio.rawMediaEngineStore === "string") {
+            try {
+                window.localStorage.setItem("MediaEngineStore", masterAudio.rawMediaEngineStore);
+            } catch {}
+        }
+
+        const tryApply = () => applyAudioSettings(masterAudio);
+        tryApply();
+
+        waitFor(["dispatch", "subscribe"], (dispatcher: any) => {
+            const unConn = dispatcher.subscribe("CONNECTION_OPEN", () => {
+                try { unConn(); } catch {}
+                setTimeout(tryApply, 500);
+                setTimeout(tryApply, 1500);
+            });
+        });
+
+        [1000, 2500, 5000].forEach(delay => {
+            setTimeout(tryApply, delay);
+        });
+    } catch (e) {
+        console.warn("[GuncordMI] syncInstanceAudioSettings error:", e);
+    }
+}
+
+let unhookAudioWatcher: (() => void) | null = null;
+function hookAudioSettingsWatcher(): void {
+    if (unhookAudioWatcher) return;
+    const unsubs: Array<() => void> = [];
+
+    const onAudioChanged = () => scheduleMasterAudioSave();
+
+    if (FluxDispatcher?.subscribe) {
+        const events = [
+            "AUDIO_SET_OUTPUT_VOLUME",
+            "AUDIO_SET_INPUT_VOLUME",
+            "AUDIO_SET_OUTPUT_DEVICE",
+            "AUDIO_SET_INPUT_DEVICE",
+            "AUDIO_SET_MODE",
+            "AUDIO_SET_NOISE_SUPPRESSION",
+            "AUDIO_SET_NOISE_CANCELLATION",
+            "AUDIO_SET_ECHO_CANCELLATION",
+            "AUDIO_SET_AUTOMATIC_GAIN_CONTROL",
+            "AUDIO_SET_QOS",
+            "AUDIO_SET_ATTENUATION",
+            "MEDIA_ENGINE_SET_AUDIO_SUB_SYSTEM",
+            "MEDIA_ENGINE_SETTINGS_CHANGED",
+        ];
+        for (const evt of events) {
+            try {
+                FluxDispatcher.subscribe(evt, onAudioChanged);
+                unsubs.push(() => FluxDispatcher.unsubscribe(evt, onAudioChanged));
+            } catch {}
+        }
+    }
+
+    if (MediaEngineStore?.addChangeListener) {
+        try {
+            MediaEngineStore.addChangeListener(onAudioChanged);
+            unsubs.push(() => MediaEngineStore.removeChangeListener(onAudioChanged));
+        } catch {}
+    }
+
+    unhookAudioWatcher = () => {
+        for (const u of unsubs) {
+            try { u(); } catch {}
+        }
+        unsubs.length = 0;
+        unhookAudioWatcher = null;
+    };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -222,6 +543,76 @@ function getNativeAccounts(): SavedAccount[] {
     } catch {
         return [];
     }
+}
+
+async function fetchAllAccounts(): Promise<SavedAccount[]> {
+    let local: SavedAccount[] = [];
+    try {
+        local = (await DataStore.get<SavedAccount[]>(STORE_KEY)) ?? [];
+    } catch {}
+
+    let shared: SavedAccount[] = [];
+    try {
+        if (typeof (Native as any)?.getSharedAccounts === "function") {
+            shared = (await (Native as any).getSharedAccounts()) ?? [];
+        }
+    } catch {}
+
+    const map = new Map<string, SavedAccount>();
+    for (const a of shared) {
+        if (a && a.id) map.set(a.id, a);
+    }
+    for (const a of local) {
+        if (!a || !a.id) continue;
+        const prev = map.get(a.id);
+        map.set(a.id, {
+            id: a.id,
+            username: a.username || prev?.username || "",
+            avatar: a.avatar || prev?.avatar || "",
+            token: a.token || prev?.token || "",
+        });
+    }
+
+    const nativeAccs = getNativeAccounts();
+    for (const a of nativeAccs) {
+        if (!a || !a.id) continue;
+        const prev = map.get(a.id);
+        map.set(a.id, {
+            id: a.id,
+            username: a.username || prev?.username || "",
+            avatar: a.avatar || prev?.avatar || "",
+            token: a.token || prev?.token || tokenCache[a.id] || "",
+        });
+    }
+
+    const curUser = UserStore.getCurrentUser();
+    if (curUser?.id) {
+        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const curTok = tokenMod?.getToken?.();
+        const prev = map.get(curUser.id);
+        map.set(curUser.id, {
+            id: curUser.id,
+            username: (curUser as any).globalName || curUser.username || prev?.username || "",
+            avatar: getAvatarUrl(curUser.id, curUser.avatar) || prev?.avatar || "",
+            token: curTok || prev?.token || tokenCache[curUser.id] || "",
+        });
+    }
+
+    const merged = Array.from(map.values());
+    for (const acc of merged) {
+        if (acc.token && acc.token.startsWith("dQw4w9WgXcQ:")) {
+            try {
+                const dec = await Native.decryptToken(acc.token);
+                if (dec) acc.token = dec;
+            } catch {}
+        }
+    }
+
+    if (typeof (Native as any)?.saveSharedAccounts === "function") {
+        (Native as any).saveSharedAccounts(merged).catch(() => {});
+    }
+    DataStore.set(STORE_KEY, merged).catch(() => {});
+    return merged;
 }
 
 /** Quick switch — token direct */
@@ -353,9 +744,15 @@ function ContextMenuPortal(props: CtxMenuProps) {
                 </div>
             )}
 
-            <div className="mi-ctx-item" onClick={() => { onSwitch(); onClose(); }}>
-                <SwitchIcon /> {t("Quick switch")}
-            </div>
+            {acc.id !== UserStore.getCurrentUser()?.id ? (
+                <div className="mi-ctx-item" onClick={() => { onSwitch(); onClose(); }}>
+                    <SwitchIcon /> {t("Quick switch")}
+                </div>
+            ) : (
+                <div className="mi-ctx-hint" style={{ textAlign: "center", color: "var(--brand-500, #5865f2)", fontWeight: 600 }}>
+                    {t("Current active account")}
+                </div>
+            )}
 
             {isOpen && <>
                 <div className="mi-ctx-separator" />
@@ -388,23 +785,9 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
 
     React.useEffect(() => {
         captureCurrentToken();
-        DataStore.get<SavedAccount[]>(STORE_KEY).then(async v => {
-            const raw = v ?? [];
-            const decrypted: SavedAccount[] = [];
-            for (const acc of raw) {
-                let tok = acc.token;
-                if (tok && tok.startsWith("dQw4w9WgXcQ:")) {
-                    try {
-                        const dec = await Native.decryptToken(tok);
-                        if (dec) tok = dec;
-                    } catch (e) {
-                        console.warn("[MultiInstance] Decryption failed for", acc.username, e);
-                    }
-                }
-                decrypted.push({ ...acc, token: tok });
-            }
-            setSavedAccounts(decrypted);
-        });
+        fetchAllAccounts().then(accs => {
+            setSavedAccounts(accs);
+        }).catch(() => {});
         setNativeAccounts(getNativeAccounts());
         Native.getOpenInstances().then(ids => setOpenInstances(ids ?? [])).catch(() => { });
     }, []);
@@ -415,8 +798,31 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
         const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
         const curTok = tokenMod?.getToken?.();
 
+        // 1. Current logged-in user (appears first among accounts)
+        if (currentUser) {
+            seen.add(currentUser.id);
+            const saved = savedAccounts.find(s => s.id === currentUser.id);
+            const native = nativeAccounts.find(n => n.id === currentUser.id);
+            let token = curTok || saved?.token || native?.token || tokenCache[currentUser.id] || "";
+            if (token) {
+                const owner = getUserIdFromToken(token);
+                if (owner && owner !== currentUser.id) {
+                    token = "";
+                }
+            }
+            result.push({
+                id: currentUser.id,
+                username: (currentUser as any).globalName || currentUser.username,
+                avatar: getAvatarUrl(currentUser.id, currentUser.avatar),
+                token,
+                hasToken: !!token,
+                isNative: true,
+            });
+        }
+
+        // 2. Native Discord accounts
         for (const acc of nativeAccounts) {
-            if (acc.id === currentUser?.id || seen.has(acc.id)) continue;
+            if (seen.has(acc.id)) continue;
             seen.add(acc.id);
             const saved = savedAccounts.find(s => s.id === acc.id);
             let token = saved?.token || acc.token || tokenCache[acc.id] || "";
@@ -431,10 +837,12 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
             }
             result.push({ ...acc, token, hasToken: !!token, isNative: true });
         }
+
+        // 3. Saved accounts from TokenImporter & Shared Accounts
         for (const acc of savedAccounts) {
-            if (acc.id === currentUser?.id || seen.has(acc.id)) continue;
+            if (seen.has(acc.id)) continue;
             seen.add(acc.id);
-            let token = acc.token;
+            let token = acc.token || tokenCache[acc.id] || "";
             if (token && curTok && token === curTok && acc.id !== currentUser?.id) {
                 token = "";
             }
@@ -465,9 +873,10 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
         }
         setCtx(null);
         setStatus(t("Opening window…"));
-        const { domain, blockExternalTokenAccess, performanceMode } = settings.store;
-        // @ts-ignore - Passage du pseudo, domaine, token protection, perf mode
-        const res = await Native.openInstanceWindow(acc.token, acc.id, false, acc.username, domain, blockExternalTokenAccess, performanceMode).catch(() => ({ ok: false, error: "error" }));
+        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings } = settings.store;
+        const audioSettings = syncAudioSettings ? captureMasterAudioSettings() : undefined;
+        // @ts-ignore - Passage du pseudo, domaine, token protection, perf mode, audioSettings
+        const res = await Native.openInstanceWindow(acc.token, acc.id, false, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings).catch(() => ({ ok: false, error: "error" }));
         if ((res as any).ok) {
             setStatus(t("Window opened"));
             await refreshInstances();
@@ -488,9 +897,10 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
         }
         setCtx(null);
         setStatus(t("Opening detached instance…"));
-        const { domain, blockExternalTokenAccess, performanceMode } = settings.store;
-        // @ts-ignore - Argument 'detached', pseudo, domaine, token protection, perf mode
-        const res = await Native.openInstanceWindow(acc.token, acc.id, true, acc.username, domain, blockExternalTokenAccess, performanceMode).catch(() => ({ ok: false, error: "error" }));
+        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings } = settings.store;
+        const audioSettings = syncAudioSettings ? captureMasterAudioSettings() : undefined;
+        // @ts-ignore - Argument 'detached', pseudo, domaine, token protection, perf mode, audioSettings
+        const res = await Native.openInstanceWindow(acc.token, acc.id, true, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings).catch(() => ({ ok: false, error: "error" }));
         if ((res as any).ok) {
             setStatus(t("Instance opened"));
             await refreshInstances();
@@ -511,9 +921,10 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
         }
         setCtx(null);
         setStatus(t("Opening grouped instance…"));
-        const { domain, blockExternalTokenAccess, performanceMode } = settings.store;
+        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings } = settings.store;
+        const audioSettings = syncAudioSettings ? captureMasterAudioSettings() : undefined;
         // @ts-ignore
-        const res = await Native.openInstanceWindowGrouped(acc.token, acc.id, acc.username, domain, blockExternalTokenAccess, performanceMode).catch(() => ({ ok: false, error: "error" }));
+        const res = await Native.openInstanceWindowGrouped(acc.token, acc.id, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings).catch(() => ({ ok: false, error: "error" }));
         if ((res as any).ok) {
             setStatus(t("Instance opened"));
             await refreshInstances();
@@ -543,46 +954,28 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
                     <strong>{t("Left click")}</strong> {t("or")} <strong>{t("right click")}</strong> → {t("options menu")}
                 </p>
 
-                {/* Active account */}
-                {currentUser && (
-                    <div className="mi-list">
-                        <div className="mi-section-label">{t("ACTIVE ACCOUNT")}</div>
-                        <div className="mi-account-row mi-account-row--current">
-                            <AccountAvatar
-                                url={getAvatarUrl(currentUser.id, currentUser.avatar)}
-                                name={currentUser.username}
-                            />
-                            <div className="mi-account-info">
-                                <span className="mi-account-name">
-                                    {(currentUser as any).globalName || currentUser.username}
-                                </span>
-                                <span className="mi-account-tag">@{currentUser.username}</span>
-                            </div>
-                            <span className="mi-badge-current">{t("Active")}</span>
-                        </div>
-                    </div>
-                )}
-
-                {/* Autres accounts */}
                 <div className="mi-list">
                     <div className="mi-section-label">
-                        {allAccounts.length} {t(allAccounts.length !== 1 ? "OTHER ACCOUNTS" : "OTHER ACCOUNT")}
+                        {allAccounts.length} {t(allAccounts.length !== 1 ? "ACCOUNTS" : "ACCOUNT")}
                     </div>
 
                     {allAccounts.length === 0 ? (
                         <div className="mi-empty">
-                            {t("No other account found.")}<br />
+                            {t("No account found.")}<br />
                             {t("Use")} "<strong>{t("Switch Account")}</strong>" {t("in Discord or add tokens via")} <strong>{t("TokenImporter")}</strong>.
                         </div>
                     ) : allAccounts.map(acc => {
+                        const isCurrent = acc.id === currentUser?.id;
                         const isOpen = openInstances.includes(acc.id);
-                        const tagText = acc.hasToken
-                            ? (acc.isNative ? t("Discord Account") : t("Token"))
-                            : t("Requires normal login to capture token");
+                        const tagText = isCurrent
+                            ? `@${currentUser?.username ?? acc.username}`
+                            : (acc.hasToken
+                                ? (acc.isNative ? t("Discord Account") : t("Token"))
+                                : t("Requires normal login to capture token"));
                         return (
                             <div
                                 key={acc.id}
-                                className={`mi-account-row${isOpen ? " mi-account-row--active" : ""}${!acc.hasToken ? " mi-account-row--no-token" : ""}`}
+                                className={`mi-account-row${isCurrent ? " mi-account-row--current" : ""}${isOpen ? " mi-account-row--active" : ""}${!acc.hasToken && !isCurrent ? " mi-account-row--no-token" : ""}`}
                                 onClick={e => openCtx(e, acc)}
                                 onContextMenu={e => openCtx(e, acc)}
                             >
@@ -593,7 +986,9 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
                                         {tagText}
                                     </span>
                                 </div>
-                                {acc.hasToken ? (
+                                {isCurrent ? (
+                                    <span className="mi-badge-current">{t("Active")}</span>
+                                ) : acc.hasToken ? (
                                     isOpen
                                         ? <span className="mi-badge-open">{t("Open")}</span>
                                         : <span className="mi-badge-arrow">›</span>
@@ -874,6 +1269,10 @@ async function initInstanceWindowAuth(): Promise<void> {
         });
     });
 
+    if (settings.store.syncAudioSettings !== false) {
+        syncInstanceAudioSettings();
+    }
+
     // 5. Gentle fallback checks (at 1s, 2.5s, 5s)
     [1000, 2500, 5000].forEach(delay => {
         setTimeout(() => {
@@ -910,12 +1309,18 @@ export default definePlugin({
         hookEncryptAndStoreTokens();
         this._fluxUnsub = hookFluxDispatcher();
         captureCurrentToken();
+        fetchAllAccounts().catch(() => {});
+        if (!isCurrentInstanceWindow()) {
+            scheduleMasterAudioSave();
+            hookAudioSettingsWatcher();
+        }
         addHeaderBarButton("guncord-multi-instance", () => <MultiInstanceButton />, 9);
     },
 
     stop() {
         removeHeaderBarButton("guncord-multi-instance");
         if (this._fluxUnsub) { this._fluxUnsub(); this._fluxUnsub = null; }
+        if (unhookAudioWatcher) { unhookAudioWatcher(); }
         const root = document.getElementById("guncord-mi-ctx-root");
         if (root) root.remove();
     },

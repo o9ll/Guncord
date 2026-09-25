@@ -24,8 +24,8 @@ const suffix = IS_DEV ? "dev" : "";
 
 export const DATA_DIR = process.env.GUNCORD_USER_DATA_DIR ?? (
     process.env.DISCORD_USER_DATA_DIR
-        ? join(process.env.DISCORD_USER_DATA_DIR, "..", "GuncordData", suffix)
-        : join(app.getPath("userData"), "..", "Guncord", suffix)
+        ? join(process.env.DISCORD_USER_DATA_DIR, "..", "Guncord")
+        : join(app.getPath("userData"), "..", "Guncord")
 );
 
 export const SETTINGS_DIR = join(DATA_DIR, "settings");

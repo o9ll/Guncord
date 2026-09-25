@@ -80,16 +80,40 @@ function UserAreaButtons({ props }: { props: UserAreaRenderProps; }) {
     return (
         <>
             <style>{`
-                /* Allow the username and status text to shrink and truncate when the sidebar is small, 
-                   freeing up space for the extra plugins buttons without cutting them off */
+                /* ── Clean UserArea layout ──
+                   Ensure all buttons (AntiMove, FakeVoice, Ghost, Mute, Deafen, Settings)
+                   stay cleanly aligned on a single row without wrapping, double-decking, or inflating container height.
+                   Nametag truncates gracefully when the sidebar is narrowed. */
+
+                /* 1. Account popout wrapper and nametag shrinking */
+                div[class*="accountPopoutButtonWrapper_"],
                 div[class*="nameTag_"] {
                     min-width: 0 !important;
+                    flex-shrink: 1 !important;
                 }
+
                 div[class*="nameTag_"] > * {
                     min-width: 0 !important;
                     overflow: hidden !important;
                     text-overflow: ellipsis !important;
                     white-space: nowrap !important;
+                }
+
+                /* 2. User area buttons container stays strictly on one row */
+                div[class*="buttons_"]:has(> .vc-user-area-btns) {
+                    display: flex !important;
+                    flex-wrap: nowrap !important;
+                    flex-shrink: 0 !important;
+                    align-items: center !important;
+                }
+
+                /* 3. Ensure audio button parents and individual buttons never shrink */
+                div[class*="buttons_"]:has(> .vc-user-area-btns) [class*="audioButtonParent_"],
+                div[class*="buttons_"]:has(> .vc-user-area-btns) > button,
+                div[class*="buttons_"]:has(> .vc-user-area-btns) > div,
+                .vc-user-area-btns > button,
+                .vc-user-area-btns > div {
+                    flex-shrink: 0 !important;
                 }
 
                 /* ── Guncord UserArea Bottom-Left Buttons Hover Spring Animation ── */

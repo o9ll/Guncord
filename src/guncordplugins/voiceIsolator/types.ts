@@ -5,6 +5,7 @@
  */
 
 export interface VoiceIsolatorState {
+    isolatedUserIds: string[];
     isolatedUserId: string | null;
     isolatedUserName: string | null;
     isolatedUserAvatar: string | null;

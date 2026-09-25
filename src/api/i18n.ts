@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Language, t as pluginT, getActiveLanguage } from "../guncordplugins/autoTranslateGuncord";
+import { Settings } from "@api/Settings";
+import { getActiveLanguage, t as pluginT } from "../guncordplugins/autoTranslateGuncord";
 
 export type Language = "en" | "fr" | "es" | "ru" | "zh" | "ar";
 

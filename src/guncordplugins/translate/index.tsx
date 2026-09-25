@@ -16,7 +16,7 @@ import { settings, setOnAutoTranslateReceivedToggled } from "./settings";
 import { TranslateChatBarIcon, TranslateIcon } from "./TranslateIcon";
 import { handleTranslate, TranslationAccessory } from "./TranslationAccessory";
 import { translate } from "./utils";
-import { initTranslateOnSpace, stopTranslateOnSpace } from "./wordTranslate";
+import { IDIOM_TRANSLATIONS, initTranslateOnSpace, stopTranslateOnSpace } from "./wordTranslate";
 import { t } from "../autoTranslateGuncord";
 
 import { iconsModule } from "@plugins/_core/concatenatedModules";
@@ -266,12 +266,24 @@ export default definePlugin({
     },
 
     async onBeforeMessageSend(_, message, options) {
-        if (!settings.store.autoTranslate) return;
+        if (!settings.store.autoTranslate && !settings.store.translateOnSpace) return;
         if (!message?.content?.trim()) return;
+        if (message.content.startsWith("/")) return;
 
         try {
+            const clean = message.content.trim().toLowerCase();
+            const cleanNoApos = clean.replace(/['’]/g, "");
+            const idiom = IDIOM_TRANSLATIONS[clean] || IDIOM_TRANSLATIONS[cleanNoApos];
+            if (idiom) {
+                message.content = idiom;
+                if (options && typeof options.content === "string") {
+                    options.content = idiom;
+                }
+                return;
+            }
+
             const trans = await translate("sent", message.content);
-            if (trans?.text) {
+            if (trans?.text && trans.text.trim()) {
                 message.content = trans.text;
                 if (options && typeof options.content === "string") {
                     options.content = trans.text;

@@ -23,8 +23,28 @@ let serverProc: childProcess.ChildProcess | null = null;
 let serverReady = false;
 let startPromise: Promise<boolean> | null = null;
 
-// ── Find server/server.js ────────────────────────────────────────────
+// ── Vérifier si l'utilisateur a désinstallé le serveur via GhostInstaller ────
+function isInstallerMarkedUninstalled(): boolean {
+    try {
+        let userData = "";
+        try { userData = app.getPath("userData"); } catch {}
+        if (userData) {
+            const stateFile = path.join(userData, "GhostClientInstaller", "ghost-installer-state.json");
+            if (fs.existsSync(stateFile)) {
+                const state = JSON.parse(fs.readFileSync(stateFile, "utf-8"));
+                if (state.installed === false) return true;
+            }
+        }
+    } catch {}
+    return false;
+}
+
+// ── Trouver server/server.js ────────────────────────────────────────────
 function findServerScript(): string | null {
+    if (isInstallerMarkedUninstalled()) {
+        return null;
+    }
+
     const execDir = path.dirname(process.execPath);
     const resPath = process.resourcesPath;
     let userData = "";
@@ -91,14 +111,22 @@ async function killZombieServer(): Promise<void> {
             // Si toujours en vie sur Windows, trouver le PID sur le port 47821 et le tuer
             if (process.platform === "win32" && await ping()) {
                 try {
-                    const out = childProcess.execSync(`netstat -ano | findstr :${PORT}`, { encoding: "utf-8" });
-                    for (const line of out.split("\n")) {
-                        const parts = line.trim().split(/\s+/);
-                        const pid = parts[parts.length - 1];
-                        if (pid && !isNaN(Number(pid)) && Number(pid) > 0 && Number(pid) !== process.pid) {
-                            childProcess.execSync(`taskkill /F /PID ${pid}`, { stdio: "ignore" });
-                        }
-                    }
+                    await new Promise<void>(res => {
+                        childProcess.exec(`netstat -ano | findstr :${PORT}`, (err, stdout) => {
+                            if (!err && stdout) {
+                                for (const line of stdout.split("\n")) {
+                                    const parts = line.trim().split(/\s+/);
+                                    const pid = parts[parts.length - 1];
+                                    if (pid && !isNaN(Number(pid)) && Number(pid) > 0 && Number(pid) !== process.pid) {
+                                        try {
+                                            childProcess.spawn("taskkill", ["/F", "/PID", pid], { windowsHide: true });
+                                        } catch { }
+                                    }
+                                }
+                            }
+                            res();
+                        });
+                    });
                 } catch { }
                 await new Promise(r => setTimeout(r, 400));
             }
@@ -139,6 +167,10 @@ function syncServerScriptIfOutdated(): void {
 }
 
 async function ensureServer(): Promise<boolean> {
+    if (isInstallerMarkedUninstalled()) {
+        console.warn("[GhostNative] GhostClient companion server is uninstalled.");
+        return false;
+    }
     if (serverReady && serverProc && await ping()) return true;
     if (startPromise) return startPromise;
 
@@ -334,11 +366,13 @@ export async function listAudioInputDevices(_: any): Promise<{ label: string; ds
 
 export async function connectGhost(
     _: any, userId: string, token: string, guildId: string, channelId: string, micDevice: string,
-): Promise<{ ok: boolean; error?: string; }> {
-    // server awaits DVS internally (up to 60s) + login (20s) + joinVoice
-    // 120s HTTP timeout to cover worst case without stacking waitForDVS
-    try { return await api("/connect", { userId, token, guildId, channelId, micDevice }, 120000); }
-    catch (e: any) { return { ok: false, error: e?.message ?? String(e) }; }
+): Promise<{ ok: boolean; error?: string; notInServer?: boolean; }> {
+    try {
+        const res = await api("/connect", { userId, token, guildId, channelId, micDevice }, 120000);
+        return res ?? { ok: false, error: "Empty response" };
+    } catch (e: any) {
+        return { ok: false, error: e?.message ?? String(e) };
+    }
 }
 
 export async function preConnectGhost(
@@ -376,6 +410,10 @@ export async function disconnectGhost(_: any, userId: string): Promise<void> {
 
 export async function setMicDevice(_: any, micDevice: string): Promise<void> {
     try { await api("/set-mic", { micDevice }); } catch { }
+}
+
+export async function setVolume(_: any, volume: number, vocalBoost = false): Promise<void> {
+    try { await api("/set-volume", { volume, vocalBoost }); } catch { }
 }
 
 export async function fakeMute(_: any, userIds: string[], muted: boolean): Promise<void> {

@@ -5,12 +5,41 @@
  */
 
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { closeModal, ModalCloseButton, ModalContent, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
+import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
+import { Card } from "@components/Card";
+import { Heading } from "@components/Heading";
+import { Paragraph } from "@components/Paragraph";
+import { openInviteModal } from "@utils/discord";
+import { closeModal, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin from "@utils/types";
-import { Menu, React, Text, useEffect, useState, IconUtils } from "@webpack/common";
+import { FluxDispatcher, IconUtils, Menu, React, RestAPI, Text, useEffect, useState, UserStore } from "@webpack/common";
 import { findByPropsLazy } from "@webpack";
+import { t } from "../autoTranslateGuncord";
+
 const PresenceStore = findByPropsLazy("getStatus", "isMobileOnline");
-const AuthStore = findByPropsLazy("getToken");
+const AuthStore = findByPropsLazy("getToken", "getSessionId");
+const GuildStore = findByPropsLazy("getGuild", "getGuilds");
+const ChannelStore = findByPropsLazy("getChannel");
+const ApplicationCommandIndexStore = findByPropsLazy("getApplicationState", "query");
+
+const CROW_GUILD_ID = "585517467116371988";
+const CROW_CHANNEL_ID = "1227867588323709009";
+const CROW_INVITE_CODE = "crow-bots";
+const CROW_INVITE_URL = "https://discord.gg/crow-bots";
+const DISCORD_EPOCH = 1420070400000n;
+
+function generateNonce(): string {
+    return String((BigInt(Date.now()) - DISCORD_EPOCH) << 22n);
+}
+
+function isUserInCrowServer(): boolean {
+    try {
+        return Boolean(GuildStore?.getGuild(CROW_GUILD_ID));
+    } catch {
+        return false;
+    }
+}
 
 type UserStatus = "online" | "idle" | "dnd" | "invisible" | "offline";
 
@@ -23,9 +52,7 @@ function useUserStatus(userId: string): UserStatus {
         const update = () => {
             try { setStatus(PresenceStore.getStatus(userId) ?? "offline"); } catch {}
         };
-        // PresenceStore dispatches on flux — poll on mount is enough for a modal
         update();
-        // Optional: subscribe if PresenceStore exposes an addChangeListener
         if (typeof PresenceStore.addChangeListener === "function") {
             PresenceStore.addChangeListener(update);
             return () => PresenceStore.removeChangeListener?.(update);
@@ -43,9 +70,7 @@ const STATUS_COLOR: Record<UserStatus, string> = {
     offline:   "#80848e",
 };
 
-// ─── API ──────────────────────────────────────────────────────────────────────
-
-const API_BASE = "https://api-dq0h.onrender.com";
+// ─── API & Bot Interaction Engine ─────────────────────────────────────────────
 
 interface PrevNameEntry {
     timestamp: number;
@@ -58,21 +83,319 @@ interface PrevNamesResponse {
     prevnames: PrevNameEntry[];
 }
 
-async function fetchPrevNames(userId: string): Promise<PrevNamesResponse> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000); // 15s timeout
+interface CachedCommandInfo {
+    id: string;
+    application_id: string;
+    version: string;
+    name: string;
+    options?: any[];
+}
+
+let cachedCommand: CachedCommandInfo | null = null;
+
+async function resolvePrevnamesCommand(): Promise<CachedCommandInfo> {
+    if (cachedCommand) return cachedCommand;
+
+    // 1. Try querying ApplicationCommandIndexStore
     try {
-        const res = await fetch(`${API_BASE}/prevnames/${userId}`, { signal: controller.signal });
-        if (res.status === 404) return { userId, prevnames: [] };
-        if (res.status === 429) throw new Error("RATE_LIMITED");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-    } catch (e: any) {
-        if (e?.name === "AbortError") throw new Error("TIMEOUT");
-        throw e;
-    } finally {
-        clearTimeout(timeout);
+        const channel = ChannelStore?.getChannel(CROW_CHANNEL_ID);
+        if (channel && ApplicationCommandIndexStore?.query) {
+            const res = ApplicationCommandIndexStore.query(
+                { channel },
+                { commandType: 1, text: "prevnames" },
+                { placeholderCount: 0, scoreThreshold: 0 }
+            );
+            const cmd = res?.commands?.find((c: any) => c.name === "prevnames");
+            if (cmd) {
+                cachedCommand = {
+                    id: cmd.id,
+                    application_id: cmd.applicationId || cmd.application_id,
+                    version: cmd.version,
+                    name: cmd.name,
+                    options: cmd.options
+                };
+                return cachedCommand;
+            }
+        }
+    } catch {}
+
+    // 2. Fetch directly from Discord API channel search
+    try {
+        const res = await RestAPI.get({
+            url: `/channels/${CROW_CHANNEL_ID}/application-commands/search?query=prevnames&limit=5`
+        });
+        const commands = res?.body?.application_commands || res?.application_commands || [];
+        const cmd = commands.find((c: any) => c.name === "prevnames");
+        if (cmd) {
+            cachedCommand = {
+                id: cmd.id,
+                application_id: cmd.application_id,
+                version: cmd.version,
+                name: cmd.name,
+                options: cmd.options
+            };
+            return cachedCommand;
+        }
+    } catch (e) {
+        console.error("[PrevNames] Failed to fetch command via search API:", e);
     }
+
+    // 3. Fallback to guild application-command-index
+    try {
+        const res = await RestAPI.get({
+            url: `/guilds/${CROW_GUILD_ID}/application-command-index`
+        });
+        const commands = res?.body?.application_commands || res?.application_commands || [];
+        const cmd = commands.find((c: any) => c.name === "prevnames");
+        if (cmd) {
+            cachedCommand = {
+                id: cmd.id,
+                application_id: cmd.application_id,
+                version: cmd.version,
+                name: cmd.name,
+                options: cmd.options
+            };
+            return cachedCommand;
+        }
+    } catch (e) {
+        console.error("[PrevNames] Failed to fetch command via guild index:", e);
+    }
+
+    throw new Error("COMMAND_NOT_FOUND");
+}
+
+function parseEmbedData(embed: any): { entries: PrevNameEntry[]; currentPage: number; totalPages: number } {
+    const textParts = [
+        embed?.description || "",
+        ...(embed?.fields?.map((f: any) => `${f.name || ""}\n${f.value || ""}`) || [])
+    ];
+    const fullText = textParts.join("\n");
+    const lines = fullText.split("\n").map(l => l.trim()).filter(Boolean);
+    const entries: PrevNameEntry[] = [];
+
+    for (const rawLine of lines) {
+        // Strip leading list bullet markers
+        const line = rawLine.replace(/^[•\-\*]\s*/, "").trim();
+
+        // 1. Discord timestamp format: <t:1726100000:d> - username
+        const tsMatch = line.match(/<t:(\d+)(?::[a-zA-Z])?>\s*[-–—:]\s*(.+)/);
+        if (tsMatch) {
+            const ts = parseInt(tsMatch[1], 10) * 1000;
+            const name = tsMatch[2].replace(/[*`_~]/g, "").trim();
+            if (name) {
+                const rawDate = new Date(ts).toLocaleDateString("en-US");
+                entries.push({ timestamp: ts, date: rawDate, name });
+                continue;
+            }
+        }
+
+        // 2. Date format with optional backticks, bold, etc.: `9/12/2026` - addictive
+        const m = line.match(/^[`*_\s]*([0-9]{1,4}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{1,4})[`*_\s]*\s*[-–—:]\s*(.+)$/);
+        if (m) {
+            const rawDate = m[1].trim();
+            const name = m[2].replace(/[*`_~]/g, "").trim();
+            if (name) {
+                const parsedTime = Date.parse(rawDate);
+                const timestamp = !isNaN(parsedTime) ? parsedTime : Date.now();
+                entries.push({
+                    timestamp,
+                    date: rawDate,
+                    name
+                });
+                continue;
+            }
+        }
+
+        // 3. Fallback: any line containing date and separator
+        const fallbackMatch = line.match(/([0-9]{1,4}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{1,4})\s*[-–—:]\s*(.+)/);
+        if (fallbackMatch) {
+            const rawDate = fallbackMatch[1].trim();
+            const name = fallbackMatch[2].replace(/[*`_~]/g, "").trim();
+            if (name) {
+                const parsedTime = Date.parse(rawDate);
+                const timestamp = !isNaN(parsedTime) ? parsedTime : Date.now();
+                entries.push({
+                    timestamp,
+                    date: rawDate,
+                    name
+                });
+            }
+        }
+    }
+
+    let currentPage = 1;
+    let totalPages = 1;
+    const footerText = embed?.footer?.text || "";
+    const pageMatch = footerText.match(/(\d+)\s*\/\s*(\d+)/);
+    if (pageMatch) {
+        currentPage = parseInt(pageMatch[1], 10);
+        totalPages = parseInt(pageMatch[2], 10);
+    }
+
+    return { entries, currentPage, totalPages };
+}
+
+async function fetchPrevNames(userId: string): Promise<PrevNamesResponse> {
+    if (!isUserInCrowServer()) {
+        throw new Error("NOT_IN_SERVER");
+    }
+    const currentUserId = UserStore.getCurrentUser()?.id;
+    const sessionId = AuthStore?.getSessionId?.() ?? "";
+    const cmd = await resolvePrevnamesCommand();
+
+    const interactionNonce = generateNonce();
+
+    return new Promise((resolve, reject) => {
+        let isDone = false;
+        let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+        let targetMessageId: string | null = null;
+        let targetAppId: string = cmd.application_id;
+        let lastMessage: any = null;
+        let isPaging = false;
+
+        const allEntries: PrevNameEntry[] = [];
+        const seenKeys = new Set<string>();
+
+        function addEntries(entries: PrevNameEntry[]) {
+            for (const e of entries) {
+                const key = `${e.timestamp}_${e.name}`;
+                if (!seenKeys.has(key)) {
+                    seenKeys.add(key);
+                    allEntries.push(e);
+                }
+            }
+        }
+
+        function finish(success = true) {
+            if (isDone) return;
+            isDone = true;
+            if (timeoutTimer) clearTimeout(timeoutTimer);
+            FluxDispatcher.unsubscribe("MESSAGE_CREATE", onMessageCreate);
+            FluxDispatcher.unsubscribe("MESSAGE_UPDATE", onMessageUpdate);
+
+            if (success) {
+                resolve({ userId, prevnames: allEntries });
+            } else {
+                reject(new Error("TIMEOUT"));
+            }
+        }
+
+        timeoutTimer = setTimeout(() => {
+            if (!isDone) {
+                if (allEntries.length > 0) {
+                    finish(true);
+                } else {
+                    finish(false);
+                }
+            }
+        }, 15000);
+
+        async function handleBotMessage(msg: any) {
+            if (msg?.channel_id !== CROW_CHANNEL_ID) return;
+
+            const isOurInteraction =
+                (msg.nonce === interactionNonce) ||
+                (msg.interaction?.user?.id === currentUserId && msg.interaction?.name === "prevnames") ||
+                (targetMessageId && msg.id === targetMessageId);
+
+            if (!isOurInteraction && !targetMessageId) {
+                const title = msg.embeds?.[0]?.title || "";
+                if (!title.toLowerCase().includes("pseudo") && !title.toLowerCase().includes("prevname")) {
+                    return;
+                }
+            }
+
+            targetMessageId = msg.id;
+            targetAppId = msg.application_id ?? msg.author?.id ?? cmd.application_id;
+            lastMessage = msg;
+
+            const embed = msg.embeds?.[0];
+            if (!embed) return;
+
+            const { entries, currentPage, totalPages } = parseEmbedData(embed);
+            addEntries(entries);
+
+            // If there are more pages, click button 2 (index 1) to navigate
+            if (currentPage < totalPages && !isPaging) {
+                isPaging = true;
+                const buttons = (msg.components?.[0]?.components || []);
+                const nextBtn = buttons[1] || buttons.find((b: any) => b.custom_id?.includes("next") || b.custom_id?.includes("right"));
+                if (nextBtn && !nextBtn.disabled) {
+                    await new Promise(r => setTimeout(r, 200));
+                    try {
+                        await RestAPI.post({
+                            url: "/interactions",
+                            body: {
+                                type: 3, // MESSAGE_COMPONENT
+                                channel_id: CROW_CHANNEL_ID,
+                                message_id: msg.id,
+                                application_id: targetAppId,
+                                session_id: sessionId,
+                                message_flags: msg.flags ?? 0,
+                                data: {
+                                    component_type: 2, // BUTTON
+                                    custom_id: nextBtn.custom_id,
+                                },
+                                nonce: generateNonce(),
+                                guild_id: CROW_GUILD_ID
+                            }
+                        });
+                        isPaging = false;
+                        return; // wait for next MESSAGE_UPDATE
+                    } catch (err) {
+                        console.error("[PrevNames] Failed to click next button:", err);
+                    }
+                }
+                isPaging = false;
+            }
+
+            if (currentPage >= totalPages) {
+                finish(true);
+            }
+        }
+
+        function onMessageCreate({ message }: { message: any }) {
+            handleBotMessage(message);
+        }
+
+        function onMessageUpdate({ message }: { message: any }) {
+            handleBotMessage(message);
+        }
+
+        FluxDispatcher.subscribe("MESSAGE_CREATE", onMessageCreate);
+        FluxDispatcher.subscribe("MESSAGE_UPDATE", onMessageUpdate);
+
+        const option = cmd.options?.[0] ?? { name: "membre", type: 6 };
+        RestAPI.post({
+            url: "/interactions",
+            body: {
+                type: 2, // APPLICATION_COMMAND
+                application_id: cmd.application_id,
+                guild_id: CROW_GUILD_ID,
+                channel_id: CROW_CHANNEL_ID,
+                session_id: sessionId,
+                data: {
+                    version: cmd.version,
+                    id: cmd.id,
+                    name: cmd.name,
+                    type: 1,
+                    options: [
+                        {
+                            type: option.type,
+                            name: option.name,
+                            value: userId
+                        }
+                    ],
+                    application_command: cmd,
+                    attachments: []
+                },
+                nonce: interactionNonce
+            }
+        }).catch(err => {
+            console.error("[PrevNames] Failed to send interaction:", err);
+            finish(false);
+        });
+    });
 }
 
 function getBannerUrl(userId: string, bannerHash: string | null | undefined, size = 480): string | null {
@@ -88,6 +411,7 @@ function getAvatarUrl(userId: string, avatarHash: string | null | undefined, siz
 }
 
 function formatRelativeDate(date: Date): string {
+    if (isNaN(date.getTime())) return "";
     const now = new Date();
     const isToday =
         date.getDate() === now.getDate() &&
@@ -212,7 +536,8 @@ function CopyBtn({ text, label }: { text: string; label?: string }) {
 function NameCard({ entry, index, isLatest, isOldest, search }: {
     entry: PrevNameEntry; index: number; isLatest: boolean; isOldest: boolean; search: string;
 }) {
-    const date = new Date(entry.date);
+    const date = new Date(entry.timestamp || entry.date);
+    const formattedDate = !isNaN(date.getTime()) ? formatRelativeDate(date) : entry.date;
 
     return (
         <div
@@ -248,7 +573,7 @@ function NameCard({ entry, index, isLatest, isOldest, search }: {
                         </div>
                         <div className="vc-pn-card-date">
                             <CalendarIcon size={11} color="var(--text-muted)" />
-                            <span>{formatRelativeDate(date)}</span>
+                            <span>{formattedDate || entry.date}</span>
                         </div>
                     </div>
 
@@ -264,21 +589,32 @@ function NameCard({ entry, index, isLatest, isOldest, search }: {
 
 // ─── Skeleton Loading ────────────────────────────────────────────────────────
 
-function SkeletonCard({ index }: { index: number }) {
+function LoadingState() {
     return (
-        <div className="vc-pn-card" style={{ animationDelay: `${index * 0.06}s`, opacity: 0.6 }}>
-            <div className="vc-pn-timeline-track">
-                <div className="vc-pn-timeline-dot" />
-                {index < 3 && <div className="vc-pn-timeline-line" />}
+        <div className="vc-pn-loading-state">
+            {/* Spinner */}
+            <div className="vc-pn-spinner-wrap">
+                <svg className="vc-pn-spinner" viewBox="0 0 32 32" fill="none">
+                    <circle cx="16" cy="16" r="13" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
+                    <path
+                        d="M16 3 A13 13 0 0 1 29 16"
+                        stroke="rgba(255,255,255,0.55)"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                    />
+                </svg>
             </div>
-            <div className="vc-pn-card-body">
-                <div className="vc-pn-card-inner" style={{ gap: 10 }}>
-                    <div className="vc-pn-skeleton" style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0 }} />
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <div className="vc-pn-skeleton" style={{ width: `${45 + index * 8}%`, height: 14, borderRadius: 6 }} />
-                        <div className="vc-pn-skeleton" style={{ width: "55%", height: 10, borderRadius: 4 }} />
+            {/* Shimmer rows */}
+            <div className="vc-pn-shimmer-rows">
+                {[72, 55, 64, 48].map((w, i) => (
+                    <div key={i} className="vc-pn-shimmer-row" style={{ animationDelay: `${i * 0.12}s` }}>
+                        <div className="vc-pn-shimmer-dot" style={{ animationDelay: `${i * 0.12}s` }} />
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 7 }}>
+                            <div className="vc-pn-shimmer-bar" style={{ width: `${w}%`, height: 13, animationDelay: `${i * 0.12}s` }} />
+                            <div className="vc-pn-shimmer-bar" style={{ width: "40%", height: 9, animationDelay: `${i * 0.12 + 0.06}s` }} />
+                        </div>
                     </div>
-                </div>
+                ))}
             </div>
         </div>
     );
@@ -486,7 +822,10 @@ function PrevNamesModal({ modalProps, userId, username, avatarHash }: {
                                 <span className="vc-pn-stat-label">Since</span>
                                 <span className="vc-pn-stat-value">
                                     {all.length > 0
-                                        ? new Date(all[all.length - 1].date).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+                                        ? (() => {
+                                            const d = new Date(all[all.length - 1].timestamp || all[all.length - 1].date);
+                                            return !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "short", year: "numeric" }) : all[all.length - 1].date;
+                                          })()
                                         : "—"}
                                 </span>
                             </div>
@@ -499,10 +838,17 @@ function PrevNamesModal({ modalProps, userId, username, avatarHash }: {
             <ModalContent className="vc-pn-content">
 
                 {/* Loading */}
-                {loading && (
-                    <div>
-                        <div className="vc-pn-section-label vc-pn-skeleton" style={{ width: 80, height: 12, borderRadius: 4, marginBottom: 16 }} />
-                        {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} index={i} />)}
+                {loading && <LoadingState />}
+
+                {/* Not in server */}
+                {!loading && error === "NOT_IN_SERVER" && (
+                    <div className="vc-pn-alert vc-pn-alert--warn">
+                        <div className="vc-pn-alert-icon"><AlertIcon size={20} color="#f0b232" /></div>
+                        <div className="vc-pn-alert-body">
+                            <span className="vc-pn-alert-title" style={{ color: "#f0b232" }}>{t("Crow Bots Server Required")}</span>
+                            <span className="vc-pn-alert-desc" style={{ color: "#ffffff" }}>{t("To view username history, you must join the official Crow Bots Discord server.")}</span>
+                        </div>
+                        <button onClick={() => openInviteModal(CROW_INVITE_CODE)} className="vc-pn-retry-btn">{t("Join Server")}</button>
                     </div>
                 )}
 
@@ -511,8 +857,8 @@ function PrevNamesModal({ modalProps, userId, username, avatarHash }: {
                     <div className="vc-pn-alert vc-pn-alert--warn">
                         <div className="vc-pn-alert-icon"><ClockIcon size={20} color="#f0b232" /></div>
                         <div className="vc-pn-alert-body">
-                            <span className="vc-pn-alert-title" style={{ color: "#f0b232" }}>Server waking up…</span>
-                            <span className="vc-pn-alert-desc" style={{ color: "#ffffff" }}>The API server was sleeping (Render free tier). It usually takes 30–60s to start. Please retry.</span>
+                            <span className="vc-pn-alert-title" style={{ color: "#f0b232" }}>Timeout</span>
+                            <span className="vc-pn-alert-desc" style={{ color: "#ffffff" }}>The bot took too long to respond in the channel. Please retry.</span>
                         </div>
                         <button onClick={load} className="vc-pn-retry-btn">Retry</button>
                     </div>
@@ -531,7 +877,7 @@ function PrevNamesModal({ modalProps, userId, username, avatarHash }: {
                 )}
 
                 {/* Error */}
-                {!loading && error && !isRateLimited && (
+                {!loading && error && error !== "NOT_IN_SERVER" && !isRateLimited && (
                     <div className="vc-pn-alert vc-pn-alert--error">
                         <div className="vc-pn-alert-icon"><AlertIcon size={20} color="#f23f42" /></div>
                         <div className="vc-pn-alert-body">
@@ -623,9 +969,70 @@ function PrevNamesModal({ modalProps, userId, username, avatarHash }: {
     );
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Modals & Settings ────────────────────────────────────────────────────────
+
+function openJoinCrowServerModal() {
+    const key = openModal(props => (
+        <ModalRoot {...props} size={ModalSize.DYNAMIC} className="vc-pn-modal-root">
+            <ModalHeader separator={false} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 24px 0" }}>
+                <Heading variant="heading-lg/semibold" style={{ color: "#ffffff" }}>
+                    {t("Crow Bots Server Required")}
+                </Heading>
+                <ModalCloseButton onClick={() => closeModal(key)} />
+            </ModalHeader>
+            <ModalContent style={{ padding: "16px 24px 20px" }}>
+                <Paragraph style={{ color: "var(--text-muted)", fontSize: "15px", lineHeight: "1.5", marginBottom: "12px" }}>
+                    {t("To view username history, you must join the official Crow Bots Discord server.")}
+                </Paragraph>
+                <Paragraph style={{ color: "var(--text-muted)", fontSize: "14px", lineHeight: "1.5", marginBottom: "16px" }}>
+                    {t("PrevNames queries the bot in the background within the dedicated channel. You must be a member of the Crow Bots server to use it.")}
+                </Paragraph>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <a
+                        href={CROW_INVITE_URL}
+                        onClick={e => {
+                            e.preventDefault();
+                            openInviteModal(CROW_INVITE_CODE);
+                        }}
+                        style={{
+                            color: "var(--text-link)",
+                            fontSize: "14px",
+                            fontWeight: 600,
+                            textDecoration: "underline",
+                            cursor: "pointer"
+                        }}
+                    >
+                        {CROW_INVITE_URL}
+                    </a>
+                </div>
+            </ModalContent>
+            <ModalFooter style={{ display: "flex", justifyContent: "flex-end", gap: "20px", padding: "16px 24px" }}>
+                <Button
+                    color={Button.Colors.PRIMARY}
+                    look={Button.Looks.LINK}
+                    onClick={() => closeModal(key)}
+                >
+                    {t("Cancel")}
+                </Button>
+                <Button
+                    color={Button.Colors.BRAND}
+                    onClick={() => {
+                        openInviteModal(CROW_INVITE_CODE);
+                        closeModal(key);
+                    }}
+                >
+                    {t("Join Server")}
+                </Button>
+            </ModalFooter>
+        </ModalRoot>
+    ));
+}
 
 function openPrevNamesModal(userId: string, username: string, avatarHash?: string | null) {
+    if (!isUserInCrowServer()) {
+        openJoinCrowServerModal();
+        return;
+    }
     const key = openModal(props => (
         <PrevNamesModal
             modalProps={{ ...props, onClose: () => closeModal(key) }}
@@ -635,6 +1042,60 @@ function openPrevNamesModal(userId: string, username: string, avatarHash?: strin
         />
     ));
 }
+
+function PrevNamesSettingsComponent() {
+    return (
+        <Card
+            variant="primary"
+            style={{
+                padding: "16px 20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
+                background: "var(--background-secondary)",
+                borderRadius: "12px",
+                border: "1px solid rgba(255, 255, 255, 0.06)",
+                marginTop: "8px"
+            }}
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <Heading variant="heading-md/semibold" style={{ color: "var(--header-primary)" }}>
+                    {t("Crow Bots Server")}
+                </Heading>
+                <Paragraph style={{ color: "var(--text-muted)", fontSize: "13px", lineHeight: "1.5", margin: 0 }}>
+                    {t("PrevNames queries the bot in the background within the dedicated channel. You must be a member of the Crow Bots server to use it.")}
+                </Paragraph>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "4px" }}>
+                <a
+                    href={CROW_INVITE_URL}
+                    onClick={e => {
+                        e.preventDefault();
+                        openInviteModal(CROW_INVITE_CODE);
+                    }}
+                    style={{
+                        color: "var(--text-link)",
+                        fontSize: "14px",
+                        fontWeight: 600,
+                        textDecoration: "underline",
+                        cursor: "pointer"
+                    }}
+                >
+                    {CROW_INVITE_URL}
+                </a>
+                <Button
+                    color={Button.Colors.BRAND}
+                    size={Button.Sizes.SMALL}
+                    onClick={() => openInviteModal(CROW_INVITE_CODE)}
+                >
+                    {t("Join Server")}
+                </Button>
+            </div>
+        </Card>
+    );
+}
+
+const settings = definePluginSettings({});
 
 // ─── Context Menu Patch ───────────────────────────────────────────────────────
 
@@ -656,10 +1117,12 @@ const userCtxPatch: NavContextMenuPatchCallback = (children, props) => {
 
 export default definePlugin({
     name: "PrevNames",
+    enabledByDefault: true,
     description: "Shows the username history of a user. Right-click → PrevNames.",
-    authors: [{ name: "you",
-     id: 0n }],
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["ContextMenuAPI"],
+    settings,
+    settingsAboutComponent: PrevNamesSettingsComponent,
 
     start() {
         const style = document.createElement("style");
@@ -1103,15 +1566,72 @@ export default definePlugin({
                 animation: vc-pn-fadeUp 0.25s ease both;
             }
 
-            /* ── Skeleton ── */
+            /* ── Skeleton (legacy, kept for backwards compat) ── */
             .vc-pn-skeleton {
                 background: linear-gradient(90deg,
-                    rgba(255,255,255,0.03) 25%,
-                    rgba(255,255,255,0.08) 50%,
-                    rgba(255,255,255,0.03) 75%);
+                    rgba(255,255,255,0.05) 25%,
+                    rgba(255,255,255,0.13) 50%,
+                    rgba(255,255,255,0.05) 75%);
                 background-size: 300% 100%;
                 animation: vc-pn-shimmer 1.6s infinite linear;
                 display: block;
+            }
+
+            /* ── Loading State ── */
+            .vc-pn-loading-state {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: 24px 0 16px;
+                gap: 20px;
+            }
+            .vc-pn-spinner-wrap {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .vc-pn-spinner {
+                width: 32px;
+                height: 32px;
+                animation: vc-pn-spin 0.9s linear infinite;
+                flex-shrink: 0;
+            }
+            .vc-pn-shimmer-rows {
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .vc-pn-shimmer-row {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 12px 14px;
+                background: rgba(255,255,255,0.02);
+                border-radius: 10px;
+                border: 1px solid rgba(255,255,255,0.04);
+                animation: vc-pn-fadeUp 0.3s ease both;
+            }
+            .vc-pn-shimmer-dot {
+                width: 22px;
+                height: 22px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                background: linear-gradient(90deg,
+                    rgba(255,255,255,0.06) 25%,
+                    rgba(255,255,255,0.14) 50%,
+                    rgba(255,255,255,0.06) 75%);
+                background-size: 300% 100%;
+                animation: vc-pn-shimmer 1.8s infinite linear;
+            }
+            .vc-pn-shimmer-bar {
+                border-radius: 6px;
+                background: linear-gradient(90deg,
+                    rgba(255,255,255,0.06) 25%,
+                    rgba(255,255,255,0.14) 50%,
+                    rgba(255,255,255,0.06) 75%);
+                background-size: 300% 100%;
+                animation: vc-pn-shimmer 1.8s infinite linear;
             }
         `;
         document.head.appendChild(style);

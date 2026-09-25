@@ -4,37 +4,42 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { authorizeUser, getStoredToken } from "@api/OAuth2";
-import { getPublicPluginConfig, saveOwnPluginConfig } from "@api/PluginSync";
+import { NavContextMenuPatchCallback, removeContextMenuPatch } from "@api/ContextMenu";
+import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import { Card } from "@components/Card";
 import { Flex, FlexAlign, FlexDirection, FlexJustify } from "@components/Flex";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { Button, ChannelStore, Menu, React, RelationshipStore, SelectedChannelStore, showToast, Text, Toasts, UserStore } from "@webpack/common";
+import { Button, ChannelStore, Menu, React, SelectedChannelStore, showToast, Text, Toasts } from "@webpack/common";
 import { t } from "../autoTranslateGuncord";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface CloudWallpaperConfig {
-    dmWallpapers?: Record<string, string>; // [friendUserId]: wallpaperUrl
-    updatedAt?: number;
-    private?: boolean;
-}
-
-// ── In-Memory State & Caches ───────────────────────────────────────────────────
+// ── In-Memory State & Persistent Storage Keys ──────────────────────────────────
 
 let _cachedOpacity = 0.3;
 let _cachedBlur = 0;
 let _wpCache: Record<string, string> | null = null;
 let _wpRaw = "";
 let _activeVideo: HTMLVideoElement | null = null;
-let _syncPollInterval: ReturnType<typeof setInterval> | null = null;
-let _cachedOwnCloudDmWallpapers: Record<string, string> = {};
-const _syncedFromFriends = new Set<string>(); // channelIds synced from friend
-const _syncLastFetched: Record<string, number> = {}; // channelId -> timestamp of last cloud sync
-const SYNC_THROTTLE_MS = 30_000; // skip repeat sync calls within 30 s
+let _chatObserver: MutationObserver | null = null;
+let _activeChannelId: string | null = null;
+let _activeWallpaperUrl: string | null = null;
+
+const LS_LOCAL_WALLPAPERS = "GuncordCW_localWallpapers";
+
+function loadMap<T>(key: string): Record<string, T> {
+    try {
+        const raw = localStorage.getItem(key);
+        if (raw) return JSON.parse(raw);
+    } catch {}
+    return {};
+}
+
+function saveMap<T>(key: string, map: Record<string, T>) {
+    try {
+        localStorage.setItem(key, JSON.stringify(map));
+    } catch {}
+}
 
 // ── Settings ───────────────────────────────────────────────────────────────────
 
@@ -54,7 +59,11 @@ const settings = definePluginSettings({
         default: 0.3,
         stickToMarkers: false,
         restartNeeded: false,
-        onChange(v: number) { _cachedOpacity = v; applyWallpaper(); }
+        onChange(v: number) {
+            _cachedOpacity = v;
+            const container = document.getElementById(CONTAINER_ID);
+            if (container) container.style.opacity = String(v);
+        }
     },
     blur: {
         type: OptionType.SLIDER,
@@ -63,7 +72,11 @@ const settings = definePluginSettings({
         default: 0,
         stickToMarkers: false,
         restartNeeded: false,
-        onChange(v: number) { _cachedBlur = v; applyWallpaper(); }
+        onChange(v: number) {
+            _cachedBlur = v;
+            const container = document.getElementById(CONTAINER_ID);
+            if (container) container.style.filter = v > 0 ? `blur(${v}px)` : "";
+        }
     },
     defaultWallpaper: {
         type: OptionType.STRING,
@@ -71,19 +84,27 @@ const settings = definePluginSettings({
         default: "",
         restartNeeded: false,
         onChange() { applyWallpaper(); }
-    },
-    syncWithFriends: {
-        type: OptionType.BOOLEAN,
-        description: "Sync DM wallpapers with Guncord friends via OAuth2 API",
-        default: true,
-        restartNeeded: false,
-    },
+    }
 });
 
 function getWallpapers(): Record<string, string> {
     const raw = settings.store.wallpapers || "{}";
     if (raw === _wpRaw && _wpCache !== null) return _wpCache;
     try { _wpCache = JSON.parse(raw); } catch { _wpCache = {}; }
+
+    // Dual-layer fallback with localStorage
+    const backup = loadMap<string>(LS_LOCAL_WALLPAPERS);
+    let dirty = false;
+    for (const [k, v] of Object.entries(backup)) {
+        if (v && !_wpCache[k]) {
+            _wpCache[k] = v;
+            dirty = true;
+        }
+    }
+    if (dirty) {
+        settings.store.wallpapers = JSON.stringify(_wpCache);
+    }
+
     _wpRaw = raw;
     return _wpCache!;
 }
@@ -103,100 +124,34 @@ function hasWallpaper(channelId: string): boolean {
     return !!wp[channelId];
 }
 
-function saveLocalWallpaperOnly(channelId: string, url: string) {
+function saveWallpaper(channelId: string, url: string) {
     const wp = getWallpapers();
+    const backup = loadMap<string>(LS_LOCAL_WALLPAPERS);
+
     if (url) {
         wp[channelId] = url;
+        backup[channelId] = url;
     } else {
         delete wp[channelId];
+        delete backup[channelId];
     }
+
     settings.store.wallpapers = JSON.stringify(wp);
+    saveMap(LS_LOCAL_WALLPAPERS, backup);
     _invalidateWpCache();
 
     if (SelectedChannelStore.getChannelId() === channelId) {
-        applyWallpaper(channelId);
-    }
-}
-
-// ── Guncord API Cloud Synchronization ────────────────────────────────────────
-
-async function syncWallpaperToCloud(recipientUserId: string, wallpaperUrl: string) {
-    try {
-        let token = await getStoredToken();
-        if (!token) {
-            token = await authorizeUser();
-        }
-        if (!token) {
-            showToast(t("Connect with Discord OAuth2 to sync with friends"), Toasts.Type.WARNING);
-            return;
-        }
-
-        if (wallpaperUrl) {
-            _cachedOwnCloudDmWallpapers[recipientUserId] = wallpaperUrl;
+        if (url) {
+            applyWallpaper(channelId);
         } else {
-            delete _cachedOwnCloudDmWallpapers[recipientUserId];
+            removeWallpaperElements();
         }
-
-        const cloudPayload: CloudWallpaperConfig = {
-            dmWallpapers: _cachedOwnCloudDmWallpapers,
-            updatedAt: Date.now(),
-            private: false
-        };
-
-        await saveOwnPluginConfig("channelWallpaper", token, cloudPayload as unknown as Record<string, unknown>);
-    } catch (err) {
-        console.error("[ChannelWallpaper] Cloud sync error:", err);
     }
 }
 
-async function syncWithFriendForChannel(channelId: string) {
-    if (!settings.store.syncWithFriends) return;
-
-    const channel = ChannelStore.getChannel(channelId);
-    if (!channel || channel.type !== 1) return; // Only Direct Message channels (type 1)
-
-    const friendUserId = channel.recipients?.[0] || (channel as any).getRecipientId?.();
-    if (!friendUserId || !RelationshipStore.isFriend(friendUserId)) return;
-
-    // Throttle: skip cloud API call if this channel was synced recently
-    const now = Date.now();
-    if (_syncLastFetched[channelId] && now - _syncLastFetched[channelId] < SYNC_THROTTLE_MS) return;
-    _syncLastFetched[channelId] = now;
-
-    const myUserId = UserStore.getCurrentUser()?.id;
-    if (!myUserId) return;
-
-    try {
-        const friendConfig: CloudWallpaperConfig | null = await getPublicPluginConfig("channelWallpaper", friendUserId);
-        if (!friendConfig || !friendConfig.dmWallpapers) return;
-
-        const friendSharedWp = friendConfig.dmWallpapers[myUserId] || "";
-        const currentWp = getWallpaper(channelId);
-
-        if (friendSharedWp && friendSharedWp !== currentWp) {
-            saveLocalWallpaperOnly(channelId, friendSharedWp);
-            _syncedFromFriends.add(channelId);
-            showToast(t("Applied shared wallpaper from friend!"), Toasts.Type.SUCCESS);
-        } else if (!friendSharedWp && currentWp && _syncedFromFriends.has(channelId)) {
-            saveLocalWallpaperOnly(channelId, "");
-            _syncedFromFriends.delete(channelId);
-            showToast(t("Friend removed the shared wallpaper"), Toasts.Type.MESSAGE);
-        }
-    } catch (err) {
-        console.error("[ChannelWallpaper] Failed to fetch friend wallpaper config:", err);
-    }
-}
-
-async function saveWallpaper(channelId: string, url: string) {
-    saveLocalWallpaperOnly(channelId, url);
-
-    const channel = ChannelStore.getChannel(channelId);
-    if (channel?.type === 1) {
-        const friendUserId = channel.recipients?.[0] || (channel as any).getRecipientId?.();
-        if (friendUserId && RelationshipStore.isFriend(friendUserId) && settings.store.syncWithFriends) {
-            await syncWallpaperToCloud(friendUserId, url);
-        }
-    }
+function removeWallpaper(channelId: string) {
+    saveWallpaper(channelId, "");
+    showToast(t("Wallpaper deleted"), Toasts.Type.SUCCESS);
 }
 
 // ── Wallpaper Application & DOM Injection ─────────────────────────────────────
@@ -205,8 +160,18 @@ const STYLE_ID = "channel-wallpaper-style";
 const CONTAINER_ID = "channel-wallpaper-container";
 
 function removeWallpaperElements() {
+    _activeChannelId = null;
+    _activeWallpaperUrl = null;
+    if (_chatObserver) {
+        _chatObserver.disconnect();
+        _chatObserver = null;
+    }
     document.getElementById(STYLE_ID)?.remove();
     document.getElementById(CONTAINER_ID)?.remove();
+    if (_activeVideo) {
+        _activeVideo.pause();
+        _activeVideo = null;
+    }
 }
 
 function pauseVideo() {
@@ -231,19 +196,11 @@ function handleFocusChange() {
     else pauseVideo();
 }
 
-function applyWallpaper(channelId?: string) {
-    removeWallpaperElements();
+function injectWallpaperContainer(channelId: string, url: string): boolean {
+    const currentCid = SelectedChannelStore?.getChannelId?.();
+    if (currentCid !== channelId) return false;
 
-    const cid = channelId || SelectedChannelStore?.getChannelId?.();
-    if (!cid) return;
-
-    const url = getWallpaper(cid);
-    if (!url) return;
-
-    const opacity = _cachedOpacity;
-    const blur = _cachedBlur;
-    const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(url) || url.startsWith("data:video/");
-
+    // Ensure CSS overrides exist
     if (!document.getElementById(STYLE_ID)) {
         const style = document.createElement("style");
         style.id = STYLE_ID;
@@ -251,7 +208,9 @@ function applyWallpaper(channelId?: string) {
 [class*="messagesWrapper"],
 [class*="chatContent"],
 [class*="chat-messages"],
-[class*="scroller"][class*="message"] {
+[class*="chat_"],
+[class*="scroller"][class*="message"],
+[class*="scrollerInner"] {
     background: transparent !important;
 }
 
@@ -261,8 +220,8 @@ function applyWallpaper(channelId?: string) {
     z-index: 0;
     pointer-events: none;
     overflow: hidden;
-    opacity: ${opacity};
-    ${blur > 0 ? `filter: blur(${blur}px);` : ""}
+    opacity: ${_cachedOpacity};
+    ${_cachedBlur > 0 ? `filter: blur(${_cachedBlur}px);` : ""}
 }
 
 #${CONTAINER_ID} img,
@@ -280,8 +239,22 @@ function applyWallpaper(channelId?: string) {
         document.head.appendChild(style);
     }
 
+    // Check if container already exists with the same URL and is connected to DOM
+    const existing = document.getElementById(CONTAINER_ID);
+    if (existing && existing.isConnected && existing.dataset.url === url) {
+        existing.style.opacity = String(_cachedOpacity);
+        existing.style.filter = _cachedBlur > 0 ? `blur(${_cachedBlur}px)` : "";
+        return true;
+    }
+
+    // Otherwise recreate
+    existing?.remove();
+
+    const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(url) || url.startsWith("data:video/");
     const container = document.createElement("div");
     container.id = CONTAINER_ID;
+    container.dataset.url = url;
+    container.dataset.channelId = channelId;
 
     if (isVideo) {
         const video = document.createElement("video");
@@ -301,34 +274,59 @@ function applyWallpaper(channelId?: string) {
         container.appendChild(img);
     }
 
-    const tryInject = () => {
-        const target =
-            document.querySelector('[class*="messagesWrapper"]') ||
-            document.querySelector('[class*="chat-messages"]') ||
-            document.querySelector('[class*="chatContent"]') ||
-            document.querySelector('[class*="content_"][class*="chat"]');
+    const target =
+        document.querySelector('[class*="messagesWrapper"]') ||
+        document.querySelector('[class*="chat-messages"]') ||
+        document.querySelector('[class*="chatContent"]') ||
+        document.querySelector('[class*="content_"][class*="chat"]');
 
-        if (target && target instanceof HTMLElement) {
-            if (!target.closest('[class*="popout"]') && !target.closest('[class*="modal"]')) {
-                if (!target.querySelector(`#${CONTAINER_ID}`)) {
-                    (target as HTMLElement).style.position = "relative";
-                    target.prepend(container);
-                }
-                return true;
-            }
+    if (target && target instanceof HTMLElement) {
+        if (!target.closest('[class*="popout"]') && !target.closest('[class*="modal"]')) {
+            target.style.position = "relative";
+            target.prepend(container);
+            return true;
         }
-        return false;
-    };
+    }
+    return false;
+}
 
-    if (!tryInject()) {
-        let tick = 0;
-        const observer = new MutationObserver((_, obs) => {
-            if (++tick % 3 !== 0) return;
-            if (tryInject()) obs.disconnect();
+function applyWallpaper(channelId?: string) {
+    const cid = channelId || SelectedChannelStore?.getChannelId?.();
+    if (!cid) {
+        removeWallpaperElements();
+        return;
+    }
+
+    const url = getWallpaper(cid);
+    if (!url) {
+        removeWallpaperElements();
+        return;
+    }
+
+    _activeChannelId = cid;
+    _activeWallpaperUrl = url;
+
+    injectWallpaperContainer(cid, url);
+
+    // Ensure continuous observer so container stays mounted if Discord re-renders or switches views
+    if (!_chatObserver) {
+        let lastCheck = 0;
+        _chatObserver = new MutationObserver(() => {
+            const now = Date.now();
+            if (now - lastCheck < 150) return;
+            lastCheck = now;
+
+            const cur = SelectedChannelStore?.getChannelId?.();
+            if (cur !== _activeChannelId || !_activeWallpaperUrl) return;
+
+            const el = document.getElementById(CONTAINER_ID);
+            if (!el || !el.isConnected) {
+                injectWallpaperContainer(cur, _activeWallpaperUrl);
+            }
         });
-        const root = document.querySelector('[class*="chat"]') || document.body;
-        observer.observe(root, { childList: true, subtree: true });
-        setTimeout(() => observer.disconnect(), 3000);
+
+        const chatRoot = document.querySelector('[class*="chat"]') || document.body;
+        _chatObserver.observe(chatRoot, { childList: true, subtree: true });
     }
 }
 
@@ -371,23 +369,60 @@ function promptUrl(): Promise<string | null> {
     });
 }
 
+async function compressImageIfNeeded(dataUrl: string, maxDim = 1920, quality = 0.85): Promise<string> {
+    if (!dataUrl.startsWith("data:image/")) return dataUrl;
+    if (dataUrl.startsWith("data:image/gif") || dataUrl.startsWith("data:image/svg")) {
+        return dataUrl;
+    }
+
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+            try {
+                let { width, height } = img;
+                if (width > maxDim || height > maxDim) {
+                    if (width > height) {
+                        height = Math.round((height * maxDim) / width);
+                        width = maxDim;
+                    } else {
+                        width = Math.round((width * maxDim) / height);
+                        height = maxDim;
+                    }
+                }
+
+                const canvas = document.createElement("canvas");
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) { resolve(dataUrl); return; }
+
+                ctx.drawImage(img, 0, 0, width, height);
+                const compressed = canvas.toDataURL("image/jpeg", quality);
+                resolve(compressed.length < dataUrl.length ? compressed : dataUrl);
+            } catch {
+                resolve(dataUrl);
+            }
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
+}
+
 async function setWallpaperFromFile(channelId: string) {
-    const dataUrl = await pickFileRaw();
-    if (!dataUrl) return;
-    await saveWallpaper(channelId, dataUrl);
-    showToast(t("Wallpaper applied and synced via Guncord API!"), Toasts.Type.SUCCESS);
+    const rawData = await pickFileRaw();
+    if (!rawData) return;
+
+    const dataUrl = await compressImageIfNeeded(rawData);
+    saveWallpaper(channelId, dataUrl);
+    showToast(t("Channel wallpaper applied!"), Toasts.Type.SUCCESS);
 }
 
 async function setWallpaperFromUrl(channelId: string) {
     const url = await promptUrl();
     if (!url) return;
-    await saveWallpaper(channelId, url);
-    showToast(t("Wallpaper applied and synced via Guncord API!"), Toasts.Type.SUCCESS);
-}
 
-async function removeWallpaper(channelId: string) {
-    await saveWallpaper(channelId, "");
-    showToast(t("Wallpaper deleted"), Toasts.Type.SUCCESS);
+    saveWallpaper(channelId, url);
+    showToast(t("Channel wallpaper applied!"), Toasts.Type.SUCCESS);
 }
 
 // ── Context Menu Components ───────────────────────────────────────────────────
@@ -426,8 +461,6 @@ function TrashIcon() {
 
 function buildWallpaperMenu(channelId: string): React.ReactElement {
     const has = hasWallpaper(channelId);
-    const channel = ChannelStore.getChannel(channelId);
-    const isDM = channel?.type === 1;
 
     return (
         <Menu.MenuItem
@@ -455,7 +488,7 @@ function buildWallpaperMenu(channelId: string): React.ReactElement {
                     <Menu.MenuSeparator />
                     <Menu.MenuItem
                         id="wallpaper-remove"
-                        label={isDM ? t("Delete for both") : t("Delete wallpaper")}
+                        label={t("Delete wallpaper")}
                         color="danger"
                         icon={TrashIcon}
                         leadingAccessory={TrashIcon}
@@ -468,6 +501,7 @@ function buildWallpaperMenu(channelId: string): React.ReactElement {
 }
 
 const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: any) => {
+    if (!isPluginEnabled("ChannelWallpaper")) return;
     if (!user?.id) return;
     const channelId = (ChannelStore as any).getDMFromUserId?.(user.id);
     if (!channelId) return;
@@ -476,6 +510,7 @@ const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: a
 };
 
 const channelContextMenuPatch: NavContextMenuPatchCallback = (children, { channel }: any) => {
+    if (!isPluginEnabled("ChannelWallpaper")) return;
     if (!channel?.id) return;
     children.push(buildWallpaperMenu(channel.id));
 };
@@ -483,58 +518,12 @@ const channelContextMenuPatch: NavContextMenuPatchCallback = (children, { channe
 // ── Settings Panel Component ───────────────────────────────────────────────────
 
 function ChannelWallpaperSettingsComponent() {
-    const [token, setToken] = React.useState<string | null>(null);
-    const [loadingAuth, setLoadingAuth] = React.useState(false);
+    const [refreshTick, setRefreshTick] = React.useState(0);
     const wpMap = getWallpapers();
     const wpEntries = Object.entries(wpMap);
 
-    React.useEffect(() => {
-        getStoredToken().then(t => setToken(t));
-    }, []);
-
-    const handleConnect = async () => {
-        setLoadingAuth(true);
-        try {
-            const res = await authorizeUser();
-            setToken(res);
-            if (res) {
-                showToast(t("Connected to Guncord Cloud"), Toasts.Type.SUCCESS);
-            }
-        } finally {
-            setLoadingAuth(false);
-        }
-    };
-
     return (
         <Flex direction={FlexDirection.COLUMN} style={{ gap: 16 }}>
-            {/* OAuth2 Cloud Sync Status */}
-            <Card style={{ padding: "16px 20px", background: "var(--background-secondary)" }}>
-                <Flex align={FlexAlign.CENTER} justify={FlexJustify.BETWEEN}>
-                    <Flex direction={FlexDirection.COLUMN} style={{ gap: 4 }}>
-                        <Text variant="text-md/semibold" style={{ color: "var(--header-primary)" }}>
-                            {t("Sync DM Wallpapers with Friends")}
-                        </Text>
-                        <Text variant="text-xs/normal" style={{ color: "var(--text-muted)" }}>
-                            {t("Automatically sync wallpapers in DMs with your Guncord friends via OAuth2 API.")}
-                        </Text>
-                    </Flex>
-                    {token ? (
-                        <Text variant="text-sm/medium" style={{ color: "var(--text-positive)" }}>
-                            {t("Connected to Guncord Cloud")}
-                        </Text>
-                    ) : (
-                        <Button
-                            size={Button.Sizes.SMALL}
-                            color={Button.Colors.BRAND}
-                            disabled={loadingAuth}
-                            onClick={handleConnect}
-                        >
-                            {loadingAuth ? t("Connecting...") : t("Connect with Discord OAuth2")}
-                        </Button>
-                    )}
-                </Flex>
-            </Card>
-
             {/* List of Active Wallpapers */}
             <Card style={{ padding: "16px 20px", background: "var(--background-secondary)" }}>
                 <Text variant="text-md/semibold" style={{ color: "var(--header-primary)", marginBottom: 12 }}>
@@ -585,7 +574,8 @@ function ChannelWallpaperSettingsComponent() {
                                         color={Button.Colors.RED}
                                         look={Button.Looks.OUTLINED}
                                         onClick={() => {
-                                            saveWallpaper(cid, "");
+                                            removeWallpaper(cid);
+                                            setRefreshTick(t => t + 1);
                                         }}
                                     >
                                         {t("Clear")}
@@ -606,12 +596,11 @@ export default definePlugin({
     name: "ChannelWallpaper",
     enabledByDefault: false,
     authors: [Devs.rushii, Devs.Nickyux],
-    description: "Allows for custom backgrounds for every individual channel and syncs DM wallpapers with friends via Guncord API.",
+    description: "Allows for custom backgrounds for every individual channel.",
     settings,
     settingsAboutComponent: ChannelWallpaperSettingsComponent,
 
     contextMenus: {
-        "user-context": userContextMenuPatch,
         "channel-context": channelContextMenuPatch,
         "gdm-context": channelContextMenuPatch,
     },
@@ -619,10 +608,9 @@ export default definePlugin({
     flux: {
         CHANNEL_SELECT({ channelId }: { channelId: string; }) {
             if (channelId) {
-                setTimeout(() => {
-                    applyWallpaper(channelId);
-                    syncWithFriendForChannel(channelId);
-                }, 100);
+                applyWallpaper(channelId);
+                setTimeout(() => applyWallpaper(channelId), 150);
+                setTimeout(() => applyWallpaper(channelId), 400);
             } else {
                 removeWallpaperElements();
             }
@@ -630,24 +618,19 @@ export default definePlugin({
     },
 
     start() {
+        removeContextMenuPatch("user-context", userContextMenuPatch);
         _cachedOpacity = settings.store.opacity ?? 0.3;
         _cachedBlur = settings.store.blur ?? 0;
 
+        _wpCache = null;
+        _wpRaw = "";
+
         const cid = SelectedChannelStore.getChannelId();
         if (cid) {
-            setTimeout(() => {
-                applyWallpaper(cid);
-                syncWithFriendForChannel(cid);
-            }, 300);
+            applyWallpaper(cid);
+            setTimeout(() => applyWallpaper(cid), 200);
+            setTimeout(() => applyWallpaper(cid), 500);
         }
-
-        // Periodic background sync for active DM channel
-        _syncPollInterval = setInterval(() => {
-            const currentChannelId = SelectedChannelStore.getChannelId();
-            if (currentChannelId) {
-                syncWithFriendForChannel(currentChannelId);
-            }
-        }, 15000);
 
         document.addEventListener("visibilitychange", handleVisChange);
         window.addEventListener("focus", handleFocusChange);
@@ -656,10 +639,9 @@ export default definePlugin({
 
     stop() {
         removeWallpaperElements();
-        if (_syncPollInterval) {
-            clearInterval(_syncPollInterval);
-            _syncPollInterval = null;
-        }
+        removeContextMenuPatch("channel-context", channelContextMenuPatch);
+        removeContextMenuPatch("gdm-context", channelContextMenuPatch);
+        removeContextMenuPatch("user-context", userContextMenuPatch);
         document.removeEventListener("visibilitychange", handleVisChange);
         window.removeEventListener("focus", handleFocusChange);
         window.removeEventListener("blur", handleFocusChange);

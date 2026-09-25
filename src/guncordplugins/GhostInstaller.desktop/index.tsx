@@ -7,10 +7,11 @@
 import "./style.css";
 
 import { showNotification } from "@api/Notifications";
-import { definePluginSettings, Settings } from "@api/Settings";
+import { isPluginEnabled, plugins, startPlugin, stopPlugin } from "@api/PluginManager";
+import { definePluginSettings, flushSettings, Settings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
-import { DeleteIcon, GhostIcon, WarningIcon, NoEntrySignIcon } from "@components/Icons";
+import { DeleteIcon, WarningIcon, NoEntrySignIcon } from "@components/Icons";
 import { Paragraph } from "@components/Paragraph";
 import SettingsPlugin from "@plugins/_core/settings";
 import { classes, removeFromArray } from "@utils/misc";
@@ -18,10 +19,95 @@ import definePlugin, { OptionType, PluginNative, ReporterTestable } from "@utils
 import { Alerts, Button, React, SettingsRouter, showToast, TextInput, Toasts } from "@webpack/common";
 import { t } from "../autoTranslateGuncord";
 
-import type { ActionInfo, InstallInfo, NativeResult } from "./native";
+import type { ActionInfo, InstallInfo, InstallProgress, NativeResult } from "./native";
 
 const Native = ((VencordNative.pluginHelpers as any).GhostInstaller || (VencordNative.pluginHelpers as any).GhostClientInstaller) as PluginNative<typeof import("./native")>;
 const SETTINGS_ENTRY_KEY = "guncord_ghost_client_installer";
+
+let globalProgress: InstallProgress = {
+    active: false,
+    percent: 0,
+    stage: "",
+    detail: "",
+    error: null,
+    done: false,
+    info: null
+};
+
+const progressListeners = new Set<(p: InstallProgress) => void>();
+let globalPollTimer: ReturnType<typeof setInterval> | null = null;
+
+function startGlobalPoller() {
+    if (globalPollTimer) return;
+    globalPollTimer = setInterval(async () => {
+        try {
+            const res = await Native.getInstallProgress();
+            if (res?.success && res.data) {
+                globalProgress = res.data;
+                progressListeners.forEach(l => l(globalProgress));
+                if (!res.data.active && globalPollTimer) {
+                    clearInterval(globalPollTimer);
+                    globalPollTimer = null;
+                }
+            }
+        } catch {}
+    }, 250);
+}
+
+function GhostInstallerSidebarIcon(props: any) {
+    return (
+        <svg
+            role="img"
+            viewBox="0 0 24 24"
+            width={24}
+            height={24}
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            {...props}
+            className={classes(props?.className, "vc-icon")}
+        >
+            <path
+                d="M12 2C7.58 2 4 5.58 4 10V19C4 20.66 5.34 22 7 22C8.66 22 10 20.66 10 19C10 20.66 11.34 22 13 22C14.66 22 16 20.66 16 19C16 20.66 17.34 22 19 22C20.66 22 22 20.66 22 19V10C22 5.58 18.42 2 14 2H10H12Z"
+                fill="currentColor"
+            />
+            <circle cx="8.5" cy="10" r="1.5" fill="black" fillOpacity="0.6" />
+            <circle cx="15.5" cy="10" r="1.5" fill="black" fillOpacity="0.6" />
+        </svg>
+    );
+}
+
+function ProgressBar({ progress }: { progress: InstallProgress }) {
+    if (!progress.active && !progress.done && progress.percent === 0 && !progress.error) return null;
+
+    const isError = Boolean(progress.error);
+    const isDone = progress.done && !progress.active && !isError;
+
+    return (
+        <div className={classes("vc-ghost-installer-progress-card", isError && "vc-ghost-installer-progress-error", isDone && "vc-ghost-installer-progress-done")}>
+            <div className="vc-ghost-installer-progress-header">
+                <div className="vc-ghost-installer-progress-title-wrapper">
+                    <span className="vc-ghost-installer-progress-stage">
+                        {progress.stage || (progress.active ? t("Installing...") : (isDone ? t("Installation Complete") : t("Status")))}
+                    </span>
+                    {progress.detail && (
+                        <span className="vc-ghost-installer-progress-detail">
+                            {progress.detail}
+                        </span>
+                    )}
+                </div>
+                <span className="vc-ghost-installer-progress-percent">
+                    {progress.percent}%
+                </span>
+            </div>
+            <div className="vc-ghost-installer-progress-bar-bg">
+                <div
+                    className="vc-ghost-installer-progress-bar-fill"
+                    style={{ width: `${Math.min(100, Math.max(0, progress.percent))}%` }}
+                />
+            </div>
+        </div>
+    );
+}
 
 type LogLevel = "error" | "info" | "success" | "warning";
 
@@ -79,7 +165,7 @@ function InstallationStatus({ info }: { info: InstallInfo | ActionInfo; }) {
     if (info.installStatus === "installed") {
         return (
             <div className={classes("vc-ghost-installer-install-status", "vc-ghost-installer-install-status-installed")}>
-                <GhostIcon width={28} height={28} />
+                <GhostInstallerSidebarIcon width={36} height={36} />
                 <div>
                     <Heading tag="h3">{t("GhostClient is installed")}</Heading>
                     <Paragraph>{t("GhostClient is active and server is ready for")} {info.clientLabel}.</Paragraph>
@@ -91,7 +177,7 @@ function InstallationStatus({ info }: { info: InstallInfo | ActionInfo; }) {
     if (info.installStatus === "needsReinstall") {
         return (
             <div className={classes("vc-ghost-installer-install-status", "vc-ghost-installer-install-status-needs-reinstall")}>
-                <WarningIcon width={28} height={28} />
+                <WarningIcon width={36} height={36} />
                 <div>
                     <Heading tag="h3">{t("GhostClient must be installed again")}</Heading>
                     <Paragraph>{info.repatchWarning || t("Discord was updated after GhostClient was installed. Click Patch to reinstall.")}</Paragraph>
@@ -102,7 +188,7 @@ function InstallationStatus({ info }: { info: InstallInfo | ActionInfo; }) {
 
     return (
         <div className={classes("vc-ghost-installer-install-status", "vc-ghost-installer-install-status-not-installed")}>
-            <NoEntrySignIcon width={28} height={28} />
+            <NoEntrySignIcon width={36} height={36} />
             <div>
                 <Heading tag="h3">{t("GhostClient is not installed")}</Heading>
                 <Paragraph>{t("Click Patch to download from GitHub and install GhostClient.")}</Paragraph>
@@ -140,11 +226,24 @@ function GhostClientInstallerPanel() {
     const [status, setStatus] = React.useState("Ready.");
     const [logs, setLogs] = React.useState<LogEntry[]>([]);
     const [busy, setBusy] = React.useState(false);
+    const [progress, setProgressState] = React.useState<InstallProgress>(globalProgress);
+
+    const isOperationBusy = busy || progress.active;
 
     async function runNative<T>(action: () => Promise<NativeResult<T>>): Promise<T | null> {
         setBusy(true);
+        const pollLogsTimer = setInterval(async () => {
+            try {
+                const res = await Native.readLogs();
+                if (res?.success && Array.isArray(res.data)) {
+                    setLogs(appendLogs([], res.data));
+                }
+            } catch {}
+        }, 500);
+
         try {
             const result = await action();
+            clearInterval(pollLogsTimer);
             setLogs(currentLogs => appendLogs(currentLogs, result.logs));
 
             if (!result.success) {
@@ -155,6 +254,7 @@ function GhostClientInstallerPanel() {
 
             return result.data;
         } finally {
+            clearInterval(pollLogsTimer);
             setBusy(false);
         }
     }
@@ -204,6 +304,8 @@ function GhostClientInstallerPanel() {
             return;
         }
 
+        startGlobalPoller();
+
         const result = await runNative<ActionInfo>(() => Native.patchGhostClient({
             githubUrl: targetUrl,
             discordRoot: root
@@ -211,13 +313,42 @@ function GhostClientInstallerPanel() {
 
         if (!result) return;
         setInfo(result);
-        // Auto-enable the ghostClient plugin so it activates immediately after patching
-        try { (Settings.plugins["ghostClient"] ??= {} as any).enabled = true; } catch {}
+        // Auto-enable the GhostClient plugin so it activates immediately after patching
+        try {
+            (Settings.plugins["GhostClient"] ??= {} as any).enabled = true;
+            (Settings.plugins["ghostClient"] ??= {} as any).enabled = true;
+            flushSettings();
+            if (plugins["GhostClient"] && !isPluginEnabled("GhostClient")) {
+                startPlugin(plugins["GhostClient"]);
+            }
+        } catch {}
         setStatus(t("GhostClient installed successfully."));
         showToast(t("GhostClient installed successfully."), Toasts.Type.SUCCESS);
     }
 
     async function runDelete(): Promise<void> {
+        startGlobalPoller();
+
+        // 1. Terminate all active ghost sessions first so accounts leave voice immediately
+        try {
+            await fetch("http://127.0.0.1:47821/leave-all", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
+                signal: AbortSignal.timeout(1500)
+            }).catch(() => {});
+        } catch {}
+
+        // 2. Turn off GhostClient plugin in settings and stop it
+        try {
+            (Settings.plugins["GhostClient"] ??= {} as any).enabled = false;
+            (Settings.plugins["ghostClient"] ??= {} as any).enabled = false;
+            flushSettings();
+            if (plugins["GhostClient"] && isPluginEnabled("GhostClient")) {
+                stopPlugin(plugins["GhostClient"]);
+            }
+        } catch {}
+
         const result = await runNative<ActionInfo>(() => Native.revertGhostClient({
             discordRoot: root
         }));
@@ -261,6 +392,34 @@ function GhostClientInstallerPanel() {
     React.useEffect(() => {
         void autoDetect();
         void loadLogs();
+
+        // Check active progress immediately on mount (survives closing and reopening settings)
+        void Native.getInstallProgress().then(res => {
+            if (res?.success && res.data) {
+                globalProgress = res.data;
+                setProgressState({ ...res.data });
+                if (res.data.active) {
+                    startGlobalPoller();
+                }
+            }
+        });
+
+        const onProgressUpdate = (p: InstallProgress) => {
+            setProgressState({ ...p });
+            if (p.info) {
+                setInfo(p.info);
+            }
+            if (p.error) {
+                setStatus(p.error);
+            } else if (p.stage) {
+                setStatus(p.stage);
+            }
+        };
+
+        progressListeners.add(onProgressUpdate);
+        return () => {
+            progressListeners.delete(onProgressUpdate);
+        };
     }, []);
 
     return (
@@ -273,7 +432,7 @@ function GhostClientInstallerPanel() {
                             value={githubUrl}
                             placeholder="https://github.com/o9ll/ghostclient/releases"
                             onChange={(value: string) => setGithubUrl(value)}
-                            disabled={busy}
+                            disabled={isOperationBusy}
                         />
                     </div>
                     <div className="vc-ghost-installer-select-row">
@@ -282,7 +441,7 @@ function GhostClientInstallerPanel() {
                             value={root}
                             placeholder={t("Discord install folder")}
                             onChange={(value: string) => setRoot(value)}
-                            disabled={busy}
+                            disabled={isOperationBusy}
                         />
                     </div>
                 </div>
@@ -291,29 +450,31 @@ function GhostClientInstallerPanel() {
                     <Button
                         color={Button.Colors.PRIMARY}
                         size={Button.Sizes.SMALL}
-                        disabled={busy}
+                        disabled={isOperationBusy}
                         onClick={() => void autoDetect()}
                     >{t("Auto-detect")}</Button>
                     <Button
                         color={Button.Colors.PRIMARY}
                         size={Button.Sizes.SMALL}
-                        disabled={busy}
+                        disabled={isOperationBusy}
                         onClick={() => void browse()}
                     >{t("Browse")}</Button>
                     <Button
                         color={Button.Colors.GREEN}
                         size={Button.Sizes.SMALL}
-                        disabled={busy}
+                        disabled={isOperationBusy}
                         onClick={confirmPatch}
                     >{t("Patch GhostClient")}</Button>
                     <Button
                         color={Button.Colors.RED}
                         size={Button.Sizes.SMALL}
-                        disabled={busy}
+                        disabled={isOperationBusy}
                         onClick={confirmDelete}
                     >{t("Delete GhostClient")}</Button>
                 </div>
             </div>
+
+            <ProgressBar progress={progress} />
 
             {info && <InstallationStatus info={info} />}
 
@@ -329,7 +490,7 @@ function GhostClientInstallerPanel() {
                 </div>
             )}
 
-            <Paragraph className="vc-ghost-installer-status">{busy ? t("Working...") : status}</Paragraph>
+            <Paragraph className="vc-ghost-installer-status">{isOperationBusy ? (progress.stage || t("Working...")) : status}</Paragraph>
 
             <div className="vc-ghost-installer-log-panel">
                 <div className="vc-ghost-installer-log-header">
@@ -340,7 +501,7 @@ function GhostClientInstallerPanel() {
                     <Button
                         color={Button.Colors.RED}
                         size={Button.Sizes.SMALL}
-                        disabled={busy || !logs.length}
+                        disabled={isOperationBusy || !logs.length}
                         onClick={() => void clearLogs()}
                     >
                         <DeleteIcon width={16} height={16} />
@@ -392,7 +553,7 @@ export default definePlugin({
                 key: SETTINGS_ENTRY_KEY,
                 title: t("GhostInstaller"),
                 Component: ErrorBoundary.wrap(GhostInstallerPage, { noop: true }),
-                Icon: GhostIcon,
+                Icon: GhostInstallerSidebarIcon,
             });
         }
 
