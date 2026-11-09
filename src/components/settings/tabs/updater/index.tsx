@@ -14,9 +14,10 @@ import { Paragraph } from "@components/Paragraph";
 import { SettingsTab, wrapTab } from "@components/settings";
 import { Span } from "@components/Span";
 import { Margins } from "@utils/margins";
-import { relaunch } from "@utils/native";
+import { relaunch, relaunchApp } from "@utils/native";
 import { changes, checkForUpdates, rebuild, update, UpdateLogger } from "@utils/updater";
-import { React, useState } from "@webpack/common";
+import { Alerts, React, useState } from "@webpack/common";
+import { ChangelogContent } from "../changelog";
 import { Toasts } from "@webpack/common";
 import { t } from "@api/i18n";
 
@@ -41,7 +42,24 @@ function UpdaterTab() {
             setUpdateList(changes ?? []);
             setChecked(true);
 
-            if (!hasUpdate) {
+            if (hasUpdate) {
+                Alerts.show({
+                    title: t("Update Available"),
+                    body: (
+                        <>
+                            <p style={{ textAlign: "center", marginBottom: 8 }}>
+                                {t("A newer version of Guncord is available.")}
+                            </p>
+                            <p style={{ textAlign: "center", color: "var(--text-muted)" }}>
+                                {t("Would you like to restart the client now to apply the update?")}
+                            </p>
+                        </>
+                    ),
+                    confirmText: t("Restart Client"),
+                    cancelText: t("Later"),
+                    onConfirm: () => relaunchApp()
+                });
+            } else {
                 Toasts.show({
                     message: t("You are already on the latest version!"),
                     id: Toasts.genId(),
@@ -134,7 +152,7 @@ function UpdaterTab() {
                     </Card>
                 ) : (
                     <Card style={{ padding: "10px 16px", marginBottom: 12, borderLeft: "3px solid var(--status-positive)" }}>
-                        <Span size="sm" style={{ color: "var(--text-positive)" }}>{t("You are running the latest version ✓")}</Span>
+                        <Span size="sm" style={{ color: "var(--text-positive)" }}>{t("You are running the latest version")}</Span>
                     </Card>
                 )
             )}
@@ -153,19 +171,18 @@ function UpdaterTab() {
                     <Button
                         size="small"
                         variant="primary"
-                        onClick={handleUpdate}
-                        disabled={downloading}
+                        onClick={() => relaunchApp()}
                     >
-                        {downloading ? "Installing..." : "🚀 Update Now (Automatic)"}
+                        {t("Restart Client")}
                     </Button>
                 )}
             </Flex>
 
             <Divider className={Margins.top20} />
 
-            <Paragraph className={Margins.top16} style={{ fontSize: 12, opacity: 0.6 }}>
-                {t('Clicking "Update Now" will automatically download the latest version and restart your client.')}
-            </Paragraph>
+            <div style={{ marginTop: 24 }}>
+                <ChangelogContent />
+            </div>
         </SettingsTab>
     );
 }

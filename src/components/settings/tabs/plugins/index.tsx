@@ -84,7 +84,6 @@ export const BASIC_CONFIG_PLUGINS: Set<string> = new Set([
     "FollowUser",
     "GifConvertor",
     "GhostInstaller",
-    "IconViewer",
     "ImageZoom",
     "LiveWallpaper",
     "MassDM",

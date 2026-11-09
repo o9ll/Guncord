@@ -26,6 +26,7 @@ class PurgerEngine {
     private loopPromise: Promise<void> | null = null;
     private pendingLogs: string[] = [];
     private lastSaveTime = 0;
+    private cleanedReactionChannels = new Set<string>();
 
     constructor() {
         void this.loadSavedState();
@@ -140,6 +141,7 @@ class PurgerEngine {
     public startNewPurge(queue: PurgeQueueItem[], delayMs = 1500) {
         this.isStopped = true;
         this.isPaused = false;
+        this.cleanedReactionChannels.clear();
 
         this.state = {
             status: "running",
@@ -215,6 +217,51 @@ class PurgerEngine {
         }
     }
 
+    private async purgeChannelReactions(channelId: string) {
+        try {
+            let beforeId: string | undefined;
+            for (let page = 0; page < 5; page++) {
+                if (this.isStopped || this.isPaused) break;
+                const url = beforeId
+                    ? `/channels/${channelId}/messages?limit=100&before=${beforeId}`
+                    : `/channels/${channelId}/messages?limit=100`;
+                const res = await RestAPI.get({ url }).catch(() => null);
+                if (!res?.body || !Array.isArray(res.body) || res.body.length === 0) break;
+
+                const messages = res.body;
+                for (const msg of messages) {
+                    if (this.isStopped || this.isPaused) break;
+                    if (msg.reactions && Array.isArray(msg.reactions)) {
+                        for (const r of msg.reactions) {
+                            if (!r.me && !r.me_burst) continue;
+                            const emojiName = r.emoji?.name;
+                            if (!emojiName) continue;
+                            const rx = r.emoji?.id
+                                ? encodeURIComponent(`${emojiName}:${r.emoji.id}`)
+                                : encodeURIComponent(emojiName);
+                            if (r.me) {
+                                try {
+                                    await RestAPI.del({ url: `/channels/${channelId}/messages/${msg.id}/reactions/${rx}/@me` });
+                                    await new Promise(res => setTimeout(res, 200));
+                                } catch {}
+                            }
+                            if (r.me_burst) {
+                                try {
+                                    await RestAPI.del({ url: `/channels/${channelId}/messages/${msg.id}/reactions/${rx}/@me?burst=true` });
+                                    await new Promise(res => setTimeout(res, 200));
+                                } catch {}
+                            }
+                        }
+                    }
+                }
+                beforeId = messages[messages.length - 1].id;
+                if (messages.length < 100) break;
+            }
+        } catch (e) {
+            console.error("[PurgerEngine] Failed to purge channel reactions:", e);
+        }
+    }
+
     private async runLoop(delayMs: number) {
         while (this.state.currentIndex < this.state.queue.length) {
             if (this.isStopped) break;
@@ -229,6 +276,11 @@ class PurgerEngine {
             this.state.currentChannelName = item.channelName;
             this.state.currentMessageId = item.messageId;
             this.emit();
+
+            if (!this.cleanedReactionChannels.has(item.channelId)) {
+                this.cleanedReactionChannels.add(item.channelId);
+                void this.purgeChannelReactions(item.channelId);
+            }
 
             const result = await this.deleteMessageRequest(item.channelId, item.messageId);
 

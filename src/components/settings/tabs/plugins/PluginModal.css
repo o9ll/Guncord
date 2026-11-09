@@ -86,17 +86,8 @@
 input.nc-blurred-api-key {
     filter: blur(6px) !important;
     user-select: none !important;
+    pointer-events: none;
     transition: filter 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.nc-blurred-api-key:hover input,
-.nc-blurred-api-key:focus-within input,
-.nc-blurred-api-key:hover textarea,
-.nc-blurred-api-key:focus-within textarea,
-input.nc-blurred-api-key:hover,
-input.nc-blurred-api-key:focus {
-    filter: blur(0px) !important;
-    user-select: text !important;
 }
 
 .nc-api-key-toggle-btn {

@@ -24,7 +24,7 @@ const ResetIcon = () => (
     </svg>
 );
 
-export default function FontsTab() {
+export function FontsContent() {
     const [config, setConfig] = useState<GlobalFontConfig>(getGlobalFontConfig);
     const [selectedFontId, setSelectedFontId] = useState<string>(() => {
         const cur = getGlobalFontConfig();
@@ -103,7 +103,7 @@ export default function FontsTab() {
         : previewDef.fontFamily || "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
     return (
-        <SettingsTab className="nc-fonts-tab">
+        <div className="nc-fonts-tab">
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                 {/* Header Description */}
                 <div>
@@ -287,6 +287,14 @@ export default function FontsTab() {
                     </div>
                 </Card>
             </div>
+        </div>
+    );
+}
+
+export default function FontsTab() {
+    return (
+        <SettingsTab>
+            <FontsContent />
         </SettingsTab>
     );
 }

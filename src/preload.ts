@@ -31,6 +31,46 @@ if (location.protocol !== "data:") {
     invoke(IpcEvents.INIT_FILE_WATCHERS);
 
     if (IS_DISCORD_DESKTOP) {
+        try {
+            const uId = process.env.GUNCORD_INSTANCE_USER ||
+                process.argv.find(a => a.startsWith("--guncord-instance-user="))?.split("=")[1];
+            if (uId) {
+                const fs = require("original-fs");
+                const path = require("path");
+                const instanceDir = process.env.GUNCORD_INSTANCE_DIR || path.join(process.resourcesPath, "..", "..", `Guncord-Instance-${uId}`);
+                const possiblePaths = [
+                    path.join(instanceDir, "guncord-instance.json"),
+                    path.join(instanceDir, "discord", "guncord-instance.json")
+                ];
+                let cfg: any = null;
+                for (const p of possiblePaths) {
+                    if (fs.existsSync(p)) {
+                        try {
+                            cfg = JSON.parse(fs.readFileSync(p, "utf-8"));
+                            break;
+                        } catch {}
+                    }
+                }
+                if (cfg?.token) {
+                    const tokLit = JSON.stringify(cfg.token);
+                    const uidLit = JSON.stringify(cfg.userId || uId);
+                    webFrame.executeJavaScript(`(function(){
+                        try {
+                            var raw = ${tokLit};
+                            var q = JSON.stringify(raw);
+                            localStorage.setItem("token", q);
+                            localStorage.setItem("default_token", q);
+                            localStorage.setItem("user_id_cache", JSON.stringify(${uidLit}));
+                            Object.defineProperty(window, "__guncord_token", { value: raw, writable: false, configurable: true });
+                            Object.defineProperty(window, "__guncord_user_id", { value: ${uidLit}, writable: false, configurable: true });
+                        } catch(e) {}
+                    })()`);
+                }
+            }
+        } catch (e) {
+            console.error("[GuncordMI] preload token injection error:", e);
+        }
+
         webFrame.executeJavaScript(sendSync<string>(IpcEvents.PRELOAD_GET_RENDERER_JS));
         if (process.env.DISCORD_PRELOAD) {
             try {

@@ -13,11 +13,11 @@ import { CogWheel, InfoIcon } from "@components/Icons";
 import { AddonCard } from "@components/settings/AddonCard";
 import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
-import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
+import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openMediaModal, openModal } from "@utils/modal";
 import { OptionType, Plugin } from "@utils/types";
 import { HeadingPrimary } from "@components/Heading";
 import { Button } from "@components/Button";
-import { React, showToast, Text, Toasts, Tooltip, UserStore } from "@webpack/common";
+import { React, showToast, Text, Toasts, Tooltip, UserStore, useState } from "@webpack/common";
 import { flushSettings, Settings } from "@api/Settings";
 import { t } from "@api/i18n";
 import { tPlugin } from "@api/pluginI18n";
@@ -186,43 +186,81 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
         doToggleEnabled();
     }
 
-    const openTutorialVideo = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        const videoName = getTutorialVideoName(plugin.name) ?? plugin.name;
-        const videoUrl = `https://raw.githubusercontent.com/o9ll/GunTutorials/main/videos/${encodeURIComponent(videoName)}.mp4`;
-        const hasSettings = plugin.settings && Object.keys(plugin.settings).length > 0;
+function TutorialModal({
+    modalProps,
+    plugin,
+    videoUrl,
+    hasSettings
+}: {
+    modalProps: any;
+    plugin: any;
+    videoUrl: string;
+    hasSettings: boolean;
+}) {
+    const videoRef = React.useRef<HTMLVideoElement | null>(null);
+    const [hasError, setHasError] = useState(false);
 
-        openModal(props => (
-            <ModalRoot {...props} size={ModalSize.DYNAMIC} className="nc-tutorial-modal">
-                <ModalHeader separator={false} style={{ padding: "24px 24px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 8 }}>
-                        <Text variant="heading-xl/bold" style={{ color: "#ffffff", fontSize: "20px", fontWeight: 700, margin: 0 }}>
-                            {plugin.name} – {t("Tutorial")}
-                        </Text>
-                        <Text variant="text-sm/normal" style={{ color: "#949ba4", fontSize: "14px", margin: 0, paddingBottom: "6px" }}>
-                            {t("Watch full plugin guide and feature demonstration")}
-                        </Text>
-                    </div>
-                    <ModalCloseButton onClick={props.onClose} />
-                </ModalHeader>
-                <ModalContent style={{ padding: "6px 24px 20px" }}>
-                    <div style={{ width: "100%", aspectRatio: "16 / 9", borderRadius: "10px", overflow: "hidden", background: "#000000", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+    const handlePlayInDiscord = () => {
+        setHasError(false);
+        if (videoRef.current) {
+            videoRef.current.currentTime = 0;
+            videoRef.current.play().catch(() => {});
+            if (typeof videoRef.current.requestFullscreen === "function") {
+                videoRef.current.requestFullscreen().catch(() => {});
+            }
+        }
+    };
+
+    const handleOpenInBrowser = () => {
+        const openExt = (VencordNative as any)?.desktopUtils?.openExternal
+            ?? (window as any)?.open;
+        if (typeof openExt === "function") {
+            openExt(videoUrl);
+        }
+    };
+
+    return (
+        <ModalRoot {...modalProps} size={ModalSize.DYNAMIC} className="nc-tutorial-modal">
+            <ModalHeader separator={false} style={{ padding: "24px 24px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 8 }}>
+                    <Text variant="heading-xl/bold" style={{ color: "#ffffff", fontSize: "20px", fontWeight: 700, margin: 0 }}>
+                        {plugin.name} – {t("Tutorial")}
+                    </Text>
+                    <Text variant="text-sm/normal" style={{ color: "#949ba4", fontSize: "14px", margin: 0, paddingBottom: "6px" }}>
+                        {t("Watch full plugin guide and feature demonstration")}
+                    </Text>
+                </div>
+                <ModalCloseButton onClick={modalProps.onClose} />
+            </ModalHeader>
+            <ModalContent style={{ padding: "6px 24px 20px" }}>
+                <div
+                    style={{
+                        position: "relative",
+                        width: "100%",
+                        aspectRatio: "16 / 9",
+                        borderRadius: "10px",
+                        overflow: "hidden",
+                        background: "#000000",
+                        border: "1px solid rgba(255, 255, 255, 0.08)"
+                    }}
+                >
+                    {!hasError ? (
                         <video
+                            ref={videoRef}
                             src={videoUrl}
                             controls
                             autoPlay
+                            playsInline
+                            preload="auto"
                             style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-                            onError={e => {
-                                const el = e.currentTarget;
-                                el.style.display = "none";
-                                const msg = el.parentElement?.querySelector(".nc-video-error") as HTMLElement;
-                                if (msg) msg.style.display = "flex";
+                            onError={() => {
+                                setHasError(true);
                             }}
                         />
+                    ) : (
                         <div
-                            className="nc-video-error"
                             style={{
-                                display: "none",
+                                display: "flex",
                                 flexDirection: "column",
                                 alignItems: "center",
                                 justifyContent: "center",
@@ -230,59 +268,101 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
                                 height: "100%",
                                 padding: "32px 16px",
                                 color: "#949ba4",
-                                gap: "8px",
+                                gap: "12px",
                                 textAlign: "center"
                             }}
                         >
-                            <Text variant="text-md/medium" style={{ color: "#949ba4" }}>{t("No video tutorial available for this plugin.")}</Text>
+                            <Text variant="text-md/medium" style={{ color: "#ffffff", fontWeight: 600 }}>
+                                {t("Video tutorial temporarily unavailable.")}
+                            </Text>
+                            <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+                                <Button
+                                    variant="primary"
+                                    size="small"
+                                    onClick={handlePlayInDiscord}
+                                >
+                                    {t("Play in Discord")}
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    size="small"
+                                    onClick={handleOpenInBrowser}
+                                >
+                                    {t("Open in Browser")}
+                                </Button>
+                            </div>
                         </div>
+                    )}
+                </div>
+            </ModalContent>
+            <ModalFooter style={{ padding: "16px 24px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                        <Button
+                            variant="primary"
+                            size="small"
+                            onClick={handlePlayInDiscord}
+                        >
+                            {t("Play in Discord")}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            size="small"
+                            onClick={handleOpenInBrowser}
+                        >
+                            {t("Open in Browser")}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            size="small"
+                            onClick={() => {
+                                VencordNative.clipboard.copy(videoUrl);
+                                showToast(t("Video link copied to clipboard!"), Toasts.Type.SUCCESS);
+                            }}
+                        >
+                            {t("Copy Link")}
+                        </Button>
                     </div>
-                </ModalContent>
-                <ModalFooter style={{ padding: "16px 24px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                            <Button
-                                variant="secondary"
-                                size="small"
-                                onClick={() => VencordNative.native.openExternal(videoUrl)}
-                            >
-                                {t("Open in Browser")}
-                            </Button>
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                        {hasSettings && (
                             <Button
                                 variant="secondary"
                                 size="small"
                                 onClick={() => {
-                                    VencordNative.clipboard.copy(videoUrl);
-                                    showToast(t("Video link copied to clipboard!"), Toasts.Type.SUCCESS);
+                                    modalProps.onClose();
+                                    openPluginModal(plugin);
                                 }}
                             >
-                                {t("Copy Link")}
+                                {t("Plugin Settings")}
                             </Button>
-                        </div>
-                        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                            {hasSettings && (
-                                <Button
-                                    variant="primary"
-                                    size="small"
-                                    onClick={() => {
-                                        props.onClose();
-                                        openPluginModal(plugin);
-                                    }}
-                                >
-                                    {t("Plugin Settings")}
-                                </Button>
-                            )}
-                            <Button
-                                variant="secondary"
-                                size="small"
-                                onClick={props.onClose}
-                            >
-                                {t("Close")}
-                            </Button>
-                        </div>
+                        )}
+                        <Button
+                            variant="secondary"
+                            size="small"
+                            onClick={modalProps.onClose}
+                        >
+                            {t("Close")}
+                        </Button>
                     </div>
-                </ModalFooter>
-            </ModalRoot>
+                </div>
+            </ModalFooter>
+        </ModalRoot>
+    );
+}
+
+    const openTutorialVideo = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const videoName = getTutorialVideoName(plugin.name) ?? plugin.name;
+        const videoUrl = `https://raw.githubusercontent.com/o9ll/GunTutorials/main/videos/${encodeURIComponent(videoName)}.mp4`;
+        const hasSettings = Boolean(plugin.settings && Object.keys(plugin.settings).length > 0);
+
+        openModal(props => (
+            <TutorialModal
+                modalProps={props}
+                plugin={plugin}
+                videoUrl={videoUrl}
+                hasSettings={hasSettings}
+            />
         ));
     };
 

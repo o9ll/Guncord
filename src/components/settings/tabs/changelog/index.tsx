@@ -224,7 +224,7 @@ function UpdateLogCard({
     );
 }
 
-function ChangelogContent() {
+export function ChangelogContent() {
     const repo = GUNCORD_REPO_URL;
     const repoErr = null;
     const repoPending = false;

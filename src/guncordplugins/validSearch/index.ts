@@ -476,8 +476,29 @@ async function handleStrangerSelect(username: string, switcher?: any) {
 }
 
 
+function getQuickSwitcherElements(): { container: HTMLElement | null; input: HTMLInputElement | null } {
+    // 1. Must strictly be the Discord QuickSwitcher modal container
+    const container = document.querySelector<HTMLElement>(
+        '[class*="quickswitcher_"], [class*="quickSwitcher_"], [class*="quickswitcher-"], [class*="quickSwitcher-"]'
+    );
+    if (!container) return { container: null, input: null };
+
+    // 2. Reject if inside settings or sidebar views
+    if (container.closest('[class*="standardSidebarView_"], [class*="settings_"], [class*="sidebarRegion_"]')) {
+        return { container: null, input: null };
+    }
+
+    // 3. Find input strictly inside this QuickSwitcher container
+    const input = container.querySelector<HTMLInputElement>(
+        'input[class*="input_"], input[role="combobox"], input[aria-autocomplete="list"], input'
+    );
+    if (!input) return { container: null, input: null };
+
+    return { container, input };
+}
+
 async function performAdvancedSearch(switcher?: any) {
-    const input = document.querySelector<HTMLInputElement>(".quickswitcher_ac6cb0 .input_ac6cb0");
+    const { input } = getQuickSwitcherElements();
     const rawQuery = (switcher?.state?.query ?? input?.value ?? "").trim();
 
     if (!rawQuery) {
@@ -596,20 +617,24 @@ function updateButtonPosition(btn: HTMLElement, container: HTMLElement, input: H
 }
 
 function mountSearchButton(switcher?: any) {
-    const container = document.querySelector<HTMLElement>(".quickswitcher_ac6cb0");
+    const { container, input } = getQuickSwitcherElements();
     if (!container) return;
 
     if (getComputedStyle(container).position === "static") {
         container.style.position = "relative";
     }
 
-    const input = container.querySelector<HTMLInputElement>(".input_ac6cb0");
     if (input) {
         input.style.paddingRight = "54px";
     }
 
     let btn = container.querySelector<HTMLElement>("#guncord-validsearch-btn");
     if (!btn) {
+        const orphan = document.getElementById("guncord-validsearch-btn");
+        if (orphan && orphan !== btn) {
+            orphan.remove();
+        }
+
         btn = document.createElement("div");
         btn.id = "guncord-validsearch-btn";
         btn.className = "guncord-validsearch-btn";
@@ -620,21 +645,40 @@ function mountSearchButton(switcher?: any) {
 
         btn.innerHTML = '<svg class="vc-ic-save-icon" aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24"><path fill="currentColor" d="M12 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM11.53 11A9.53 9.53 0 0 0 2 20.53c0 .81.66 1.47 1.47 1.47h.22c.24 0 .44-.17.5-.4.29-1.12.84-2.17 1.32-2.91.14-.21.43-.1.4.15l-.26 2.61c-.02.3.2.55.5.55h6.4a.5.5 0 0 0 .35-.85l-.02-.03a3 3 0 1 1 4.24-4.24l.53.52c.2.2.5.2.7 0l1.8-1.8c.17-.17.2-.43.06-.62A9.52 9.52 0 0 0 12.47 11h-.94Z"></path><path fill="currentColor" d="M23.7 17.7a1 1 0 1 0-1.4-1.4L18 20.58l-2.3-2.3a1 1 0 0 0-1.4 1.42l3 3a1 1 0 0 0 1.4 0l5-5Z"></path></svg>';
 
-        // Prevent input from losing focus when clicking button
-        btn.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-        });
-
-        btn.addEventListener("click", async (e) => {
+        let lastTriggerTime = 0;
+        const triggerSearch = async (e: Event) => {
             e.preventDefault();
             e.stopPropagation();
+            const now = Date.now();
+            if (now - lastTriggerTime < 350) return;
+            lastTriggerTime = now;
             await performAdvancedSearch(switcher || activeSwitcher);
+        };
+
+        btn.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
         });
 
-        btn.addEventListener("keydown", async (e) => {
+        btn.addEventListener("mouseup", (e) => {
+            triggerSearch(e);
+        });
+
+        btn.addEventListener("click", (e) => {
+            triggerSearch(e);
+        });
+
+        btn.addEventListener("pointerdown", (e) => {
+            e.stopPropagation();
+        });
+
+        btn.addEventListener("pointerup", (e) => {
+            triggerSearch(e);
+        });
+
+        btn.addEventListener("keydown", (e) => {
             if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                await performAdvancedSearch(switcher || activeSwitcher);
+                triggerSearch(e);
             }
         });
 
@@ -648,6 +692,16 @@ function mountSearchButton(switcher?: any) {
                 updateButtonPosition(btn, container, input);
             }
         });
+        setTimeout(() => {
+            if (btn && container && input && container.contains(btn)) {
+                updateButtonPosition(btn, container, input);
+            }
+        }, 100);
+        setTimeout(() => {
+            if (btn && container && input && container.contains(btn)) {
+                updateButtonPosition(btn, container, input);
+            }
+        }, 300);
     }
 }
 
@@ -974,8 +1028,9 @@ export default definePlugin({
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    cursor: pointer;
-    z-index: 100;
+    cursor: pointer !important;
+    z-index: 999999 !important;
+    pointer-events: auto !important;
     color: var(--header-secondary, #b5bac1);
     background-color: var(--background-modifier-hover, rgba(255, 255, 255, 0.08));
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -983,19 +1038,22 @@ export default definePlugin({
     user-select: none;
     box-sizing: border-box;
 }
+.guncord-validsearch-btn * {
+    pointer-events: none !important;
+}
 .guncord-validsearch-btn svg path {
     fill: currentColor !important;
 }
 .guncord-validsearch-btn:hover {
-    color: var(--interactive-hover, #ffffff);
-    background-color: var(--background-modifier-selected, rgba(255, 255, 255, 0.18));
-    border-color: rgba(255, 255, 255, 0.22);
-    transform: translateY(-50%) scale(1.05);
+    color: var(--interactive-hover, #ffffff) !important;
+    background-color: var(--background-modifier-selected, rgba(255, 255, 255, 0.18)) !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
+    transform: translateY(-50%) scale(1.05) !important;
 }
 .guncord-validsearch-btn:active {
-    color: var(--interactive-active, #ffffff);
-    background-color: var(--background-modifier-active, rgba(255, 255, 255, 0.24));
-    transform: translateY(-50%) scale(0.95);
+    color: var(--interactive-active, #ffffff) !important;
+    background-color: var(--background-modifier-active, rgba(255, 255, 255, 0.24)) !important;
+    transform: translateY(-50%) scale(0.95) !important;
 }
 .guncord-validsearch-btn.loading {
     opacity: 0.6;
@@ -1015,14 +1073,22 @@ export default definePlugin({
             switcherScheduled = true;
             requestAnimationFrame(() => {
                 switcherScheduled = false;
-                const qs = document.querySelector(".quickswitcher_ac6cb0");
-                if (qs) {
+                const { container } = getQuickSwitcherElements();
+                if (container) {
                     mountSearchButton(activeSwitcher);
+                } else {
+                    const btn = document.getElementById("guncord-validsearch-btn");
+                    if (btn) btn.remove();
                 }
             });
         });
-        const layersTarget = document.querySelector("[class*='layers_'], [class*='layerContainer_'], .layers__960e4") || document.body;
-        switcherObserver.observe(layersTarget, { childList: true, subtree: true });
+        switcherObserver.observe(document.body, { childList: true, subtree: true });
+
+        // Immediate check in case Quick Switcher is already open
+        const { container: initialContainer } = getQuickSwitcherElements();
+        if (initialContainer) {
+            mountSearchButton(activeSwitcher);
+        }
 
         // 1. Subscribe to Gateway member chunks
         boundOnChunk = (event: any) => {

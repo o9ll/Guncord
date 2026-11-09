@@ -6,7 +6,7 @@
 
 import { onceDefined } from "@shared/onceDefined";
 import electron, { app, BrowserWindowConstructorOptions, Menu, session } from "electron";
-import { appendFileSync, existsSync as fsExistsSync, statSync as fsStatSync, writeFileSync } from "original-fs";
+import { appendFileSync, existsSync as fsExistsSync, readFileSync, statSync as fsStatSync, writeFileSync } from "original-fs";
 import { dirname, join } from "path";
 
 import { makeLinksOpenExternally } from "./utils/externalLinks";
@@ -14,6 +14,7 @@ import { RendererSettings } from "./settings";
 import { patchTrayMenu } from "./trayMenu";
 import { applyPendingUpdateOnStartup } from "./updater/pendingUpdate";
 import { IS_VANILLA } from "./utils/constants";
+import PluginNatives from "~pluginNatives";
 
 const DEBUG_LOG_FILE = process.env.GUNCORD_LOG_FILE || (process.argv.includes("--guncord-debug-logs") ? join(process.env.TEMP || ".", "guncord-debug.log") : "");
 
@@ -119,12 +120,48 @@ if (!IS_VANILLA) {
                         visible: false,
                         acceleratorWorksWhenHidden: true,
                         accelerator: "Control+Q",
-                        click: () => app.quit()
+                        click: () => {
+                            try {
+                                (PluginNatives as any)?.MultiInstance?.setExplicitAppQuit?.(true);
+                            } catch {}
+                            app.quit();
+                        }
                     });
                 }
             }
             return originalBuild.call(this, template);
         };
+    }
+
+    const instanceUserId = process.env.GUNCORD_INSTANCE_USER ||
+        process.argv.find(a => a.startsWith("--guncord-instance-user="))?.split("=")[1];
+
+    let instanceConfig: {
+        userId?: string;
+        username?: string;
+        token?: string;
+        domain?: string;
+        uniqueAppId?: string;
+        iconPath?: string;
+    } | null = null;
+
+    if (instanceUserId) {
+        try {
+            const instDir = process.env.GUNCORD_INSTANCE_DIR || join(app.getPath("appData"), `Guncord-Instance-${instanceUserId}`);
+            const possiblePaths = [
+                join(instDir, "guncord-instance.json"),
+                join(instDir, "discord", "guncord-instance.json"),
+                join(app.getPath("userData"), "guncord-instance.json")
+            ];
+            for (const p of possiblePaths) {
+                if (fsExistsSync(p)) {
+                    instanceConfig = JSON.parse(readFileSync(p, "utf-8"));
+                    break;
+                }
+            }
+        } catch (e) {
+            console.warn("[Guncord] Failed to read instance config:", e);
+        }
     }
 
     class BrowserWindow extends electron.BrowserWindow {
@@ -140,6 +177,13 @@ if (!IS_VANILLA) {
             if (!isMainWindow) {
                 super(options);
                 return;
+            }
+
+            if (instanceConfig) {
+                options.title = `Guncord [${instanceConfig.username || instanceUserId}]`;
+                if (instanceConfig.iconPath && fsExistsSync(instanceConfig.iconPath)) {
+                    options.icon = instanceConfig.iconPath;
+                }
             }
 
             options.webPreferences.preload = join(__dirname, "preload.js");
@@ -181,7 +225,47 @@ if (!IS_VANILLA) {
             super(options);
 
             if (isMainWindow) {
+                (this as any).__isMainWindow = true;
                 makeLinksOpenExternally(this);
+
+                if (instanceConfig) {
+                    (this as any).__isMultiInstanceProcess = true;
+                    if (process.platform === "win32") {
+                        try {
+                            this.setAppDetails({
+                                appId: instanceConfig.uniqueAppId || `guncord.instance.${instanceUserId}`,
+                                appIconPath: instanceConfig.iconPath || undefined,
+                                relaunchDisplayName: `Guncord [${instanceConfig.username || instanceUserId}]`
+                            });
+                        } catch {}
+                    }
+
+                    this.webContents.on("page-title-updated", (e, title) => {
+                        const cleanTitle = title.replace(/^\(\d+\)\s*/, "").replace(/\s*\[.*\]$/, "");
+                        this.setTitle(`${cleanTitle} [${instanceConfig!.username || instanceUserId}]`);
+                        e.preventDefault();
+                    });
+
+                    if (instanceConfig.token) {
+                        const rawTok = instanceConfig.token;
+                        const uId = instanceConfig.userId || instanceUserId;
+                        const tokenInjectJs = `(function() {
+                            try {
+                                var t = ${JSON.stringify(rawTok)};
+                                var qt = JSON.stringify(t);
+                                localStorage.setItem("token", qt);
+                                localStorage.setItem("default_token", qt);
+                                localStorage.setItem("user_id_cache", JSON.stringify(${JSON.stringify(uId)}));
+                                Object.defineProperty(window, "__guncord_token", { value: t, writable: false, configurable: true });
+                                Object.defineProperty(window, "__guncord_user_id", { value: ${JSON.stringify(uId)}, writable: false, configurable: true });
+                            } catch(e) {}
+                        })();`;
+                        this.webContents.on("dom-ready", () => {
+                            this.webContents.executeJavaScript(tokenInjectJs).catch(() => {});
+                        });
+                    }
+                }
+
                 if (DEBUG_LOG_FILE) {
                     const levelNames = ["DEBUG", "INFO", "WARN", "ERROR"];
                     this.webContents.on("console-message", (_event, level, message, line, sourceId) => {
@@ -191,6 +275,37 @@ if (!IS_VANILLA) {
                         writeDebugLine(`RENDERER:${lvl}`, `${cleanMsg} (${shortSrc}:${line})`);
                     });
                 }
+
+                this.on("show", () => {
+                    (this as any).__hiddenDueToMultiInstance = false;
+                });
+
+                this.on("close", (event) => {
+                    if ((this as any).__isMultiInstanceProcess) {
+                        return;
+                    }
+                    try {
+                        const multi = (PluginNatives as any)?.MultiInstance;
+                        const isExplicitQuit = typeof multi?.getExplicitAppQuit === "function"
+                            ? multi.getExplicitAppQuit()
+                            : false;
+                        const hasInstances = typeof multi?.hasActiveMultiInstances === "function"
+                            ? multi.hasActiveMultiInstances()
+                            : false;
+
+                        if (isExplicitQuit) {
+                            return;
+                        }
+
+                        if (hasInstances) {
+                            event.preventDefault();
+                            (this as any).__hiddenDueToMultiInstance = true;
+                            this.hide();
+                        }
+                    } catch (err) {
+                        console.error("[Guncord] Error in mainWindow close handler:", err);
+                    }
+                });
             }
 
             if (settings.streamProof) {

@@ -402,6 +402,13 @@ function EquicordSettings() {
                 warning: { enabled: false },
             },
             {
+                key: "showIconFinder",
+                title: t("Enable Icon Finder"),
+                description: t("Show the Icon Finder tab in the settings sidebar to search and inspect Discord vector icons."),
+                restartRequired: false,
+                warning: { enabled: false },
+            },
+            {
                 key: "hideNativeHeaderButtons",
                 title: t("Hide Native Header Buttons (Inbox)"),
                 description: t("Hides native Discord header buttons like the notification inbox. Turn OFF to show the notification inbox button again."),

@@ -14,7 +14,7 @@ import { FormSwitch } from "@components/FormSwitch";
 import { ModalCloseButton } from "@utils/modal";
 import definePlugin, { PluginNative } from "@utils/types";
 import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { React, ReactDOM, Toasts, useState, useEffect, useRef, useCallback, SettingsRouter, Slider, Select, Text, Tooltip } from "@webpack/common";
+import { React, ReactDOM, Toasts, useState, useEffect, useRef, useCallback, SettingsRouter, Slider, Select, Text, Tooltip, RestAPI } from "@webpack/common";
 import { t } from "../autoTranslateGuncord";
 
 // UserAreaButton 100% sûr - aucun proxy lazy Webpack pour éviter les erreurs de type Reflect
@@ -551,13 +551,59 @@ function getMyVoiceState(): { channelId: string; guildId: string; isDM?: boolean
     }
 }
 
-function avatarUrl(userId: string, avatar: string | null) {
-    if (avatar) return `https://cdn.discordapp.com/avatars/${userId}/${avatar}.webp?size=80`;
+function isValidAvatarHash(avatar: any): boolean {
+    if (!avatar || typeof avatar !== "string") return false;
+    const str = avatar.trim();
+    if (str === "null" || str === "undefined" || str === "" || str === "0" || str === "1" || str === "2" || str === "3" || str === "4" || str === "5") return false;
+    if (/^\d+$/.test(str)) return false;
+    if (str.length < 15 && !str.startsWith("http")) return false;
+    return true;
+}
+
+function extractAvatarHash(raw: any): string | null {
+    if (!raw) return null;
+    const str = String(raw).trim();
+    if (str.includes("embed/avatars")) return null;
+    const lastPart = str.includes("/") ? str.split("/").pop()?.split(".")[0]?.split("?")[0] || "" : str;
+    return isValidAvatarHash(lastPart) ? lastPart : null;
+}
+
+const DEFAULT_AVATAR_COLORS = [
+    "#5865F2", // Blurple (0)
+    "#747F8D", // Grey (1)
+    "#57F287", // Green (2)
+    "#FEE75C", // Yellow (3)
+    "#EB459E", // Fuchsia (4)
+    "#ED4245", // Red (5)
+];
+
+function getDiscordDefaultAvatarSvgDataUri(userId?: string | null): string {
+    let idx = 0;
     try {
-        const idNum = userId ? BigInt(userId) : 0n;
-        const idx = idNum ? Number(idNum >> 22n) % 6 : 0;
-        return `https://cdn.discordapp.com/embed/avatars/${idx}.png`;
-    } catch { return "https://cdn.discordapp.com/embed/avatars/0.png"; }
+        if (userId) {
+            const idNum = BigInt(userId);
+            idx = Math.abs(Number((idNum >> 22n) % 6n));
+        }
+    } catch {
+        idx = 0;
+    }
+    const color = DEFAULT_AVATAR_COLORS[idx] || DEFAULT_AVATAR_COLORS[0];
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><circle cx="24" cy="24" r="24" fill="${color}"/><path fill="#ffffff" transform="translate(10, 10) scale(1.16)" d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.01.06.02.09.01 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02zM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12zm6.97 0c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12z"/></svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function getDefaultAvatarUrl(userId?: string | null): string {
+    return getDiscordDefaultAvatarSvgDataUri(userId);
+}
+
+function avatarUrl(userId: string, avatar: string | null) {
+    if (isValidAvatarHash(avatar)) {
+        if (avatar!.startsWith("http://") || avatar!.startsWith("https://")) {
+            return avatar!;
+        }
+        return `https://cdn.discordapp.com/avatars/${userId}/${avatar}.webp?size=80`;
+    }
+    return getDiscordDefaultAvatarSvgDataUri(userId);
 }
 
 function cleanToken(t: any): string {
@@ -611,7 +657,7 @@ async function validateToken(rawToken: string): Promise<GhostAccount | null> {
                 return {
                     userId: u.id,
                     username: u.global_name || u.username,
-                    avatar: u.avatar ? String(u.avatar).split("/").pop()?.split(".")[0] || null : null,
+                    avatar: extractAvatarHash(u.avatar),
                     token
                 };
             }
@@ -631,7 +677,7 @@ async function validateToken(rawToken: string): Promise<GhostAccount | null> {
                 return {
                     userId: d.id,
                     username: d.global_name || d.username,
-                    avatar: d.avatar ? String(d.avatar).split("/").pop()?.split(".")[0] || null : null,
+                    avatar: extractAvatarHash(d.avatar),
                     token
                 };
             }
@@ -668,7 +714,7 @@ async function getAllSavedAccounts(forceScan = false): Promise<GhostAccount[]> {
                 userId: uid,
                 token: tk,
                 username: a.username || "Ghost",
-                avatar: a.avatar ? String(a.avatar).split("/").pop()?.split(".")[0] || null : null
+                avatar: extractAvatarHash(a.avatar)
             });
         }
     }
@@ -688,7 +734,7 @@ async function getAllSavedAccounts(forceScan = false): Promise<GhostAccount[]> {
                 userId: uid,
                 token: tk,
                 username: a.username || "Ghost",
-                avatar: a.avatar ? String(a.avatar).split("/").pop()?.split(".")[0] || null : null
+                avatar: extractAvatarHash(a.avatar)
             });
         }
     }
@@ -834,6 +880,12 @@ function startFollowing() {
             if (ghostJoinDelay === 0) {
                 await Promise.all(activeAccs.map(async acc => {
                     if (newCh) {
+                        const targetChannel = ChannelStore?.getChannel?.(newCh);
+                        if (targetChannel?.type === 3 || targetChannel?.isGroupDM?.()) {
+                            try {
+                                await RestAPI.put({ url: `/channels/${newCh}/recipients/${acc.userId}` });
+                            } catch {}
+                        }
 
                         let realToken = acc.token;
                         try { realToken = await decryptToken(acc.token); } catch {}
@@ -866,6 +918,12 @@ function startFollowing() {
                 for (let i = 0; i < activeAccs.length; i++) {
                     const acc = activeAccs[i];
                     if (newCh) {
+                        const targetChannel = ChannelStore?.getChannel?.(newCh);
+                        if (targetChannel?.type === 3 || targetChannel?.isGroupDM?.()) {
+                            try {
+                                await RestAPI.put({ url: `/channels/${newCh}/recipients/${acc.userId}` });
+                            } catch {}
+                        }
 
                         let realToken = acc.token;
                         try { realToken = await decryptToken(acc.token); } catch {}
@@ -1426,20 +1484,16 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
 
         return (
             <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "none" }}>
-                {avatar ? (
-                    <img
-                        src={avatarUrl(uid, avatar)}
-                        style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
-                        alt=""
-                    />
-                ) : (
-                    <div
-                        className="gc-dropdown-avatar-placeholder"
-                        style={{ width: 20, height: 20, fontSize: 10, flexShrink: 0 }}
-                    >
-                        {name?.[0]?.toUpperCase() ?? "?"}
-                    </div>
-                )}
+                <img
+                    src={avatarUrl(uid, avatar)}
+                    onError={e => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        const fallback = getDefaultAvatarUrl(uid);
+                        if (target.src !== fallback) target.src = fallback;
+                    }}
+                    style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                    alt=""
+                />
                 <span style={{ color: "var(--text-normal, #fff)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {name}
                 </span>
@@ -1486,20 +1540,16 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
 
         return (
             <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "2px 0", pointerEvents: "none" }}>
-                {avatar ? (
-                    <img
-                        src={avatarUrl(uid, avatar)}
-                        style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
-                        alt=""
-                    />
-                ) : (
-                    <div
-                        className="gc-dropdown-avatar-placeholder"
-                        style={{ width: 24, height: 24, fontSize: 11, flexShrink: 0 }}
-                    >
-                        {name?.[0]?.toUpperCase() ?? "?"}
-                    </div>
-                )}
+                <img
+                    src={avatarUrl(uid, avatar)}
+                    onError={e => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        const fallback = getDefaultAvatarUrl(uid);
+                        if (target.src !== fallback) target.src = fallback;
+                    }}
+                    style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                    alt=""
+                />
                 <span style={{ flex: 1, color: "var(--text-normal, #fff)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {name}
                 </span>
@@ -1513,7 +1563,7 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
             key: String(a.userId),
             value: String(a.userId),
             label: a.username,
-            avatar: a.avatar,
+            avatar: avatarUrl(String(a.userId), a.avatar),
             userId: String(a.userId)
         }))
     ];
@@ -1940,7 +1990,16 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                             <div key={acc.userId} className={`gc-account ${isActive ? "gc-account--on" : ""}`}>
                                 <div className="gc-account-left">
                                     <div className="gc-avatar-wrap">
-                                        <img src={avatarUrl(acc.userId, acc.avatar)} className="gc-avatar" alt="" />
+                                        <img
+                                            src={avatarUrl(acc.userId, acc.avatar)}
+                                            onError={e => {
+                                                const target = e.currentTarget as HTMLImageElement;
+                                                const fallback = getDefaultAvatarUrl(acc.userId);
+                                                if (target.src !== fallback) target.src = fallback;
+                                            }}
+                                            className="gc-avatar"
+                                            alt=""
+                                        />
                                         <div className={`gc-status-dot ${isStreaming ? "gc-dot--stream" : isActive ? "gc-dot--voice" : isConnecting ? "gc-dot--connecting" : "gc-dot--off"}`} />
                                     </div>
                                     <div className="gc-account-info">
@@ -2862,6 +2921,13 @@ const GhostUserAreaButton = ({ iconForeground, hideTooltips, nameplate }: any) =
             ghostStates.set(acc.userId, { ...cur, connecting: true, error: null });
             notify();
             try {
+                const targetChannel = ChannelStore?.getChannel?.(vs.channelId);
+                if (targetChannel?.type === 3 || targetChannel?.isGroupDM?.()) {
+                    try {
+                        await RestAPI.put({ url: `/channels/${vs.channelId}/recipients/${acc.userId}` });
+                    } catch {}
+                }
+
                 const result = await Native.connectGhost(acc.userId, realToken, vs.guildId || "", vs.channelId, ghostMicLabel);
                 if (_cancelBatch) {
                     Native.leaveVoice(acc.userId, vs.guildId).catch(() => {});

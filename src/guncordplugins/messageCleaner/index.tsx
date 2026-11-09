@@ -120,6 +120,53 @@ async function deleteMessage(channelId: string, messageId: string, retryCount = 
     }
 }
 
+async function removeOwnReactionsFromMessage(channelId: string, message: any): Promise<number> {
+    if (!message?.reactions || !Array.isArray(message.reactions)) return 0;
+    let removedCount = 0;
+    for (const r of message.reactions) {
+        if (!r.me && !r.me_burst) continue;
+        const emojiName = r.emoji?.name;
+        if (!emojiName) continue;
+        const reactionStr = r.emoji?.id
+            ? encodeURIComponent(`${emojiName}:${r.emoji.id}`)
+            : encodeURIComponent(emojiName);
+
+        if (r.me) {
+            try {
+                await RestAPI.del({ url: `/channels/${channelId}/messages/${message.id}/reactions/${reactionStr}/@me` });
+                removedCount++;
+                await new Promise(res => setTimeout(res, 250));
+            } catch (err: any) {
+                if (err?.status === 429) {
+                    const retry = Number(err?.body?.retry_after ?? 1);
+                    await new Promise(res => setTimeout(res, retry * 1000 + 100));
+                    try {
+                        await RestAPI.del({ url: `/channels/${channelId}/messages/${message.id}/reactions/${reactionStr}/@me` });
+                        removedCount++;
+                    } catch {}
+                }
+            }
+        }
+        if (r.me_burst) {
+            try {
+                await RestAPI.del({ url: `/channels/${channelId}/messages/${message.id}/reactions/${reactionStr}/@me?burst=true` });
+                removedCount++;
+                await new Promise(res => setTimeout(res, 250));
+            } catch (err: any) {
+                if (err?.status === 429) {
+                    const retry = Number(err?.body?.retry_after ?? 1);
+                    await new Promise(res => setTimeout(res, retry * 1000 + 100));
+                    try {
+                        await RestAPI.del({ url: `/channels/${channelId}/messages/${message.id}/reactions/${reactionStr}/@me?burst=true` });
+                        removedCount++;
+                    } catch {}
+                }
+            }
+        }
+    }
+    return removedCount;
+}
+
 async function deleteTargetMessage(channelId: string, message: any, skipCalls: Set<string>): Promise<DeleteResult> {
     const isCall = isCallMessage(message);
     if (isCall) {
@@ -179,37 +226,58 @@ async function cleanChannel(channelId: string, logEntry: LogEntry, taskName: str
             const messages = await getChannelMessages(channelId, lastMessageId);
             if (messages.length === 0) break;
 
-            const validMessages = messages.filter(msg => canDeleteMessage(msg, currentUserId));
-
-            if (validMessages.length === 0) {
-                lastMessageId = messages[messages.length - 1].id;
-                logEntry.skipped += messages.length;
-                if (messages.length < 100) break;
-                continue;
-            }
-
-            for (const message of validMessages) {
+            for (const message of messages) {
                 if (shouldStop) break;
 
-                // Messages were just fetched from the channel, no need to re-verify them
-                const res = await deleteTargetMessage(channelId, message, skipCalls);
-                applyDeleteResult(logEntry, message, res);
-                totalProcessed++;
-                // Nothing was actually sent to Discord for skipped messages: no need to wait
-                if (res === "missing" || res === "forbidden") continue;
-                // Keep total as max(initial, deleted) so bar never goes backwards
-                const effectiveTotal = Math.max(initialTotalResults, logEntry.deleted);
-                currentTask = {
-                    name: taskName,
-                    progress: effectiveTotal > 0 ? `Deleted ${logEntry.deleted} / ${effectiveTotal}` : `Deleted ${logEntry.deleted}`,
-                    percentage: effectiveTotal > 0 ? Math.min((logEntry.deleted / effectiveTotal) * 100, 99) : Math.min((totalProcessed / (totalProcessed + 50)) * 100, 99)
-                };
-                emit();
+                const isOwn = canDeleteMessage(message, currentUserId);
+                if (isOwn) {
+                    const res = await deleteTargetMessage(channelId, message, skipCalls);
+                    applyDeleteResult(logEntry, message, res);
+                    totalProcessed++;
+                    if (res === "forbidden") {
+                        // If deleting whole message is forbidden, try stripping own reactions
+                        if (message.reactions?.some((r: any) => r.me || r.me_burst)) {
+                            const rxRemoved = await removeOwnReactionsFromMessage(channelId, message);
+                            if (rxRemoved > 0) {
+                                logEntry.deleted += rxRemoved;
+                                logEntry.messages.push(`[${message.timestamp}] (Reaction removed) ${message.content || "<attachment/embed>"}`);
+                            }
+                        }
+                        continue;
+                    }
+                    if (res === "missing") continue;
 
-                await new Promise(resolve => setTimeout(resolve, getDeleteDelay())); // User-configured deletion speed
+                    const effectiveTotal = Math.max(initialTotalResults, logEntry.deleted);
+                    currentTask = { 
+                        name: taskName, 
+                        progress: effectiveTotal > 0 ? `Deleted ${logEntry.deleted} / ${effectiveTotal}` : `Deleted ${logEntry.deleted}`, 
+                        percentage: effectiveTotal > 0 ? Math.min((logEntry.deleted / effectiveTotal) * 100, 99) : Math.min((totalProcessed / (totalProcessed + 50)) * 100, 99) 
+                    };
+                    emit();
+                    await new Promise(resolve => setTimeout(resolve, getDeleteDelay()));
+                } else {
+                    // Message from another user: remove any reaction placed by the current user
+                    if (message.reactions?.some((r: any) => r.me || r.me_burst)) {
+                        const rxRemoved = await removeOwnReactionsFromMessage(channelId, message);
+                        if (rxRemoved > 0) {
+                            totalProcessed++;
+                            logEntry.deleted += rxRemoved;
+                            logEntry.messages.push(`[${message.timestamp}] (Reaction removed) ${message.content || "<reaction>"}`);
+                            const effectiveTotal = Math.max(initialTotalResults, logEntry.deleted);
+                            currentTask = { 
+                                name: taskName, 
+                                progress: effectiveTotal > 0 ? `Deleted ${logEntry.deleted} / ${effectiveTotal}` : `Deleted ${logEntry.deleted}`, 
+                                percentage: effectiveTotal > 0 ? Math.min((logEntry.deleted / effectiveTotal) * 100, 99) : Math.min((totalProcessed / (totalProcessed + 50)) * 100, 99) 
+                            };
+                            emit();
+                            await new Promise(resolve => setTimeout(resolve, getDeleteDelay()));
+                        }
+                    } else {
+                        logEntry.skipped++;
+                    }
+                }
             }
-
-            logEntry.skipped += messages.length - validMessages.length;
+            
             lastMessageId = messages[messages.length - 1].id;
             if (messages.length < 100) break;
 
@@ -291,7 +359,13 @@ async function cleanGuild(guildId: string, logEntry: LogEntry, taskName: string)
                 applyDeleteResult(logEntry, message, res);
 
                 totalProcessed++;
-                if (res === "missing" || res === "forbidden") continue;
+                if (res === "forbidden") {
+                    if (message.reactions?.some((r: any) => r.me || r.me_burst)) {
+                        await removeOwnReactionsFromMessage(message.channel_id, message);
+                    }
+                    continue;
+                }
+                if (res === "missing") continue;
                 // Keep total as max(initial, deleted) so bar never goes backwards
                 const effectiveTotal = Math.max(initialTotalResults, logEntry.deleted);
                 currentTask = {

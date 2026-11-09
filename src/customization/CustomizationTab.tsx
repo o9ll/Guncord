@@ -1,3 +1,5 @@
+import { FontsContent } from "@components/settings/tabs/FontsTab";
+import { getGlobalFontConfig, setGlobalFontConfig, subscribeGlobalFont, type GlobalFontConfig } from "./globalFonts/globalFontManager";
 /*
  * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
@@ -57,13 +59,26 @@ const SparklesIcon = () => (
     </svg>
 );
 
-type ActiveTab = "stories" | "songs" | "effects";
+const FontIcon = () => (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 8 }}>
+        <polyline points="4 7 4 4 20 4 20 7" />
+        <line x1="9" y1="20" x2="15" y2="20" />
+        <line x1="12" y1="4" x2="12" y2="20" />
+    </svg>
+);
+
+type ActiveTab = "stories" | "songs" | "effects" | "fonts";
 
 export function CustomizationTab() {
     const [settings, setSettings] = useState<GuncordPremiumSettings>(getCachedPremiumSettings);
     const [isAuthed, setIsAuthed] = useState(false);
     const [activeTab, setActiveTab] = useState<ActiveTab>("stories");
     const [syncing, setSyncing] = useState(false);
+    const [fontConfig, setFontConfig] = useState<GlobalFontConfig>(getGlobalFontConfig);
+
+    useEffect(() => {
+        return subscribeGlobalFont(setFontConfig);
+    }, []);
 
     const currentUser = UserStore.getCurrentUser();
 
@@ -285,6 +300,33 @@ export function CustomizationTab() {
                             {t("Manage Effects")}
                         </Button>
                     </div>
+                    {/* Option 4: Client Fonts */}
+                    <div style={{
+                        background: "rgba(255, 255, 255, 0.03)",
+                        padding: "14px 16px",
+                        borderRadius: 8,
+                        border: activeTab === "fonts" ? "1px solid var(--brand-500, #5865f2)" : "1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))",
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "space-between",
+                        gap: 12
+                    }}>
+                        <FormSwitch
+                            title={t("Client Typography")}
+                            description={t("Custom Google font family and scale applied client-wide.")}
+                            value={Boolean(fontConfig.enabled && fontConfig.fontId !== "none")}
+                            onChange={(v: boolean) => setGlobalFontConfig({ enabled: v })}
+                            hideBorder
+                        />
+                        <Button
+                            color={activeTab === "fonts" ? Button.Colors.BRAND : Button.Colors.PRIMARY}
+                            size={Button.Sizes.SMALL}
+                            onClick={() => setActiveTab("fonts")}
+                        >
+                            <FontIcon />
+                            {t("Manage Fonts")}
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -293,6 +335,7 @@ export function CustomizationTab() {
                 {activeTab === "stories" && <StoriesSettingsSection />}
                 {activeTab === "songs" && <FavSongsSettingsSection />}
                 {activeTab === "effects" && <ProfileEffectsSettingsSection />}
+                {activeTab === "fonts" && <FontsContent />}
             </div>
         </div>
     );

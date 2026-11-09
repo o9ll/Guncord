@@ -9,7 +9,7 @@ import "./styles.css";
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import plugins from "~plugins";
 import { t } from "../autoTranslateGuncord";
-import { ChannelStore, FluxDispatcher, IconUtils, MessageStore, React, ReactDOM, SelectedChannelStore, UserStore } from "@webpack/common";
+import { ChannelStore, FluxDispatcher, GuildMemberStore, GuildStore, IconUtils, MessageStore, React, ReactDOM, SelectedChannelStore, UserStore } from "@webpack/common";
 import definePlugin from "@utils/types";
 
 // ─── Unique IDs ─────────────────────────────────────────────────────────────
@@ -112,21 +112,19 @@ function avatarUrl(user: any): string {
 
 // ─── Channel helpers ─────────────────────────────────────────────────────────
 
-/** Returns the current channel if it's a DM (type 1) or group DM (type 3), else null */
-function getCurrentDMChannel(): any | null {
+/** Returns the current channel (DM, group DM, or server channel) */
+function getCurrentChannel(): any | null {
     try {
         const chId = SelectedChannelStore.getChannelId();
         if (!chId) return null;
-        const ch = ChannelStore.getChannel(chId);
-        if (!ch || (ch.type !== 1 && ch.type !== 3)) return null;
-        return ch;
+        return ChannelStore.getChannel(chId) ?? null;
     } catch { return null; }
 }
 
-/** For a 1:1 DM (type 1), returns the other user. For groups, returns null (use getChannelMembers). */
+/** For a 1:1 DM (type 1), returns the other user. For groups/servers, returns null. */
 function getOtherUser(): any | null {
     try {
-        const ch = getCurrentDMChannel();
+        const ch = getCurrentChannel();
         if (!ch || ch.type !== 1) return null;
         const me = UserStore.getCurrentUser();
         const otherId = ch.recipients?.find((id: string) => id !== me?.id);
@@ -134,21 +132,51 @@ function getOtherUser(): any | null {
     } catch { return null; }
 }
 
-/** Returns all members of a DM or group DM channel (including self). */
+/** Returns members of a DM, group DM, or server channel (including self). */
 function getChannelMembers(): any[] {
     try {
-        const ch = getCurrentDMChannel();
+        const ch = getCurrentChannel();
         if (!ch) return [];
         const me = UserStore.getCurrentUser();
-        const ids: string[] = ch.recipients ?? ch.rawRecipients?.map((r: any) => r.id) ?? [];
-        const members: any[] = [];
-        if (me) members.push(me);
-        for (const id of ids) {
-            if (id === me?.id) continue;
-            const u = UserStore.getUser(id);
-            if (u) members.push(u);
+        const membersMap = new Map<string, any>();
+        if (me) membersMap.set(me.id, me);
+
+        if (ch.type === 1 || ch.type === 3) {
+            const ids: string[] = ch.recipients ?? ch.rawRecipients?.map((r: any) => r.id) ?? [];
+            for (const id of ids) {
+                if (id === me?.id) continue;
+                const u = UserStore.getUser(id);
+                if (u) membersMap.set(u.id, u);
+            }
+        } else if (ch.guild_id) {
+            try {
+                const msgs = MessageStore.getMessages(ch.id)?.toArray?.() || [];
+                for (const m of msgs) {
+                    if (m?.author?.id && !membersMap.has(m.author.id)) {
+                        membersMap.set(m.author.id, m.author);
+                    }
+                }
+            } catch {}
+
+            try {
+                const gmData = (GuildMemberStore as any)?.getMembers?.(ch.guild_id);
+                if (Array.isArray(gmData)) {
+                    for (const gm of gmData) {
+                        const u = gm.user || UserStore.getUser(gm.userId);
+                        if (u && !membersMap.has(u.id)) membersMap.set(u.id, u);
+                        if (membersMap.size >= 80) break;
+                    }
+                } else if (gmData && typeof gmData === "object") {
+                    for (const gm of Object.values(gmData) as any[]) {
+                        const u = gm.user || UserStore.getUser(gm.userId);
+                        if (u && !membersMap.has(u.id)) membersMap.set(u.id, u);
+                        if (membersMap.size >= 80) break;
+                    }
+                }
+            } catch {}
         }
-        return members;
+
+        return Array.from(membersMap.values());
     } catch { return []; }
 }
 
@@ -428,23 +456,23 @@ function MemberSelect({ members, value, onChange, label }: { members: any[]; val
 // ─── FakeDM Panel ───────────────────────────────────────────────────────────
 function FakeDMPanel({ onClose, btnRect }: { onClose(): void; btnRect: DOMRect; }) {
     const me = UserStore.getCurrentUser();
-    const ch = getCurrentDMChannel();
+    const ch = getCurrentChannel();
     const channelId = SelectedChannelStore.getChannelId();
+    const isGuild = Boolean(ch?.guild_id);
     const isGroup = ch?.type === 3;
     const other = getOtherUser(); // only set for 1:1 DMs
-    const members = getChannelMembers(); // set for both 1:1 and group DMs
-    const isInDMOrGroup = !!ch; // true for type 1 AND type 3
+    const members = getChannelMembers(); // set for 1:1, group DMs, and server channels
+    const isInValidChannel = Boolean(ch);
 
     // Mode: "message" | "call"
     const [mode, setMode] = React.useState<"message" | "call">("message");
 
-    // Message mode state — for groups we use a member ID string; for 1:1 we keep "me"/"other"
+    // Message mode state
     const [senderId, setSenderId] = React.useState<string>(() => me?.id ?? "");
 
     // Call mode state
     const [callerId, setCallerId] = React.useState<string>(() => me?.id ?? "");
     const [callReceiverId, setCallReceiverId] = React.useState<string>(() => {
-        // Default "other" for calls = first non-me member
         return members.find(m => m.id !== me?.id)?.id ?? me?.id ?? "";
     });
     const [callMissed, setCallMissed] = React.useState(false);
@@ -488,7 +516,7 @@ function FakeDMPanel({ onClose, btnRect }: { onClose(): void; btnRect: DOMRect; 
         if (isNaN(date.getTime())) { setMsg(t("Invalid Date!"), false); return; }
         inject(channelId, author, text.trim(), date);
         setText("");
-        setMsg(t("Message injected ✓"), true);
+        setMsg(t("Message injected"), true);
         setDateStr(toLocal(new Date(date.getTime() + 60_000)));
         setTimeout(() => textareaRef.current?.focus(), 10);
     }
@@ -502,15 +530,15 @@ function FakeDMPanel({ onClose, btnRect }: { onClose(): void; btnRect: DOMRect; 
         if (isNaN(date.getTime())) { setMsg(t("Invalid Date!"), false); return; }
         const durSec = callMissed ? 0 : Math.max(1, Math.round((parseFloat(callDuration) || 0) * 60));
         injectCall(channelId, callerUser, receiverUser, callMissed, durSec, date);
-        setMsg(callMissed ? t("Missed call injected ✓") : t("Call injected ✓"), true);
+        setMsg(callMissed ? t("Missed call injected") : t("Call injected"), true);
         setDateStr(toLocal(new Date(date.getTime() + 60_000)));
     }
 
-    // For 1:1 DMs keep the simple two-button sender row; for groups use a select
     const meName = (me as any)?.globalName || me?.username || "Me";
     const otherName = other?.globalName || other?.username || "Other";
+    const useSelect = isGroup || isGuild || !other;
 
-    const SenderRow = isGroup ? (
+    const SenderRow = useSelect ? (
         <MemberSelect members={members} value={senderId} onChange={setSenderId} label={t("From :")} />
     ) : (
         <div className="fdm-sender-row">
@@ -551,18 +579,24 @@ function FakeDMPanel({ onClose, btnRect }: { onClose(): void; btnRect: DOMRect; 
                 onMouseUp={e => e.stopPropagation()}
             >
                 <div className="fdm-header">
-                    <span className="fdm-title">{mode === "message" ? t("✏ Fake DM") : t("📞 Fake Call")}{isGroup ? t(" (Group)") : ""}</span>
+                    <span className="fdm-title">
+                        {mode === "message"
+                            ? (isGuild ? t("Fake Message (Server)") : isGroup ? t("Fake Message (Group)") : t("Fake Message"))
+                            : t("Fake Call")}
+                    </span>
                     <button className="fdm-close" onClick={onClose}>✕</button>
                 </div>
 
                 {/* Mode tabs */}
-                <div style={{ display: "flex", gap: 6, padding: "0 12px 10px" }}>
-                    <button onClick={() => setMode("message")} style={{ flex: 1, padding: "5px 0", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: mode === "message" ? "#5865f2" : "rgba(255,255,255,0.07)", color: mode === "message" ? "#fff" : "rgba(255,255,255,0.5)" }}>{t("💬 Message")}</button>
-                    <button onClick={() => setMode("call")} style={{ flex: 1, padding: "5px 0", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: mode === "call" ? "#5865f2" : "rgba(255,255,255,0.07)", color: mode === "call" ? "#fff" : "rgba(255,255,255,0.5)" }}>{t("📞 Call")}</button>
-                </div>
+                {!isGuild && (
+                    <div style={{ display: "flex", gap: 6, padding: "0 12px 10px" }}>
+                        <button onClick={() => setMode("message")} style={{ flex: 1, padding: "5px 0", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: mode === "message" ? "#5865f2" : "rgba(255,255,255,0.07)", color: mode === "message" ? "#fff" : "rgba(255,255,255,0.5)" }}>{t("Message")}</button>
+                        <button onClick={() => setMode("call")} style={{ flex: 1, padding: "5px 0", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: mode === "call" ? "#5865f2" : "rgba(255,255,255,0.07)", color: mode === "call" ? "#fff" : "rgba(255,255,255,0.5)" }}>{t("Call")}</button>
+                    </div>
+                )}
 
-                {!isInDMOrGroup ? (
-                    <div style={{ padding: "16px 14px", color: "rgba(255,255,255,0.45)", fontSize: 13, textAlign: "center" }}>{t("Open a DM or group DM to use FakeDM.")}</div>
+                {!isInValidChannel ? (
+                    <div style={{ padding: "16px 14px", color: "rgba(255,255,255,0.45)", fontSize: 13, textAlign: "center" }}>{t("Open a channel to use FakeDM.")}</div>
                 ) : mode === "message" ? (
                     <>
                         {SenderRow}
@@ -586,8 +620,8 @@ function FakeDMPanel({ onClose, btnRect }: { onClose(): void; btnRect: DOMRect; 
                                 <button className="fdm-clear-btn" onClick={() => {
                                     if (!channelId) return;
                                     const n = clearFakes(channelId);
-                                    setMsg(`${n} ${t("msgs deleted ✓")}`, true);
-                                }}>{t("🗑 Clear")}</button>
+                                    setMsg(`${n} ${t("msgs deleted")}`, true);
+                                }}>{t("Clear")}</button>
                             </div>
                         </div>
                     </>
@@ -596,8 +630,8 @@ function FakeDMPanel({ onClose, btnRect }: { onClose(): void; btnRect: DOMRect; 
                         {CallerRow}
 
                         <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px" }}>
-                            <button onClick={() => setCallMissed(false)} style={{ flex: 1, padding: "4px 0", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: !callMissed ? "#3ba55c" : "rgba(255,255,255,0.07)", color: !callMissed ? "#fff" : "rgba(255,255,255,0.45)" }}>{t("✅ Answered")}</button>
-                            <button onClick={() => setCallMissed(true)} style={{ flex: 1, padding: "4px 0", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: callMissed ? "#ed4245" : "rgba(255,255,255,0.07)", color: callMissed ? "#fff" : "rgba(255,255,255,0.45)" }}>{t("❌ Missed")}</button>
+                            <button onClick={() => setCallMissed(false)} style={{ flex: 1, padding: "4px 0", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: !callMissed ? "#3ba55c" : "rgba(255,255,255,0.07)", color: !callMissed ? "#fff" : "rgba(255,255,255,0.45)" }}>{t("Answered")}</button>
+                            <button onClick={() => setCallMissed(true)} style={{ flex: 1, padding: "4px 0", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: callMissed ? "#ed4245" : "rgba(255,255,255,0.07)", color: callMissed ? "#fff" : "rgba(255,255,255,0.45)" }}>{t("Missed")}</button>
                             {!callMissed && (
                                 <>
                                     <input type="number" min="0" step="1" className="fdm-date-input" style={{ width: 52, textAlign: "center", flexShrink: 0 }} value={callDuration} onChange={e => setCallDuration(e.target.value)} />
@@ -617,8 +651,8 @@ function FakeDMPanel({ onClose, btnRect }: { onClose(): void; btnRect: DOMRect; 
                             <button className="fdm-clear-btn" onClick={() => {
                                 if (!channelId) return;
                                 const n = clearFakes(channelId);
-                                setMsg(`${n} ${t("msgs deleted ✓")}`, true);
-                            }}>{t("🗑 Clear")}</button>
+                                setMsg(`${n} ${t("msgs deleted")}`, true);
+                            }}>{t("Clear")}</button>
                         </div>
                     </>
                 )}
@@ -646,9 +680,9 @@ const FakeDMButton: ChatBarButtonFactory = (props: any) => {
     const { isMainChat } = props;
     const [btnRect, setBtnRect] = React.useState<DOMRect | null>(null);
 
-    // Show in main chat AND in group DMs (type 3)
-    const ch = getCurrentDMChannel();
-    if (!isMainChat && !ch) return null;
+    // Show in main chat, group DMs, and server channels
+    const ch = getCurrentChannel();
+    if (!ch) return null;
 
     function handleClick(e: React.MouseEvent) {
         if (btnRect) { setBtnRect(null); } else {
@@ -659,7 +693,7 @@ const FakeDMButton: ChatBarButtonFactory = (props: any) => {
 
     return (
         <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onMouseUp={e => e.stopPropagation()} style={{ display: "contents" }}>
-            <ChatBarButton tooltip={t("Fake DM — inject a fake message")} onClick={handleClick}>
+            <ChatBarButton tooltip={t("Fake Message — inject a fake message")} onClick={handleClick}>
                 <FakeDMIcon />
             </ChatBarButton>
             {btnRect && ReactDOM.createPortal(
@@ -674,7 +708,7 @@ const FakeDMButton: ChatBarButtonFactory = (props: any) => {
 export default definePlugin({
     name: "FakeDM",
     enabledByDefault: false,
-    description: "Injects fake local messages into a DM or group DM. Button in the text bar. Persists across restarts.",
+    description: "Injects fake local messages into a DM, group DM, or server channel. Button in the text bar. Persists across restarts.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["ChatInputButtonAPI"],
 

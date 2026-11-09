@@ -42,6 +42,15 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Performance Mode: Throttle background instances to reduce CPU usage.",
         default: false
+    },
+    processMode: {
+        type: OptionType.SELECT,
+        description: "Instance Window Mode: Dependent window (closes together with Guncord) or Independent window (detached standalone process).",
+        options: [
+            { label: "Dependent window (Default, closes with Guncord)", value: "dependent", default: true },
+            { label: "Independent window (Detached standalone process)", value: "independent" }
+        ],
+        default: "dependent"
     }
 });
 
@@ -201,7 +210,7 @@ async function runAutoLaunch(): Promise<void> {
         const curUser = UserStore.getCurrentUser();
         const openIds = (await Native.getOpenInstances().catch(() => [])) ?? [];
 
-        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings } = settings.store;
+        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings, processMode } = settings.store;
         const audioSettings = syncAudioSettings ? captureMasterAudioSettings() : undefined;
 
         let delayMs = 1500;
@@ -228,7 +237,8 @@ async function runAutoLaunch(): Promise<void> {
                         blockExternalTokenAccess,
                         performanceMode,
                         audioSettings,
-                        uiSettings
+                        uiSettings,
+                        processMode ?? "dependent"
                     );
                 } catch (err) {
                     console.warn(`[GuncordMI] Auto-launch failed for ${targetId}:`, err);
@@ -1353,11 +1363,11 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
             showToast(t("Cannot launch: Token collision detected."), Toasts.Type.FAILURE);
             return;
         }
-        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings } = settings.store;
+        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings, processMode } = settings.store;
         const audioSettings = syncAudioSettings ? captureMasterAudioSettings() : undefined;
         const uiSettings = captureSharedUiSettings();
-        // @ts-ignore - Passage du pseudo, domaine, token protection, perf mode, audioSettings, uiSettings
-        const res = await Native.openInstanceWindow(acc.token, acc.id, false, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings, uiSettings).catch(() => ({ ok: false, error: "error" }));
+        // @ts-ignore - Passage du pseudo, domaine, token protection, perf mode, audioSettings, uiSettings, processMode
+        const res = await Native.openInstanceWindow(acc.token, acc.id, false, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings, uiSettings, processMode ?? "dependent").catch(() => ({ ok: false, error: "error" }));
         if ((res as any)?.ok) {
             await refreshInstances();
         } else {
@@ -1376,11 +1386,11 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
             showToast(t("Cannot launch: Token collision detected."), Toasts.Type.FAILURE);
             return;
         }
-        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings } = settings.store;
+        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings, processMode } = settings.store;
         const audioSettings = syncAudioSettings ? captureMasterAudioSettings() : undefined;
         const uiSettings = captureSharedUiSettings();
-        // @ts-ignore - Argument 'detached', pseudo, domaine, token protection, perf mode, audioSettings, uiSettings
-        const res = await Native.openInstanceWindow(acc.token, acc.id, true, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings, uiSettings).catch(() => ({ ok: false, error: "error" }));
+        // @ts-ignore - Argument 'detached', pseudo, domaine, token protection, perf mode, audioSettings, uiSettings, processMode
+        const res = await Native.openInstanceWindow(acc.token, acc.id, true, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings, uiSettings, processMode ?? "dependent").catch(() => ({ ok: false, error: "error" }));
         if ((res as any)?.ok) {
             await refreshInstances();
         } else {
@@ -1396,11 +1406,11 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
             showToast(t("Cannot launch: Token collision detected."), Toasts.Type.FAILURE);
             return;
         }
-        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings } = settings.store;
+        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings, processMode } = settings.store;
         const audioSettings = syncAudioSettings ? captureMasterAudioSettings() : undefined;
         const uiSettings = captureSharedUiSettings();
         // @ts-ignore
-        const res = await Native.openInstanceWindowGrouped(acc.token, acc.id, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings, uiSettings).catch(() => ({ ok: false, error: "error" }));
+        const res = await Native.openInstanceWindowGrouped(acc.token, acc.id, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings, uiSettings, processMode ?? "dependent").catch(() => ({ ok: false, error: "error" }));
         if ((res as any)?.ok) {
             await refreshInstances();
         } else {

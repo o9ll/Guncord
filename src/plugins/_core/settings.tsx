@@ -4,13 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { definePluginSettings } from "@api/Settings";
+import { definePluginSettings, Settings } from "@api/Settings";
+import { isPluginEnabled } from "@api/PluginManager";
 import { BackupRestoreIcon, CloudIcon, LogIcon, MagnifyingGlassIcon, MainSettingsIcon, PaintbrushIcon, PatchHelperIcon, PluginsIcon, TrashIcon, UpdaterIcon } from "@components/Icons";
 import { LangIcon } from "@components/LangIcon";
 import {
-    BackupAndRestoreTab,
-    ChangelogTab,
-    FontsTab,
     LanguageTab,
     PatchHelperTab,
     PluginsTab,
@@ -305,13 +303,6 @@ export default definePlugin({
                 Component: CustomizationTab,
                 Icon: CustomizationIcon
             }),
-            buildEntry({
-                key: "guncord_fonts",
-                title: "Fonts",
-                panelTitle: "Fonts",
-                Component: FontsTab,
-                Icon: FontIcon
-            }),
             settings.store.showStatus && buildEntry({
                 key: "guncord_status",
                 title: "Status",
@@ -334,25 +325,13 @@ export default definePlugin({
                 Icon: UpdaterIcon
             }),
             buildEntry({
-                key: "equicord_changelog",
-                title: "Logs",
-                Component: ChangelogTab,
-                Icon: LogIcon,
-            }),
-            buildEntry({
-                key: "equicord_backup_restore",
-                title: "Backup",
-                Component: BackupAndRestoreTab,
-                Icon: BackupRestoreIcon
-            }),
-            buildEntry({
                 key: "guncord_sync",
                 title: "Sync",
                 panelTitle: "Sync",
                 Component: SyncTab,
                 Icon: CloudIcon
             }),
-            buildEntry({
+            isPluginEnabled("DmPurger") && buildEntry({
                 key: "guncord_dm_purger",
                 title: "DM",
                 panelTitle: "DM",
@@ -371,7 +350,7 @@ export default definePlugin({
                 Component: PatchHelperTab,
                 Icon: PatchHelperIcon
             }),
-            buildEntry({
+            Settings.showIconFinder && buildEntry({
                 key: "guncord_icon_finder",
                 title: "Icon",
                 Component: IconsTab,

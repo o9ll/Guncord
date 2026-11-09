@@ -1,7 +1,7 @@
 {
     "name": "guncord",
     "private": "true",
-    "version": "1.1.6",
+    "version": "1.1.7",
     "description": "The other cutest Discord client mod",
     "main": "dist/js/main.js",
     "homepage": "https://github.com/o9ll/Guncord#readme",
@@ -15,6 +15,7 @@
     "license": "GPL-3.0-or-later",
     "author": "o9ll",
     "scripts": {
+		"build:mobile": "bun run bundle/scripts/build.ts",
         "build": "pnpm depCheck && pnpm generatePluginJson && node --require=./scripts/suppressExperimentalWarnings.js scripts/build/build.mjs",
         "buildAll": "pnpm buildStandalone && pnpm buildWebStandalone && pnpm run buildDesktop",
         "buildStandalone": "pnpm build --standalone",

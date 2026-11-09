@@ -50,8 +50,12 @@ export function initGuncordTray(injectorPath: string) {
                     label: "Open Guncord",
                     click() {
                         const wins = electron.BrowserWindow.getAllWindows();
-                        const main = wins.find(w => !w.isDestroyed()) ?? wins[0];
-                        if (main) { main.show(); main.focus(); }
+                        const main = wins.find(w => !w.isDestroyed() && (w as any).__isMainWindow) ?? wins.find(w => !w.isDestroyed()) ?? wins[0];
+                        if (main) {
+                            if (main.isMinimized()) main.restore();
+                            main.show();
+                            main.focus();
+                        }
                     }
                 },
                 { type: "separator" },
@@ -68,6 +72,10 @@ export function initGuncordTray(injectorPath: string) {
                         if (uninstaller) {
                             const { spawn } = require("child_process");
                             spawn(uninstaller, [], { detached: true, stdio: "ignore" }).unref();
+                            try {
+                                const PluginNatives = (require("~pluginNatives") as any)?.default ?? require("~pluginNatives");
+                                PluginNatives?.MultiInstance?.setExplicitAppQuit?.(true);
+                            } catch {}
                             app.quit();
                         } else {
                             const { shell } = require("electron");
@@ -78,15 +86,22 @@ export function initGuncordTray(injectorPath: string) {
                 { type: "separator" },
                 {
                     label: "Quit",
-                    click() { app.quit(); }
+                    click() {
+                        try {
+                            const PluginNatives = (require("~pluginNatives") as any)?.default ?? require("~pluginNatives");
+                            PluginNatives?.MultiInstance?.setExplicitAppQuit?.(true);
+                        } catch {}
+                        app.quit();
+                    }
                 }
             ]);
 
             guncordTrayInstance!.setContextMenu(trayMenu);
             guncordTrayInstance!.on("click", () => {
                 const wins = electron.BrowserWindow.getAllWindows();
-                const main = wins.find(w => !w.isDestroyed()) ?? wins[0];
+                const main = wins.find(w => !w.isDestroyed() && (w as any).__isMainWindow) ?? wins.find(w => !w.isDestroyed()) ?? wins[0];
                 if (main) {
+                    if (main.isMinimized()) main.restore();
                     if (main.isVisible()) main.focus();
                     else main.show();
                 }

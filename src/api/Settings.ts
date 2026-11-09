@@ -87,6 +87,7 @@ export interface Settings {
     seeAllCustomProfile: boolean;
     syncOwnCustomProfile: boolean;
     syncDiscordLanguage: boolean;
+    showIconFinder: boolean;
     language: "auto" | "en" | "fr" | "ar" | "es" | "ru" | "zh";
     plugins: {
         [plugin: string]: {
@@ -152,6 +153,7 @@ const DefaultSettings: Settings = {
     seeAllCustomProfile: true,
     syncOwnCustomProfile: false,
     syncDiscordLanguage: false,
+    showIconFinder: false,
     language: "auto",
     plugins: {},
 

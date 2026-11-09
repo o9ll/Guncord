@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { spawn } from "child_process";
 import { app, BrowserWindow, ipcMain, type NativeImage, nativeImage, safeStorage, screen, session, type Session } from "electron";
 import { existsSync, mkdirSync, promises as fsPromises, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -61,6 +62,78 @@ function decryptTokenSync(token: string): string {
 const openWindows = new Map<string, BrowserWindow>();
 const openGroupedWindows = new Map<string, BrowserWindow>();
 const pendingInstanceAuth = new Map<number, { token: string; userId: string; username: string; }>();
+const runningInstancePids = new Map<string, number>();
+
+function isProcessAlive(pid: number): boolean {
+    if (!pid || typeof pid !== "number") return false;
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function getInstanceUserDataDir(userId: string): string {
+    return join(app.getPath("userData"), "..", `Guncord-Instance-${userId}`);
+}
+
+function isInstanceRunning(userId: string): boolean {
+    const memPid = runningInstancePids.get(userId);
+    if (memPid && isProcessAlive(memPid)) return true;
+    if (memPid) runningInstancePids.delete(userId);
+    return false;
+}
+
+let isExplicitAppQuit = false;
+
+app.on("before-quit", () => {
+    isExplicitAppQuit = true;
+});
+
+export function setExplicitAppQuit(val: boolean) {
+    isExplicitAppQuit = val;
+}
+
+export function getExplicitAppQuit(): boolean {
+    return isExplicitAppQuit;
+}
+
+export function hasActiveMultiInstances(): boolean {
+    for (const w of openWindows.values()) {
+        if (!w.isDestroyed()) return true;
+    }
+    for (const w of openGroupedWindows.values()) {
+        if (!w.isDestroyed()) return true;
+    }
+    return false;
+}
+
+export function handleMultiInstanceClosed() {
+    if (hasActiveMultiInstances()) return;
+    const wins = BrowserWindow.getAllWindows();
+    const main = wins.find(w => !w.isDestroyed() && (w as any).__isMainWindow);
+    if (!main) return;
+    if ((main as any).__hiddenDueToMultiInstance) {
+        const minimizeToTray = (global as any).appSettings?.get?.("MINIMIZE_TO_TRAY", true) ?? true;
+        if (!minimizeToTray) {
+            isExplicitAppQuit = true;
+            app.quit();
+        }
+    }
+}
+
+export async function showMainWindow(): Promise<boolean> {
+    const wins = BrowserWindow.getAllWindows();
+    const main = wins.find(w => !w.isDestroyed() && (w as any).__isMainWindow) ?? wins[0];
+    if (main) {
+        if (main.isMinimized()) main.restore();
+        main.show();
+        main.focus();
+        return true;
+    }
+    return false;
+}
 
 export function isMultiInstanceWin(win: BrowserWindow | null | undefined): boolean {
     if (!win || win.isDestroyed()) return false;
@@ -1026,12 +1099,109 @@ export async function openInstanceWindow(
     blockExternalTokenAccess = false,
     performanceMode = false,
     audioSettings?: any,
-    passedSharedSettings?: Record<string, string>
+    passedSharedSettings?: Record<string, string>,
+    processMode = "dependent"
 ): Promise<{ ok: boolean; error?: string; }> {
     try {
         const cleanTok = decryptTokenSync(token);
         token = cleanTok;
-        // Fenetre deja ouverte -> focus
+        const instanceDir = getInstanceUserDataDir(userId);
+        mkdirSync(instanceDir, { recursive: true });
+
+        // Icon assignment
+        let currentIconPath = "";
+        const iconDir = getDetachedIconDir();
+        const maxIcons = getAvailableIconCount();
+        currentIconPath = join(iconDir, `${iconCounter}.ico`);
+        if (!existsSync(currentIconPath)) currentIconPath = "";
+        iconCounter = iconCounter >= maxIcons ? 1 : iconCounter + 1;
+
+        const effectiveAudio = audioSettings || getMasterAudioSettings();
+        const sharedSettings = await captureAndMergeSharedSettings(_, passedSharedSettings);
+
+        if (processMode === "independent") {
+            // Independent Mode: Spawn separate detached process that survives main client closure
+            if (isInstanceRunning(userId)) {
+                const child = spawn(process.execPath, [
+                    "--multi-instance",
+                    `--user-data-dir=${instanceDir}`,
+                    `--guncord-instance-user=${userId}`
+                ], {
+                    detached: true,
+                    stdio: "ignore",
+                    windowsHide: false,
+                    env: {
+                        ...process.env,
+                        DISCORD_USER_DATA_DIR: instanceDir,
+                        GUNCORD_INSTANCE_USER: userId,
+                        GUNCORD_INSTANCE_DIR: instanceDir
+                    }
+                });
+                child.unref();
+                return { ok: true };
+            }
+
+            const uniqueAppId = `guncord.instance.${userId}`;
+
+            if (audioSettings) {
+                saveMasterAudioSettings(null, audioSettings);
+            }
+            if (userId && token) {
+                saveSharedAccounts(null, [{ id: userId, token, username: username || "", avatar: "" }]).catch(() => {});
+                saveSharedTokenCache(null, { [userId]: token }).catch(() => {});
+            }
+
+            const config = {
+                userId,
+                username: username || userId,
+                token: cleanTok,
+                domain: domain || "discord.com",
+                iconPath: currentIconPath,
+                uniqueAppId,
+                audioSettings: effectiveAudio,
+                sharedSettings
+            };
+
+            const configPath = join(instanceDir, "guncord-instance.json");
+            writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+            try {
+                const subDir = join(instanceDir, "discord");
+                mkdirSync(subDir, { recursive: true });
+                writeFileSync(join(subDir, "guncord-instance.json"), JSON.stringify(config, null, 2), "utf-8");
+            } catch {}
+
+            const child = spawn(process.execPath, [
+                "--multi-instance",
+                `--user-data-dir=${instanceDir}`,
+                `--guncord-instance-user=${userId}`
+            ], {
+                detached: true,
+                stdio: "ignore",
+                windowsHide: false,
+                env: {
+                    ...process.env,
+                    DISCORD_USER_DATA_DIR: instanceDir,
+                    GUNCORD_INSTANCE_USER: userId,
+                    GUNCORD_INSTANCE_DIR: instanceDir
+                }
+            });
+
+            if (child.pid) {
+                runningInstancePids.set(userId, child.pid);
+                try {
+                    writeFileSync(join(instanceDir, "guncord.pid"), String(child.pid), "utf-8");
+                } catch {}
+                child.on("exit", () => {
+                    runningInstancePids.delete(userId);
+                    try { unlinkSync(join(instanceDir, "guncord.pid")); } catch {}
+                });
+            }
+            child.unref();
+
+            return { ok: true };
+        }
+
+        // Dependent Mode (Default): Native BrowserWindow that terminates when main Guncord closes
         const existing = openWindows.get(userId);
         if (existing && !existing.isDestroyed()) {
             existing.show();
@@ -1042,14 +1212,6 @@ export async function openInstanceWindow(
         // ID unique par instance - Windows groupe les fenetres par AppUserModelId
         // En donnant un ID different a chaque fenetre, elles ne se regroupent pas
         const uniqueAppId = `guncord.instance.${userId}.${Date.now()}`;
-
-        // Icone : rotation 1→2→...→N→1 depuis multi-instance-icons/
-        let currentIconPath = "";
-        const iconDir = getDetachedIconDir();
-        const maxIcons = getAvailableIconCount();
-        currentIconPath = join(iconDir, `${iconCounter}.ico`);
-        if (!existsSync(currentIconPath)) currentIconPath = "";
-        iconCounter = iconCounter >= maxIcons ? 1 : iconCounter + 1;
 
         // Session Electron isolee par userId
         const savedPartition = `persist:guncord-mi-${userId}`;
@@ -1083,15 +1245,6 @@ export async function openInstanceWindow(
 
         grantSessionMediaPermissions(ses);
 
-        if (audioSettings) {
-            saveMasterAudioSettings(null, audioSettings);
-        }
-        if (userId && token) {
-            saveSharedAccounts(null, [{ id: userId, token, username: username || "", avatar: "" }]).catch(() => {});
-            saveSharedTokenCache(null, { [userId]: token }).catch(() => {});
-        }
-        const effectiveAudio = audioSettings || getMasterAudioSettings();
-        const sharedSettings = await captureAndMergeSharedSettings(_, passedSharedSettings);
         const preloadPath = createTokenPreload(token, sharedSettings, userId, effectiveAudio, username);
         ses.setPreloads([preloadPath]);
 
@@ -1145,7 +1298,6 @@ export async function openInstanceWindow(
         openWindows.set(userId, win);
         pendingInstanceAuth.set(wcId, { token: cleanTok, userId, username });
 
-        const accentColor = getAccountColor(userId || getUserIdFromToken(cleanTok));
         let hasShown = false;
         const showWindowSafely = () => {
             if (hasShown || win.isDestroyed()) return;
@@ -1302,15 +1454,10 @@ export async function openInstanceWindow(
         });
         return { ok: true };
     } catch (e: any) {
+        console.error("[GuncordMI] openInstanceWindow error:", e);
         return { ok: false, error: e?.message ?? String(e) };
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// « Grouped » windows — same group as Guncord in taskbar
-// Principle: do NOT touch setAppDetails => window inherits AppId
-// of main process (com.guncord.app), Windows groups it automatically
-// ─────────────────────────────────────────────────────────────────────────────
 
 export async function openInstanceWindowGrouped(
     _: any,
@@ -1321,12 +1468,100 @@ export async function openInstanceWindowGrouped(
     blockExternalTokenAccess = false,
     performanceMode = false,
     audioSettings?: any,
-    passedSharedSettings?: Record<string, string>
+    passedSharedSettings?: Record<string, string>,
+    processMode = "dependent"
 ): Promise<{ ok: boolean; error?: string; }> {
     try {
         const cleanTok = decryptTokenSync(token);
         token = cleanTok;
-        // Focus si deja ouverte
+        const instanceDir = getInstanceUserDataDir(userId);
+        mkdirSync(instanceDir, { recursive: true });
+
+        const effectiveAudio = audioSettings || getMasterAudioSettings();
+        const sharedSettings = await captureAndMergeSharedSettings(_, passedSharedSettings);
+
+        if (processMode === "independent") {
+            if (isInstanceRunning(userId)) {
+                const child = spawn(process.execPath, [
+                    "--multi-instance",
+                    `--user-data-dir=${instanceDir}`,
+                    `--guncord-instance-user=${userId}`
+                ], {
+                    detached: true,
+                    stdio: "ignore",
+                    windowsHide: false,
+                    env: {
+                        ...process.env,
+                        DISCORD_USER_DATA_DIR: instanceDir,
+                        GUNCORD_INSTANCE_USER: userId,
+                        GUNCORD_INSTANCE_DIR: instanceDir
+                    }
+                });
+                child.unref();
+                return { ok: true };
+            }
+
+            const uniqueAppId = "com.squirrel.Discord.Discord";
+
+            if (audioSettings) {
+                saveMasterAudioSettings(null, audioSettings);
+            }
+            if (userId && token) {
+                saveSharedAccounts(null, [{ id: userId, token, username: username || "", avatar: "" }]).catch(() => {});
+                saveSharedTokenCache(null, { [userId]: token }).catch(() => {});
+            }
+
+            const config = {
+                userId,
+                username: username || userId,
+                token: cleanTok,
+                domain: domain || "discord.com",
+                iconPath: "",
+                uniqueAppId,
+                audioSettings: effectiveAudio,
+                sharedSettings
+            };
+
+            const configPath = join(instanceDir, "guncord-instance.json");
+            writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+            try {
+                const subDir = join(instanceDir, "discord");
+                mkdirSync(subDir, { recursive: true });
+                writeFileSync(join(subDir, "guncord-instance.json"), JSON.stringify(config, null, 2), "utf-8");
+            } catch {}
+
+            const child = spawn(process.execPath, [
+                "--multi-instance",
+                `--user-data-dir=${instanceDir}`,
+                `--guncord-instance-user=${userId}`
+            ], {
+                detached: true,
+                stdio: "ignore",
+                windowsHide: false,
+                env: {
+                    ...process.env,
+                    DISCORD_USER_DATA_DIR: instanceDir,
+                    GUNCORD_INSTANCE_USER: userId,
+                    GUNCORD_INSTANCE_DIR: instanceDir
+                }
+            });
+
+            if (child.pid) {
+                runningInstancePids.set(userId, child.pid);
+                try {
+                    writeFileSync(join(instanceDir, "guncord.pid"), String(child.pid), "utf-8");
+                } catch {}
+                child.on("exit", () => {
+                    runningInstancePids.delete(userId);
+                    try { unlinkSync(join(instanceDir, "guncord.pid")); } catch {}
+                });
+            }
+            child.unref();
+
+            return { ok: true };
+        }
+
+        // Dependent Grouped Mode (Default): Native BrowserWindow that terminates when main Guncord closes
         const existing = openGroupedWindows.get(userId);
         if (existing && !existing.isDestroyed()) {
             existing.show();
@@ -1366,15 +1601,6 @@ export async function openInstanceWindowGrouped(
 
         grantSessionMediaPermissions(ses);
 
-        if (audioSettings) {
-            saveMasterAudioSettings(null, audioSettings);
-        }
-        if (userId && token) {
-            saveSharedAccounts(null, [{ id: userId, token, username: username || "", avatar: "" }]).catch(() => {});
-            saveSharedTokenCache(null, { [userId]: token }).catch(() => {});
-        }
-        const effectiveAudio = audioSettings || getMasterAudioSettings();
-        const sharedSettings = await captureAndMergeSharedSettings(_, passedSharedSettings);
         const preloadPath = createTokenPreload(token, sharedSettings, userId, effectiveAudio, username);
         ses.setPreloads([preloadPath]);
 
@@ -1561,13 +1787,10 @@ export async function openInstanceWindowGrouped(
         });
         return { ok: true };
     } catch (e: any) {
+        console.error("[GuncordMI] openInstanceWindowGrouped error:", e);
         return { ok: false, error: e?.message ?? String(e) };
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Split screen: position both windows side by side
-// ─────────────────────────────────────────────────────────────────────────────
 
 export async function arrangeSplit(_: any, userId: string): Promise<void> {
     try {
@@ -1596,9 +1819,34 @@ export async function arrangeSplit(_: any, userId: string): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getOpenInstances(_: any): Promise<string[]> {
-    return [...openWindows.entries(), ...openGroupedWindows.entries()]
-        .filter(([, w]) => !w.isDestroyed())
-        .map(([id]) => id);
+    const ids = new Set<string>();
+    for (const [id, w] of openWindows.entries()) {
+        if (!w.isDestroyed()) ids.add(id);
+    }
+    for (const [id, w] of openGroupedWindows.entries()) {
+        if (!w.isDestroyed()) ids.add(id);
+    }
+    for (const [id, pid] of runningInstancePids.entries()) {
+        if (isProcessAlive(pid)) {
+            ids.add(id);
+        } else {
+            runningInstancePids.delete(id);
+        }
+    }
+    try {
+        const parentDir = join(app.getPath("userData"), "..");
+        if (existsSync(parentDir)) {
+            for (const dir of readdirSync(parentDir)) {
+                if (dir.startsWith("Guncord-Instance-")) {
+                    const uId = dir.slice("Guncord-Instance-".length);
+                    if (isInstanceRunning(uId)) {
+                        ids.add(uId);
+                    }
+                }
+            }
+        }
+    } catch {}
+    return Array.from(ids);
 }
 
 export async function closeInstance(_: any, userId: string): Promise<void> {
@@ -1607,4 +1855,22 @@ export async function closeInstance(_: any, userId: string): Promise<void> {
         (win as any)._userRequestedClose = true;
         win.close();
     }
+    const pid = runningInstancePids.get(userId);
+    if (pid && isProcessAlive(pid)) {
+        try {
+            process.kill(pid);
+        } catch {}
+        runningInstancePids.delete(userId);
+    }
+    try {
+        const instanceDir = getInstanceUserDataDir(userId);
+        const pidPath = join(instanceDir, "guncord.pid");
+        if (existsSync(pidPath)) {
+            const savedPid = parseInt(readFileSync(pidPath, "utf-8").trim(), 10);
+            if (savedPid && isProcessAlive(savedPid)) {
+                try { process.kill(savedPid); } catch {}
+            }
+            try { unlinkSync(pidPath); } catch {}
+        }
+    } catch {}
 }
