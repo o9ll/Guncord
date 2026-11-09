@@ -9,7 +9,6 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "NormalizeMessageLinks",
-    enabledByDefault: true,
     description: "Strip canary/ptb from message links",
     tags: ["Chat"],
     authors: [Devs.bb010g],
@@ -26,3 +25,4 @@ export default definePlugin({
         return host.replace(/(^|\b)(canary\.|ptb\.)(discord.com)$/, "$1$3");
     },
 });
+

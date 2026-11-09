@@ -1,29 +1,27 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import "./style.css";
 
-import { addServerListElement, removeServerListElement, ServerListRenderPosition } from "@api/ServerList";
+import { addServerListElement, removeServerListElement, ServerListItem, ServerListRenderPosition } from "@api/ServerList";
+import { definePluginSettings } from "@api/Settings";
 import { TextButton } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { DoubleCheckmarkIcon } from "@components/Icons";
 import { Devs, EquicordDevs } from "@utils/constants";
-import definePlugin from "@utils/types";
+import definePlugin, { OptionType } from "@utils/types";
 import { ActiveJoinedThreadsStore, FluxDispatcher, GuildChannelStore, GuildStore, React, ReadStateStore } from "@webpack/common";
+
+const settings = definePluginSettings({
+    compact: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Show a small text button instead of a server list icon"
+    }
+});
 
 function onClick() {
     const channels: Array<any> = [];
@@ -53,15 +51,26 @@ function onClick() {
     });
 }
 
-const ReadAllButton = () => (
-    <TextButton
-        variant="secondary"
-        onClick={onClick}
-        className="vc-ranb-button"
-    >
-        Read All
-    </TextButton>
-);
+function ReadAllButton() {
+    const { compact } = settings.use(["compact"]);
+
+    return compact ? (
+        <TextButton
+            variant="secondary"
+            onClick={onClick}
+            className="vc-ranb-button"
+        >
+            Read All
+        </TextButton>
+    ) : (
+        <ServerListItem
+            id="vc-ranb-button-container"
+            icon={DoubleCheckmarkIcon}
+            tooltip="Read All"
+            onClick={onClick}
+        />
+    );
+}
 
 export default definePlugin({
     name: "ReadAllNotificationsButton",
@@ -69,6 +78,7 @@ export default definePlugin({
     tags: ["Notifications", "Shortcuts"],
     authors: [Devs.kemo, EquicordDevs.KrystalSkull],
     dependencies: ["ServerListAPI"],
+    settings,
 
     renderReadAllButton: ErrorBoundary.wrap(ReadAllButton, { noop: true }),
 

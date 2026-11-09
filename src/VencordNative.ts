@@ -119,7 +119,7 @@ export default {
         getInstallerPrefs: () => sendSync<{defaultPlugins: boolean, autoUpdate: boolean}>(IpcEvents.GET_INSTALLER_PREFS) || { defaultPlugins: true, autoUpdate: true },
         checkVBCable: () => invoke<{ installed: boolean; }>(IpcEvents.CHECK_VB_CABLE),
         installVBCable: () => invoke<{ success: boolean; error?: string; }>(IpcEvents.INSTALL_VB_CABLE),
-
+        netFetch: (url: string, opts?: any) => invoke<{ ok: boolean; status: number; data: any; } | null>(IpcEvents.GUNCORD_NET_FETCH, url, opts),
         relaunch: () => invoke<void>(IpcEvents.RELAUNCH_APP),
     },
 

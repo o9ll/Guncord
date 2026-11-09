@@ -224,3 +224,4 @@ function parseColor(str: string, type: ColorType): string {
             return str.replace("°", "");
     }
 }
+

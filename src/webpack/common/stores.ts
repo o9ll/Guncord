@@ -108,6 +108,13 @@ export let SessionsStore: t.SessionsStore;
 export let GuildAvailabilityStore: t.GuildAvailabilityStore;
 export let UserGuildJoinRequestStore: t.UserGuildJoinRequestStore;
 export let BasicGuildStore: t.BasicGuildStore;
+export let GuildReadStateStore: any;
+export let GuildProfileStore: any;
+export let SoundpackStore: any;
+export let StickersPersistedStore: any;
+export let GIFPickerViewStore: any;
+export let MessageRequestStore: any;
+export let SelfPresenceStore: any;
 
 /**
  * @see jsdoc of {@link t.useStateFromStores}
@@ -132,6 +139,13 @@ waitForStore("SpellcheckStore", m => SpellCheckStore = m);
 waitForStore("PermissionStore", m => PermissionStore = m);
 waitForStore("PresenceStore", m => PresenceStore = m);
 waitForStore("ReadStateStore", m => ReadStateStore = m);
+waitForStore("GuildReadStateStore", m => GuildReadStateStore = m);
+waitForStore("GuildProfileStore", m => GuildProfileStore = m);
+waitForStore("SoundpackStore", m => SoundpackStore = m);
+waitForStore("StickersPersistedStore", m => StickersPersistedStore = m);
+waitForStore("GIFPickerViewStore", m => GIFPickerViewStore = m);
+waitForStore("MessageRequestStore", m => MessageRequestStore = m);
+waitForStore("SelfPresenceStore", m => SelfPresenceStore = m);
 waitForStore("GuildChannelStore", m => GuildChannelStore = m);
 waitForStore("GuildRoleStore", m => GuildRoleStore = m);
 waitForStore("GuildScheduledEventStore", m => GuildScheduledEventStore = m);

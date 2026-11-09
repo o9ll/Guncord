@@ -362,7 +362,7 @@ const VoiceDictationButton: ChatBarButtonFactory = ({ isMainChat }) => {
 
 export default definePlugin({
     name: "VoiceDictation",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Real-time voice dictation via Groq Whisper (free). API key shared with GuncordAI.",
     authors: [{ name: "User",
      id: 0n }],

@@ -1,22 +1,10 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
-import { cl, hljs } from "@plugins/shikiCodeblocks.desktop/utils/misc";
+import { cl } from "@plugins/shikiCodeblocks.desktop/utils/misc";
 import type { IThemedToken } from "@vap/shiki";
 import { JSX } from "react";
 
@@ -24,30 +12,25 @@ import { ThemeBase } from "./Highlighter";
 
 export interface CodeProps {
     theme: ThemeBase;
-    useHljs: boolean;
-    lang?: string;
+    useArborium: boolean;
+    arboriumHtml: string | null;
     content: string;
     tokens: IThemedToken[][] | null;
 }
 
 export const Code = ({
     theme,
-    useHljs,
-    lang,
+    useArborium,
+    arboriumHtml,
     content,
     tokens,
 }: CodeProps) => {
     let lines!: JSX.Element[];
 
-    if (useHljs) {
-        try {
-            const { value: hljsHtml } = hljs.highlight(content, { language: lang!, ignoreIllegals: true });
-            lines = hljsHtml
-                .split("\n")
-                .map((line, i) => <span key={i} dangerouslySetInnerHTML={{ __html: line }} />);
-        } catch {
-            lines = content.split("\n").map((line, idx) => <span key={idx}>{line}</span>);
-        }
+    if (useArborium && arboriumHtml) {
+        lines = arboriumHtml
+            .split("\n")
+            .map((line, i) => <span key={i} dangerouslySetInnerHTML={{ __html: line }} />);
     } else {
         const renderTokens =
             tokens ??

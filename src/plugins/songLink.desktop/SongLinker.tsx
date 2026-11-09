@@ -1,13 +1,14 @@
 /*
  * Guncord, a Discord client mod
- * Copyright (c) 2025 nin0
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { BaseText } from "@components/BaseText";
+import { Button } from "@components/Button";
 import { Card } from "@components/Card";
 import { HeadphonesIcon } from "@components/Icons";
-import { Button, useEffect, useState } from "@webpack/common";
+import { useEffect, useState } from "@webpack/common";
 
 import pl, { Native, settings, SongLinkResult } from ".";
 import { Providers } from "./Providers";

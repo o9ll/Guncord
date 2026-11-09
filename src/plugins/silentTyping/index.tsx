@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption, sendBotMessage } from "@api/Commands";
@@ -147,14 +135,6 @@ const SilentTypingChatToggle: ChatBarButtonFactory = ({ channel, type }) => {
         enabledGlobally,
         chatIcon,
         defaultHidden,
-        enabledLocations,
-        disabledLocations,
-        alwaysEnableInActiveVoiceChat,
-        temporaryEnableThresholdServers,
-        temporaryEnableThresholdDirectMessages,
-        chatIconLeftClickAction,
-        chatIconMiddleClickAction,
-        chatIconRightClickAction,
     } = settings.use([
         "enabledGlobally",
         "chatIcon",
@@ -325,9 +305,7 @@ const ChatBarContextCheckbox: NavContextMenuPatchCallback = children => {
         chatIcon,
         chatContextMenu,
         enabledGlobally,
-        defaultHidden,
-        hideChatBoxTypingIndicators,
-        hideMembersListTypingIndicators
+        defaultHidden
     } = settings.use([
         "chatIcon",
         "chatContextMenu",
@@ -447,7 +425,7 @@ export default definePlugin({
                     replace: "const silentTypingShouldHideChatBarTypingIndicators=$self.shouldHideChatBarTypingIndicators();$1"
                 },
                 {
-                    match: /("stop-animation".{0,100}?ref:\i,children:)/,
+                    match: /("stop-animation".{0,150}?ref:\i,children:)/,
                     replace: "$1silentTypingShouldHideChatBarTypingIndicators?[]:"
                 }
             ]
@@ -455,7 +433,7 @@ export default definePlugin({
         {
             find: ",{avatarCutoutX",
             replacement: {
-                match: /isTyping:(\i)=!1(,typingIndicatorRef:\i,isSpeaking:)/,
+                match: /isTyping:(\i)=!1(,typingIndicatorRef:\i,avatarContentRef:)/,
                 replace: "silentTypingIsTyping:$1=$self.shouldHideMembersListTypingIndicators()?false:(arguments[0].isTyping??false)$2"
             }
         },

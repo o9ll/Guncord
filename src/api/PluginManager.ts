@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { addProfileBadge, removeProfileBadge } from "@api/Badges";
 import { addChatBarButton, removeChatBarButton } from "@api/ChatButtons";
@@ -132,6 +120,19 @@ export function pluginRequiresRestart(p: Plugin) {
 
 export const startAllPlugins = traceFunction("startAllPlugins", function startAllPlugins(target: StartAt) {
     logger.info(`Starting plugins (stage ${target})`);
+    if (target === StartAt.Init && typeof window !== "undefined") {
+        let lastTick = performance.now();
+        const uiFreezeTimer = setInterval(() => {
+            const now = performance.now();
+            const drift = now - lastTick - 100;
+            lastTick = now;
+            if (drift > 120) {
+                logger.warn(`[Perf] RENDERER UI FREEZE: blocked for ${Math.round(drift)}ms`);
+            }
+        }, 100);
+        setTimeout(() => clearInterval(uiFreezeTimer), 45000);
+    }
+    const stageStart = performance.now();
     for (const name in Plugins) {
         if (isPluginEnabled(name) && (!IS_REPORTER || isReporterTestable(Plugins[name], ReporterTestable.Start))) {
             const p = Plugins[name];
@@ -142,6 +143,8 @@ export const startAllPlugins = traceFunction("startAllPlugins", function startAl
             startPlugin(Plugins[name]);
         }
     }
+    const stageTotal = performance.now() - stageStart;
+    logger.info(`Finished starting plugins (stage ${target}) in ${stageTotal.toFixed(1)}ms`);
 });
 
 export function startDependenciesRecursive(p: Plugin) {
@@ -180,20 +183,27 @@ export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof Flux
 
         logger.debug("Subscribing to flux events of plugin", p.name);
         for (const [event, handler] of Object.entries(p.flux)) {
-            if ((handler as any).__vcWrapped) continue;
-            const wrappedHandler = p.flux[event] = function () {
-                if (p.name === "Encryptcord" && event === "MESSAGE_CREATE") return;
-                try {
-                    const res = handler!.apply(p, arguments as any);
-                    return res instanceof Promise
-                        ? res.catch(e => logger.error(`${p.name}: Error while handling ${event}\n`, e))
-                        : res;
-                } catch (e) {
-                    logger.error(`${p.name}: Error while handling ${event}\n`, e);
-                }
-            };
-            (wrappedHandler as any).__vcWrapped = true;
-            fluxDispatcher.subscribe(event as FluxEvents, wrappedHandler);
+            let wrappedHandler = handler;
+            if (!(handler as any).__vcWrapped) {
+                wrappedHandler = p.flux[event] = function () {
+                    if (p.name === "Encryptcord" && event === "MESSAGE_CREATE") return;
+                    try {
+                        const t0 = performance.now();
+                        const res = handler!.apply(p, arguments as any);
+                        const dt = performance.now() - t0;
+                        if (dt > 25) {
+                            logger.warn(`[Perf] ${p.name} flux(${event}) took ${dt.toFixed(1)}ms`);
+                        }
+                        return res instanceof Promise
+                            ? res.catch(e => logger.error(`${p.name}: Error while handling ${event}\n`, e))
+                            : res;
+                    } catch (e) {
+                        logger.error(`${p.name}: Error while handling ${event}\n`, e);
+                    }
+                };
+                (wrappedHandler as any).__vcWrapped = true;
+            }
+            fluxDispatcher.subscribe(event as FluxEvents, wrappedHandler!);
         }
     }
 }
@@ -234,7 +244,12 @@ export const startPlugin = traceFunction("startPlugin", function startPlugin(p: 
             return false;
         }
         try {
+            const t0 = performance.now();
             p.start();
+            const dt = performance.now() - t0;
+            if (dt > 15) {
+                logger.warn(`[Perf] Plugin ${name}.start() took ${dt.toFixed(1)}ms`);
+            }
         } catch (e) {
             logger.error(`Failed to start ${name}\n`, e);
             return false;
@@ -398,6 +413,32 @@ export const initPluginManager = onlyOnce(function init() {
             }
         }
         (SettingsStore.plain as any)[MIGRATION_FLAG] = true;
+        SettingsStore.markAsChanged();
+    }
+
+    // Migration v2: Désactivation par défaut des plugins gourmands pour un démarrage instantané sans latence
+    const HEAVY_MIGRATION_FLAG = "__guncord_heavy_plugins_off_v2__";
+    if (!(SettingsStore.plain as any)[HEAVY_MIGRATION_FLAG]) {
+        const heavyPlugins = [
+            "MessageLogger",
+            "MessageLoggerEnhanced",
+            "SaveGroups",
+            "QuickDM",
+            "PrevNames",
+            "AutoDeco",
+            "autoDeco",
+            "FollowUser",
+            "followUser",
+            "RealtimeTimestamps",
+            "realtimeTimestamps",
+            "CrashHandler",
+            "crashHandler"
+        ];
+        for (const name of heavyPlugins) {
+            const s = SettingsStore.plain.plugins[name];
+            if (s) s.enabled = false;
+        }
+        (SettingsStore.plain as any)[HEAVY_MIGRATION_FLAG] = true;
         SettingsStore.markAsChanged();
     }
 

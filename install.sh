@@ -220,7 +220,7 @@ install_linux() {
         echo -e "  ${CYAN}[$((i+1))]${RESET} ${WHITE}${FOUND_NAMES[$i]}${RESET} ${DIM}(${FOUND_PATHS[$i]})${RESET}"
     done
     if [ ${#FOUND_PATHS[@]} -gt 1 ]; then
-        echo -e "  ${CYAN}[$(( ${#FOUND_PATHS[@]} + 1 ))]${RESET} ${GREEN}All detected installations${RESET}"
+        echo -e "  ${CYAN}[$(( ${#FOUND_PATHS[@]} + 1 ))]${RESET} ${GREEN}All detected installations (All Discords)${RESET}"
     fi
 
     echo ""

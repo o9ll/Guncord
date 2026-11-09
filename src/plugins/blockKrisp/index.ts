@@ -9,7 +9,6 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "BlockKrisp",
-    enabledByDefault: true,
     description: "Prevent Krisp from loading",
     tags: ["Privacy", "Utility", "Voice"],
     authors: [Devs.D3SOX],

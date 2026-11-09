@@ -36,7 +36,8 @@ export default definePlugin({
         latency: {
             type: OptionType.NUMBER,
             description: "Threshold in seconds for latency indicator",
-            default: 2
+            default: 2,
+            min: 0
         },
         detectDiscordKotlin: {
             type: OptionType.BOOLEAN,
@@ -206,3 +207,4 @@ export default definePlugin({
         </svg>;
     }
 });
+

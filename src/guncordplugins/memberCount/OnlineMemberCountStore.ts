@@ -1,9 +1,3 @@
-/*
- * Guncord, a Discord client mod
- * Copyright (c) 2026 o9
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import { proxyLazy } from "@utils/lazy";
 import { sleep } from "@utils/misc";
 import { Queue } from "@utils/Queue";

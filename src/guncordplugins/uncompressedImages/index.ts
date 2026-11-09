@@ -71,8 +71,8 @@ let origGetAttribute: typeof Element.prototype.getAttribute;
 export default definePlugin({
     name: "UncompressedImages",
     description: "Hijacks client media caching to load full lossless images directly from CDN instead of compressed low-res thumbnails.",
-    authors: [{ name: "Knew", id: 332116671294734336n }],
-    enabledByDefault: true,
+    authors: [{ name: ".zp", id: 1020801845490356245n }],
+    enabledByDefault: false,
 
     start() {
         const imgProto = HTMLImageElement.prototype;

@@ -1,32 +1,21 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { TextButton } from "@components/Button";
 import { Heading } from "@components/Heading";
+import { Margins } from "@components/margins";
 import { SessionInfo } from "@plugins/betterSessions/types";
 import { getDefaultName, savedSessionsCache, saveSessionsToDataStore } from "@plugins/betterSessions/utils";
 import { RenderModalProps } from "@vencord/discord-types";
-import { Modal, React, TextInput } from "@webpack/common";
+import { Modal, React, TextInput, useState } from "@webpack/common";
 import { KeyboardEvent } from "react";
 
 export function RenameModal({ props, session, state }: { props: RenderModalProps, session: SessionInfo["session"], state: [string, React.Dispatch<React.SetStateAction<string>>]; }) {
-    const [title, setTitle] = state;
-    const [value, setValue] = React.useState(savedSessionsCache.get(session.id_hash)?.name ?? "");
+    const [, setTitle] = state;
+    const [value, setValue] = useState(savedSessionsCache.get(session.id_hash)?.name ?? "");
 
     function onSaveClick() {
         savedSessionsCache.set(session.id_hash, { name: value, isNew: false });
@@ -58,7 +47,7 @@ export function RenameModal({ props, session, state }: { props: RenderModalProps
             ]}
         >
             <div>
-                <Heading tag="h5">New device name</Heading>
+                <Heading className={Margins.bottom8}>New device name</Heading>
                 <TextInput
                     style={{ marginBottom: "10px" }}
                     placeholder={getDefaultName(session.client_info)}

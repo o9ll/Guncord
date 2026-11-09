@@ -8,11 +8,46 @@ const targetPlugins = 'c:\\Users\\o9\\Documents\\GitHub\\guncord\\src\\plugins';
 const skipDirs = new Set([
     '_core',
     'badges',
-    'messagePeek'
+    'messagePeek',
+    'newPluginsManager',
+    'sidebarChat'
 ]);
 
 if (fs.existsSync('src/guncordplugins')) {
     fs.readdirSync('src/guncordplugins').forEach(p => skipDirs.add(p));
+}
+
+const GUNCORD_HEADER = `/*
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */\n`;
+
+function transformFileContent(filePath, content) {
+    if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+        // Replace existing header comment block
+        if (content.startsWith('/*')) {
+            const endIdx = content.indexOf('*/');
+            if (endIdx !== -1) {
+                content = GUNCORD_HEADER + content.slice(endIdx + 2).replace(/^\r?\n/, '');
+            } else {
+                content = GUNCORD_HEADER + content;
+            }
+        } else {
+            content = GUNCORD_HEADER + content;
+        }
+    }
+    return content;
+}
+
+function copyFileWithTransform(srcPath, destPath) {
+    if (srcPath.endsWith('.ts') || srcPath.endsWith('.tsx')) {
+        const content = fs.readFileSync(srcPath, 'utf8');
+        const transformed = transformFileContent(srcPath, content);
+        fs.writeFileSync(destPath, transformed, 'utf8');
+    } else {
+        fs.copyFileSync(srcPath, destPath);
+    }
 }
 
 function copyDirRecursive(src, dest) {
@@ -26,7 +61,7 @@ function copyDirRecursive(src, dest) {
         if (entry.isDirectory()) {
             copyDirRecursive(srcPath, destPath);
         } else {
-            fs.copyFileSync(srcPath, destPath);
+            copyFileWithTransform(srcPath, destPath);
         }
     }
 }
@@ -51,7 +86,7 @@ if (fs.existsSync(equiPlugins)) {
                 if (apiEntry.isDirectory()) {
                     copyDirRecursive(apiSrc, apiDest);
                 } else {
-                    fs.copyFileSync(apiSrc, apiDest);
+                    copyFileWithTransform(apiSrc, apiDest);
                 }
             }
         } else if (entry.isDirectory()) {
@@ -81,7 +116,7 @@ if (fs.existsSync(equiEquiPlugins)) {
                 if (apiEntry.isDirectory()) {
                     copyDirRecursive(apiSrc, apiDest);
                 } else {
-                    fs.copyFileSync(apiSrc, apiDest);
+                    copyFileWithTransform(apiSrc, apiDest);
                 }
             }
         } else if (entry.isDirectory()) {

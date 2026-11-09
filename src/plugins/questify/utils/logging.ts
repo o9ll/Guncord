@@ -77,3 +77,4 @@ export function notifyQuestCompletion(quest?: Quest): void {
 
     QL.log("NOTIFY_QUEST_COMPLETION", { quest });
 }
+

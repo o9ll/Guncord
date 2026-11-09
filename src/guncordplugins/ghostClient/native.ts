@@ -39,7 +39,7 @@ function isInstallerMarkedUninstalled(): boolean {
     return false;
 }
 
-// ── Trouver server/server.js ────────────────────────────────────────────
+// ── Trouver ghost-server/server.js ────────────────────────────────────────────
 function findServerScript(): string | null {
     if (isInstallerMarkedUninstalled()) {
         return null;
@@ -51,14 +51,14 @@ function findServerScript(): string | null {
     try { userData = app.getPath("userData"); } catch {}
 
     const candidates = [
-        ...(userData ? [path.join(userData, "server", "server.js")] : []),
-        path.join(resPath, "server", "server.js"),
-        path.join(execDir, "resources", "server", "server.js"),
-        path.join(resPath, "..", "server", "server.js"),
-        path.join(execDir, "server", "server.js"),
-        path.join(__dirname, "..", "..", "..", "server", "server.js"),
-        path.join(__dirname, "..", "..", "..", "..", "server", "server.js"),
-        path.join(__dirname, "..", "..", "server", "server.js"),
+        ...(userData ? [path.join(userData, "ghost-server", "server.js")] : []),
+        path.join(resPath, "ghost-server", "server.js"),
+        path.join(execDir, "resources", "ghost-server", "server.js"),
+        path.join(resPath, "..", "ghost-server", "server.js"),
+        path.join(execDir, "ghost-server", "server.js"),
+        path.join(__dirname, "..", "..", "..", "ghost-server", "server.js"),
+        path.join(__dirname, "..", "..", "..", "..", "ghost-server", "server.js"),
+        path.join(__dirname, "..", "..", "ghost-server", "server.js"),
     ];
     for (const c of candidates) {
         if (fs.existsSync(c)) { return c; }
@@ -73,7 +73,7 @@ function findNode(): string {
     try { userData = app.getPath("userData"); } catch {}
 
     const candidates = [
-        ...(userData ? [path.join(userData, "server", "node.exe")] : []),
+        ...(userData ? [path.join(userData, "ghost-server", "node.exe")] : []),
         path.join(execDir, "node.exe"),
         path.join(resPath, "..", "node.exe"),
         path.join(resPath, "node.exe"),
@@ -139,16 +139,16 @@ function syncServerScriptIfOutdated(): void {
         let userData = "";
         try { userData = app.getPath("userData"); } catch {}
         if (!userData) return;
-        const targetPath = path.join(userData, "server", "server.js");
+        const targetPath = path.join(userData, "ghost-server", "server.js");
 
         const execDir = path.dirname(process.execPath);
         const resPath = process.resourcesPath;
         const sources = [
-            path.join(__dirname, "..", "..", "..", "server", "server.js"),
-            path.join(__dirname, "..", "..", "..", "..", "server", "server.js"),
-            path.join(__dirname, "..", "..", "server", "server.js"),
-            path.join(resPath, "server", "server.js"),
-            path.join(execDir, "resources", "server", "server.js"),
+            path.join(__dirname, "..", "..", "..", "ghost-server", "server.js"),
+            path.join(__dirname, "..", "..", "..", "..", "ghost-server", "server.js"),
+            path.join(__dirname, "..", "..", "ghost-server", "server.js"),
+            path.join(resPath, "ghost-server", "server.js"),
+            path.join(execDir, "resources", "ghost-server", "server.js"),
         ];
         for (const src of sources) {
             if (fs.existsSync(src) && src !== targetPath) {
@@ -171,7 +171,11 @@ async function ensureServer(): Promise<boolean> {
         console.warn("[GhostNative] GhostClient companion server is uninstalled.");
         return false;
     }
-    if (serverReady && serverProc && await ping()) return true;
+    if (serverReady && await ping()) return true;
+    if (await ping()) {
+        serverReady = true;
+        return true;
+    }
     if (startPromise) return startPromise;
 
     startPromise = (async () => {
@@ -205,7 +209,7 @@ async function ensureServer(): Promise<boolean> {
             }
         });
 
-        // Limiter les logs du server dans le main process Electron
+        // Limiter les logs du ghost-server dans le main process Electron
         // Trop de logs = I/O sur le thread principal = freezes
         let logBuffer = "";
         serverProc.stdout?.on("data", (d: Buffer) => {
@@ -240,7 +244,7 @@ async function ensureServer(): Promise<boolean> {
             }
         }
 
-        console.error("[GhostNative] server timeout !");
+        console.error("[GhostNative] ghost-server timeout !");
         startPromise = null;
         return false;
     })();
@@ -310,13 +314,13 @@ export async function listAudioInputDevices(_: any): Promise<{ label: string; ds
         let userData = "";
         try { userData = app.getPath("userData"); } catch {}
         const ghostServerNodeModules = userData
-            ? path.join(userData, "server", "node_modules")
-            : path.join(process.resourcesPath ?? "", "server", "node_modules");
+            ? path.join(userData, "ghost-server", "node_modules")
+            : path.join(process.resourcesPath ?? "", "ghost-server", "node_modules");
 
         const ffmpegCandidates = [
             ...(userData ? [
-                path.join(userData, "server", "ffmpeg.exe"),
-                path.join(userData, "server", "node_modules", "node-av", "binary", "ffmpeg.exe"),
+                path.join(userData, "ghost-server", "ffmpeg.exe"),
+                path.join(userData, "ghost-server", "node_modules", "node-av", "binary", "ffmpeg.exe"),
             ] : []),
             path.join(path.dirname(process.execPath), "ffmpeg.exe"),
             path.join(process.resourcesPath ?? "", "..", "ffmpeg.exe"),
@@ -416,6 +420,20 @@ export async function setVolume(_: any, volume: number, vocalBoost = false): Pro
     try { await api("/set-volume", { volume, vocalBoost }); } catch { }
 }
 
+export async function setAmpPanParams(_: any, params: any): Promise<{ ok: boolean; config?: any; }> {
+    try { return await api("/set-amp-pan", params); }
+    catch { return { ok: false }; }
+}
+
+export async function getAmpPanParams(_: any): Promise<{ ok: boolean; config?: any; }> {
+    try { return await api("/get-amp-pan"); }
+    catch { return { ok: false }; }
+}
+
+export async function setEq(_: any, bass: number, treble: number, mid: number, enabled = true): Promise<void> {
+    try { await api("/set-eq", { bass, treble, mid, enabled }); } catch { }
+}
+
 export async function fakeMute(_: any, userIds: string[], muted: boolean): Promise<void> {
     try { await api("/fake-mute", { userIds, muted }); } catch { }
 }
@@ -439,10 +457,10 @@ export async function init(_: any): Promise<void> {
 
     const ok = await ensureServer();
     if (!ok) {
-        console.error("[GhostNative] server failed");
+        console.error("[GhostNative] ghost-server failed");
         return;
     }
-    console.log("[GhostNative] server HTTP prêt ✓");
+    console.log("[GhostNative] ghost-server HTTP prêt ✓");
 }
 
 export async function isServerOnline(_: any): Promise<boolean> {

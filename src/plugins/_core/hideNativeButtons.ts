@@ -100,11 +100,6 @@ export function updateNativeButtonsVisibility(hide?: boolean) {
     }
 }
 
-// Immediate eager execution on module load
-try {
-    updateNativeButtonsVisibility();
-} catch {}
-
 export default definePlugin({
     name: "HideNativeButtons",
     description: "Hides unwanted native Discord buttons (Inbox, Help, Logs)",

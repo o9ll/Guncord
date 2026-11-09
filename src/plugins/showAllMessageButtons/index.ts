@@ -30,7 +30,6 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "ShowAllMessageButtons",
-    enabledByDefault: true,
     description: "Always show all message buttons no matter if you are holding the shift key or not.",
     tags: ["Chat", "Utility"],
     authors: [Devs.Nuckyz],
@@ -38,7 +37,7 @@ export default definePlugin({
 
     patches: [
         {
-            find: "#{intl::MESSAGE_UTILITIES_A11Y_LABEL}",
+            find: "#{intl::MESSAGE_UTILITIES_A11Y_LABEL}),children",
             replacement: [
                 {
                     match: /isExpanded:\i&&(.+?),/,
@@ -56,7 +55,7 @@ export default definePlugin({
                 },
                 {
                     predicate: () => !settings.store.noQuickReacts,
-                    match: /\i(\?null:\(0,\i\.jsxs\).{0,100}message:\i\}\)),\(0,\i\.jsxs?\)\(\i,\{\}\)/,
+                    match: /\i(\?null:\(0,\i\.jsxs\).{0,100}message:\i\}\)),\(0,\i\.jsxs?\)\(\i\.\i,\{\}\)/,
                     replace: "false$1"
                 },
             ]

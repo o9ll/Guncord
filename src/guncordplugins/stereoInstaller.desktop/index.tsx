@@ -576,9 +576,11 @@ export default definePlugin({
             });
         }
 
-        void Native.autoDetect().then(result => {
-            if (result.success) notifyRepatchIfNeeded(result.data);
-        }, () => void 0);
+        setTimeout(() => {
+            void Native.autoDetect().then(result => {
+                if (result.success) notifyRepatchIfNeeded(result.data);
+            }, () => void 0);
+        }, 8000);
     },
 
     stop() {

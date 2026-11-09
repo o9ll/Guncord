@@ -45,7 +45,7 @@ interface RichMessage {
 
 function getToken(): string {
     try {
-        const mod = (window as any).Vencord?.Webpack?.findByProps?.("getToken");
+        const mod = (window as any).Vencord?.Webpack?.findStore?.("AuthenticationStore") || (window as any).Vencord?.Webpack?.findByProps?.("getToken", "getId");
         return mod?.getToken?.() ?? "";
     } catch { return ""; }
 }
@@ -532,7 +532,7 @@ function ExportButton() {
 
 export default definePlugin({
     name: "ExportDM",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Exports your DMs with messages, images, videos, audio, links, embeds, stickers, reactions in TXT/JSON/CSV/MD/HTML.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["HeaderBarAPI"],

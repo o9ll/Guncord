@@ -5,7 +5,7 @@
  */
 
 import { app, BrowserWindow, ipcMain, type NativeImage, nativeImage, safeStorage, screen, session, type Session } from "electron";
-import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, promises as fsPromises, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 
 export async function decryptToken(_: any, encryptedToken: string): Promise<string | null> {
@@ -17,7 +17,8 @@ export async function encryptToken(_: any, token: string): Promise<string> {
 }
 
 function encryptTokenSync(token: string): string {
-    const clean = (token || "").trim().replace(/^"+|"+$/g, "");
+    if (typeof token !== "string") return "";
+    const clean = token.trim().replace(/^"+|"+$/g, "");
     if (!clean) return "";
     if (clean.startsWith("dQw4w9WgXcQ:")) return clean;
     try {
@@ -111,44 +112,31 @@ function grantSessionMediaPermissions(ses: Session) {
 
 const SHARED_SETTINGS_FILE = join(app.getPath("userData"), "guncord-mi-shared-settings.json");
 
-// Keys we never want to copy from one window to another (account identity / session)
-const SHARED_SETTINGS_BLOCKLIST = new Set([
-    "token",
-    "default_token",
-    "multiaccount_tokens",
-    "tokens",
-    "user_id_cache",
-    "MultiAccountStore",
-    "AuthenticationStore",
-    "UserProfileStore",
-    "UserStore",
-    "login_token",
-    "email_cache"
+// Clés légères autorisées à être partagées entre instances (UI, thème, langue, zoom)
+const SHARED_SETTINGS_ALLOWLIST = new Set([
+    "theme",
+    "customThemeIndex",
+    "locale",
+    "developerMode",
+    "AccessibilityStore",
+    "WindowStore",
+    "fontSize",
+    "zoom"
 ]);
-
-const DUMP_LOCAL_STORAGE_SCRIPT = `
-(function() {
-    try {
-        const block = ["token", "default_token", "multiaccount_tokens", "tokens", "user_id_cache", "MultiAccountStore", "AuthenticationStore", "login_token"];
-        const out = {};
-        for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i);
-            if (!k || block.includes(k)) continue;
-            out[k] = localStorage.getItem(k);
-        }
-        return JSON.stringify(out);
-    } catch (e) {
-        return "{}";
-    }
-})();
-`;
 
 function loadSharedSettings(): Record<string, string> {
     try {
         if (!existsSync(SHARED_SETTINGS_FILE)) return {};
         const raw = readFileSync(SHARED_SETTINGS_FILE, "utf-8");
         const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === "object" ? parsed : {};
+        if (!parsed || typeof parsed !== "object") return {};
+        const cleaned: Record<string, string> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+            if (SHARED_SETTINGS_ALLOWLIST.has(k) && typeof v === "string") {
+                cleaned[k] = v;
+            }
+        }
+        return cleaned;
     } catch {
         return {};
     }
@@ -156,35 +144,32 @@ function loadSharedSettings(): Record<string, string> {
 
 function saveSharedSettings(settings: Record<string, string>): void {
     try {
-        writeFileSync(SHARED_SETTINGS_FILE, JSON.stringify(settings), "utf-8");
+        fsPromises.writeFile(SHARED_SETTINGS_FILE, JSON.stringify(settings), "utf-8").catch(e => {
+            console.warn("[GuncordMI] Failed to save shared settings:", e);
+        });
     } catch (e) {
         console.warn("[GuncordMI] Failed to save shared settings:", e);
     }
 }
 
 /**
- * Captures localStorage of the window that triggered the action (event.sender)
- * and merges it with cache already present on disk. Never throws an error:
- * in case of trouble we simply fall back to existing cache.
+ * Capture ou fusionne les réglages d'interface utilisateur (thème, zoom, langue)
+ * sans JAMAIS bloquer ni exécuter de script lourd sur la fenêtre Discord principale.
  */
-async function captureAndMergeSharedSettings(sourceEvent: any): Promise<Record<string, string>> {
+async function captureAndMergeSharedSettings(_sourceEvent: any, passedSettings?: Record<string, string>): Promise<Record<string, string>> {
     const existing = loadSharedSettings();
-    try {
-        const sourceWc = sourceEvent?.sender;
-        if (!sourceWc || sourceWc.isDestroyed?.()) return existing;
-        const dump = await sourceWc.executeJavaScript(DUMP_LOCAL_STORAGE_SCRIPT);
-        const captured = JSON.parse(dump || "{}");
+    if (passedSettings && typeof passedSettings === "object" && Object.keys(passedSettings).length > 0) {
         const filtered: Record<string, string> = {};
-        for (const [key, value] of Object.entries(captured)) {
-            if (SHARED_SETTINGS_BLOCKLIST.has(key)) continue;
-            if (typeof value === "string") filtered[key] = value;
+        for (const [key, value] of Object.entries(passedSettings)) {
+            if (SHARED_SETTINGS_ALLOWLIST.has(key) && typeof value === "string") {
+                filtered[key] = value;
+            }
         }
         const merged = { ...existing, ...filtered };
         saveSharedSettings(merged);
         return merged;
-    } catch {
-        return existing;
     }
+    return existing;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -196,7 +181,7 @@ const AUDIO_SETTINGS_FILE = join(app.getPath("userData"), "guncord-mi-audio-sett
 export function saveMasterAudioSettings(_: any, settings: any): boolean {
     try {
         if (!settings || typeof settings !== "object") return false;
-        writeFileSync(AUDIO_SETTINGS_FILE, JSON.stringify(settings), "utf-8");
+        fsPromises.writeFile(AUDIO_SETTINGS_FILE, JSON.stringify(settings), "utf-8").catch(() => {});
         return true;
     } catch (e) {
         console.warn("[GuncordMI] Failed to save master audio settings:", e);
@@ -229,7 +214,7 @@ export interface SharedAccountData {
     avatar: string;
 }
 
-export async function getSharedAccounts(): Promise<SharedAccountData[]> {
+export async function getSharedAccounts(_?: any): Promise<SharedAccountData[]> {
     try {
         if (!existsSync(SHARED_ACCOUNTS_FILE)) return [];
         const raw = readFileSync(SHARED_ACCOUNTS_FILE, "utf-8");
@@ -247,13 +232,15 @@ export async function getSharedAccounts(): Promise<SharedAccountData[]> {
     }
 }
 
-export async function saveSharedAccounts(_: any, accounts: SharedAccountData[]): Promise<boolean> {
+export async function saveSharedAccounts(_: any, accounts: SharedAccountData[], overwrite = false): Promise<boolean> {
     try {
         if (!Array.isArray(accounts)) return false;
-        const existing = await getSharedAccounts();
         const map = new Map<string, SharedAccountData>();
-        for (const a of existing) {
-            if (a.id) map.set(a.id, a);
+        if (!overwrite) {
+            const existing = await getSharedAccounts();
+            for (const a of existing) {
+                if (a.id) map.set(a.id, a);
+            }
         }
         for (const a of accounts) {
             if (!a || !a.id) continue;
@@ -271,10 +258,30 @@ export async function saveSharedAccounts(_: any, accounts: SharedAccountData[]):
             avatar: acc.avatar,
             token: encryptTokenSync(acc.token),
         }));
-        writeFileSync(SHARED_ACCOUNTS_FILE, JSON.stringify(toSave, null, 2), "utf-8");
+        await fsPromises.writeFile(SHARED_ACCOUNTS_FILE, JSON.stringify(toSave, null, 2), "utf-8");
         return true;
     } catch (e) {
         console.warn("[GuncordMI] saveSharedAccounts error:", e);
+        return false;
+    }
+}
+
+export async function removeSharedAccount(_: any, userId: string): Promise<boolean> {
+    try {
+        if (!userId) return false;
+        const targetId = String(userId);
+        const existing = await getSharedAccounts();
+        const filtered = existing.filter(a => a.id !== targetId);
+        const toSave = filtered.map(acc => ({
+            id: acc.id,
+            username: acc.username,
+            avatar: acc.avatar,
+            token: encryptTokenSync(acc.token),
+        }));
+        await fsPromises.writeFile(SHARED_ACCOUNTS_FILE, JSON.stringify(toSave, null, 2), "utf-8");
+        return true;
+    } catch (e) {
+        console.warn("[GuncordMI] removeSharedAccount error:", e);
         return false;
     }
 }
@@ -298,21 +305,65 @@ export async function getSharedTokenCache(): Promise<Record<string, string>> {
     }
 }
 
-export async function saveSharedTokenCache(_: any, cache: Record<string, string>): Promise<boolean> {
+export async function saveSharedTokenCache(_: any, cache: Record<string, string>, overwrite = false): Promise<boolean> {
     try {
         if (!cache || typeof cache !== "object") return false;
-        const existing = await getSharedTokenCache();
-        const merged = { ...existing, ...cache };
+        const merged = overwrite ? { ...cache } : { ...(await getSharedTokenCache()), ...cache };
         const encrypted: Record<string, string> = {};
         for (const [id, tok] of Object.entries(merged)) {
             if (typeof tok === "string" && tok) {
                 encrypted[id] = encryptTokenSync(tok);
             }
         }
-        writeFileSync(SHARED_TOKEN_CACHE_FILE, JSON.stringify(encrypted, null, 2), "utf-8");
+        await fsPromises.writeFile(SHARED_TOKEN_CACHE_FILE, JSON.stringify(encrypted, null, 2), "utf-8");
         return true;
     } catch (e) {
         console.warn("[GuncordMI] saveSharedTokenCache error:", e);
+        return false;
+    }
+}
+
+export async function removeSharedTokenFromCache(_: any, userId: string): Promise<boolean> {
+    try {
+        if (!userId) return false;
+        const targetId = String(userId);
+        const existing = await getSharedTokenCache();
+        delete existing[targetId];
+        const encrypted: Record<string, string> = {};
+        for (const [id, tok] of Object.entries(existing)) {
+            if (typeof tok === "string" && tok) {
+                encrypted[id] = encryptTokenSync(tok);
+            }
+        }
+        await fsPromises.writeFile(SHARED_TOKEN_CACHE_FILE, JSON.stringify(encrypted, null, 2), "utf-8");
+        return true;
+    } catch (e) {
+        console.warn("[GuncordMI] removeSharedTokenFromCache error:", e);
+        return false;
+    }
+}
+
+const SHARED_AUTOLAUNCH_FILE = join(app.getPath("userData"), "guncord-mi-autolaunch.json");
+
+export async function getSharedAutoLaunch(): Promise<string[]> {
+    try {
+        if (!existsSync(SHARED_AUTOLAUNCH_FILE)) return [];
+        const raw = readFileSync(SHARED_AUTOLAUNCH_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch (e) {
+        console.warn("[GuncordMI] getSharedAutoLaunch error:", e);
+        return [];
+    }
+}
+
+export async function saveSharedAutoLaunch(_: any, ids: string[]): Promise<boolean> {
+    try {
+        if (!Array.isArray(ids)) return false;
+        await fsPromises.writeFile(SHARED_AUTOLAUNCH_FILE, JSON.stringify(ids.map(String), null, 2), "utf-8");
+        return true;
+    } catch (e) {
+        console.warn("[GuncordMI] saveSharedAutoLaunch error:", e);
         return false;
     }
 }
@@ -336,6 +387,22 @@ app.on("before-quit", () => {
     isAppQuitting = true;
 });
 
+/**
+ * Discord ouvre des popouts internes (overlay de jeu, activite, clips, appel...)
+ * via window.open("https://discord.com/popout", "DISCORD_<key>").
+ * Dans une instance multi, ces popouts ne doivent jamais partir dans le navigateur.
+ */
+function isDiscordPopoutRequest(url: string, frameName?: string): boolean {
+    if (frameName && frameName.startsWith("DISCORD_")) return true;
+    try {
+        const parsed = new URL(url);
+        if (!/(^|\.)discord\.com$/.test(parsed.hostname) && parsed.protocol !== "about:") return false;
+        return /^\/(popout|popup|overlay)(\/|$)/.test(parsed.pathname) || parsed.protocol === "about:";
+    } catch {
+        return url === "" || url.startsWith("about:");
+    }
+}
+
 function registerWindowControlIpc(win: BrowserWindow): () => void {
     const wc = win.webContents as any; // webContents.ipc exists since Electron 20
 
@@ -347,19 +414,34 @@ function registerWindowControlIpc(win: BrowserWindow): () => void {
     const FULLSCREEN = "DISCORD_WINDOW_TOGGLE_FULLSCREEN";
 
     // webContents.ipc.handle est prioritaire sur ipcMain.handle pour ce sender
-    const handleClose = () => {
+    // Discord passe une "windowKey" quand il veut fermer un popout (overlay, activite,
+    // jeu detecte...). Une instance multi n'a pas de popout : on ignore ces appels pour
+    // ne JAMAIS fermer la fenetre de l'instance a la place du popout.
+    const isPopoutKey = (key: unknown): boolean => typeof key === "string" && key.length > 0;
+
+    const handleClose = (_event?: unknown, key?: unknown) => {
+        if (isPopoutKey(key)) return;
         if (!win.isDestroyed()) {
             (win as any)._userRequestedClose = true;
             win.close();
         }
     };
-    const handleMinimize = () => { if (!win.isDestroyed()) win.minimize(); };
-    const handleMaximize = () => {
-        if (win.isDestroyed()) return;
+    const handleMinimize = (_event?: unknown, key?: unknown) => {
+        if (isPopoutKey(key)) return;
+        if (!win.isDestroyed()) win.minimize();
+    };
+    const handleMaximize = (_event?: unknown, key?: unknown) => {
+        if (isPopoutKey(key) || win.isDestroyed()) return;
         if (win.isMaximized()) win.unmaximize(); else win.maximize();
     };
-    const handleRestore = () => { if (!win.isDestroyed()) win.restore(); };
-    const handleFullscreen = () => { if (!win.isDestroyed()) win.setFullScreen(!win.isFullScreen()); };
+    const handleRestore = (_event?: unknown, key?: unknown) => {
+        if (isPopoutKey(key)) return;
+        if (!win.isDestroyed()) win.restore();
+    };
+    const handleFullscreen = (_event?: unknown, key?: unknown) => {
+        if (isPopoutKey(key)) return;
+        if (!win.isDestroyed()) win.setFullScreen(!win.isFullScreen());
+    };
 
     try {
         // webContents.ipc.handle (Electron 20+)
@@ -377,7 +459,7 @@ function registerWindowControlIpc(win: BrowserWindow): () => void {
         // "Attempted to register a second handler" crashing Discord on startup.
         const guardedHandle = (fn: () => void) => (event: Electron.IpcMainInvokeEvent) => {
             if (BrowserWindow.fromWebContents(event.sender) !== win) return;
-            fn();
+            fn(event, key);
         };
         // removeHandler first to avoid crash on double call
         ipcMain.removeHandler(CLOSE);
@@ -697,8 +779,36 @@ function registerNotificationIpc(win: BrowserWindow): () => void {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Create token preload script
+// Create the preloading script that injects the token
 // ─────────────────────────────────────────────────────────────────────────────
+// Deterministic color palette per account/instance
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const INSTANCE_PALETTE = [
+    "#5865F2", // Discord Blurple
+    "#57F287", // Green
+    "#FEE75C", // Yellow
+    "#EB459E", // Fuchsia / Pink
+    "#ED4245", // Red
+    "#00AFF4", // Cyan
+    "#9B59B6", // Purple
+    "#F47B67", // Coral / Peach
+    "#E67E22", // Orange
+    "#1ABC9C", // Turquoise / Teal
+    "#FF73FA", // Neon Pink
+    "#3498DB", // Sky Blue
+    "#2ECC71", // Emerald
+    "#E91E63", // Hot Pink
+];
+
+export function getAccountColor(userId: string): string {
+    if (!userId) return INSTANCE_PALETTE[0];
+    let hash = 0;
+    for (let i = 0; i < userId.length; i++) {
+        hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
+    }
+    return INSTANCE_PALETTE[hash % INSTANCE_PALETTE.length];
+}
 
 /**
  * Ensemble des chemins de preloads actuellement utilisés par une fenêtre MI ouverte.
@@ -707,24 +817,21 @@ function registerNotificationIpc(win: BrowserWindow): () => void {
  */
 const activePreloads = new Set<string>();
 
-function createTokenPreload(token: string, sharedSettings: Record<string, string> = {}, targetUserId = "", audioSettings?: any): string {
+function createTokenPreload(token: string, sharedSettings: Record<string, string> = {}, targetUserId = "", audioSettings?: any, username = ""): string {
     const dir = join(app.getPath("userData"), "guncord-mi-preloads");
     mkdirSync(dir, { recursive: true });
 
-    // ── Nettoyage des preloads orphelins ────────────────────────────────────────
-    // Supprime uniquement les fichiers token-preload-*.js qui ne sont PAS dans
-    // activePreloads (= fenêtre MI fermée ou crash précédent).
-    // On ne touche JAMAIS aux fichiers des fenêtres encore ouvertes, peu importe
-    // leur âge — un utilisateur peut garder une fenêtre MI ouverte des heures.
-    try {
-        for (const f of readdirSync(dir)) {
-            if (!/^token-preload-\d+\.js$/.test(f)) continue;
-            const fullPath = join(dir, f);
-            if (!activePreloads.has(fullPath)) {
-                try { unlinkSync(fullPath); } catch {}
+    setImmediate(() => {
+        try {
+            for (const f of readdirSync(dir)) {
+                if (!/^token-preload-\d+\.js$/.test(f)) continue;
+                const fullPath = join(dir, f);
+                if (!activePreloads.has(fullPath)) {
+                    try { unlinkSync(fullPath); } catch {}
+                }
             }
-        }
-    } catch {}
+        } catch {}
+    });
 
     const cleanToken = decryptTokenSync(token);
     const encryptedToken = encryptTokenSync(cleanToken);
@@ -748,11 +855,14 @@ function createTokenPreload(token: string, sharedSettings: Record<string, string
     }
 
     // Serialize values to JS string literals safe to embed via JSON.stringify
+    const accentColor = getAccountColor(effectiveUid);
     const tokenLiteral = JSON.stringify(cleanToken);
     const settingsLiteral = JSON.stringify(JSON.stringify(sharedSettings ?? {}));
     const targetUserIdLiteral = JSON.stringify(effectiveUid ?? "");
     const tokensMapLiteral = JSON.stringify(JSON.stringify(tokensMap));
     const audioLiteral = JSON.stringify(rawAudioStr);
+    const colorLiteral = JSON.stringify(accentColor);
+    const usernameLiteral = JSON.stringify(username || "");
 
     // Inner script: runs in main world via webFrame.executeJavaScript.
     // Must be plain JavaScript — no TypeScript syntax, no template literals.
@@ -763,6 +873,8 @@ function createTokenPreload(token: string, sharedSettings: Record<string, string
         "  var TARGET_UID = " + targetUserIdLiteral + ";",
         "  var TOKENS_JSON = " + tokensMapLiteral + ";",
         "  var RAW_AUDIO = " + audioLiteral + ";",
+        "  var ACCENT_COLOR = " + colorLiteral + ";",
+        "  var ACCENT_USER = " + usernameLiteral + ";",
         "  var CONFLICT = ['token','default_token','multiaccount_tokens','tokens','user_id_cache','MultiAccountStore','AuthenticationStore','login_token'];",
         "  try {",
         "    var sh = JSON.parse(SETTINGS_JSON || '{}');",
@@ -800,7 +912,7 @@ function createTokenPreload(token: string, sharedSettings: Record<string, string
         "      var dn = window.DiscordNative;",
         "      if (dn && dn.window && dn.window.close && !dn.window._miPatched) {",
         "        var orig = dn.window.close;",
-        "        dn.window.close = function() { if (Date.now() - lastUI < 2000) orig.apply(this, arguments); };",
+        "        dn.window.close = function(key) { if (typeof key === 'string' && key) return; if (Date.now() - lastUI < 2000) orig.apply(this, arguments); };",
         "        dn.window._miPatched = true;",
         "      }",
         "    }",
@@ -864,17 +976,44 @@ function createTokenPreload(token: string, sharedSettings: Record<string, string
 // Compteur d'icones detached : tourne de 1 a 5
 let iconCounter = 1;
 
-// Chemin vers le dossier d'icones detached (multi-instance-icons/ dans le dist)
+let cachedIconDir: string | null = null;
+let cachedIconCount: number | null = null;
+
+// Chemin vers le dossier d'icones detached (multi-instance-icons/ dans assets ou dist)
 function getDetachedIconDir(): string {
-    // En production : {app_dir}/multi-instance-icons/
-    // En dev : Desktop/lolll/
+    if (cachedIconDir) return cachedIconDir;
+    // 1. Dossier assets du code source
+    const sourceDir = join(__dirname, "..", "..", "assets", "multi-instance-icons");
+    if (existsSync(sourceDir)) return (cachedIconDir = sourceDir);
+
+    // 2. Dossier dist aux côtés du patcher
+    const distDir = join(__dirname, "multi-instance-icons");
+    if (existsSync(distDir)) return (cachedIconDir = distDir);
+
+    // 3. Dossier de l'exécutable Discord / resources
     const exeDir = join(process.execPath, "..");
     const prodDir = join(exeDir, "multi-instance-icons");
-    if (existsSync(prodDir)) return prodDir;
-    // Fallback dev : Desktop/lolll
-    const desktopDir = join(app.getPath("desktop"), "lolll");
-    if (existsSync(desktopDir)) return desktopDir;
-    return prodDir;
+    if (existsSync(prodDir)) return (cachedIconDir = prodDir);
+    const resDir = join(exeDir, "resources", "multi-instance-icons");
+    if (existsSync(resDir)) return (cachedIconDir = resDir);
+
+    // 4. Dossier racine de travail
+    const cwdDir = join(process.cwd(), "assets", "multi-instance-icons");
+    if (existsSync(cwdDir)) return (cachedIconDir = cwdDir);
+
+    return (cachedIconDir = distDir);
+}
+
+function getAvailableIconCount(): number {
+    if (cachedIconCount !== null) return cachedIconCount;
+    try {
+        const dir = getDetachedIconDir();
+        if (existsSync(dir)) {
+            const files = readdirSync(dir).filter(f => /^\d+\.ico$/i.test(f));
+            if (files.length > 0) return (cachedIconCount = files.length);
+        }
+    } catch {}
+    return (cachedIconCount = 9);
 }
 
 export async function openInstanceWindow(
@@ -886,7 +1025,8 @@ export async function openInstanceWindow(
     domain = "discord.com",
     blockExternalTokenAccess = false,
     performanceMode = false,
-    audioSettings?: any
+    audioSettings?: any,
+    passedSharedSettings?: Record<string, string>
 ): Promise<{ ok: boolean; error?: string; }> {
     try {
         const cleanTok = decryptTokenSync(token);
@@ -903,12 +1043,13 @@ export async function openInstanceWindow(
         // En donnant un ID different a chaque fenetre, elles ne se regroupent pas
         const uniqueAppId = `guncord.instance.${userId}.${Date.now()}`;
 
-        // Icone : rotation 1→2→3→4→5→1→... depuis multi-instance-icons/
+        // Icone : rotation 1→2→...→N→1 depuis multi-instance-icons/
         let currentIconPath = "";
         const iconDir = getDetachedIconDir();
+        const maxIcons = getAvailableIconCount();
         currentIconPath = join(iconDir, `${iconCounter}.ico`);
         if (!existsSync(currentIconPath)) currentIconPath = "";
-        iconCounter = iconCounter >= 5 ? 1 : iconCounter + 1;
+        iconCounter = iconCounter >= maxIcons ? 1 : iconCounter + 1;
 
         // Session Electron isolee par userId
         const savedPartition = `persist:guncord-mi-${userId}`;
@@ -950,8 +1091,8 @@ export async function openInstanceWindow(
             saveSharedTokenCache(null, { [userId]: token }).catch(() => {});
         }
         const effectiveAudio = audioSettings || getMasterAudioSettings();
-        const sharedSettings = await captureAndMergeSharedSettings(_);
-        const preloadPath = createTokenPreload(token, sharedSettings, userId, effectiveAudio);
+        const sharedSettings = await captureAndMergeSharedSettings(_, passedSharedSettings);
+        const preloadPath = createTokenPreload(token, sharedSettings, userId, effectiveAudio, username);
         ses.setPreloads([preloadPath]);
 
         const win = new BrowserWindow({
@@ -969,6 +1110,7 @@ export async function openInstanceWindow(
             backgroundColor: "#313338",
             title: `Guncord [${username || userId}]`,
             icon: currentIconPath || undefined,
+            show: false,
             webPreferences: {
                 preload: join(__dirname, "preload.js"),
                 contextIsolation: true,
@@ -1002,6 +1144,17 @@ export async function openInstanceWindow(
         const wcId = wc.id;
         openWindows.set(userId, win);
         pendingInstanceAuth.set(wcId, { token: cleanTok, userId, username });
+
+        const accentColor = getAccountColor(userId || getUserIdFromToken(cleanTok));
+        let hasShown = false;
+        const showWindowSafely = () => {
+            if (hasShown || win.isDestroyed()) return;
+            hasShown = true;
+            win.show();
+            win.focus();
+        };
+
+        win.once("ready-to-show", showWindowSafely);
 
         win.on("enter-html-full-screen", () => {
             if (!win.isDestroyed()) win.setFullScreen(true);
@@ -1101,27 +1254,24 @@ export async function openInstanceWindow(
                     localStorage.removeItem("AuthenticationStore");
                     localStorage.removeItem("MultiAccountStore");
                 }
-                const iframe = document.createElement("iframe");
-                iframe.style.display = "none";
-                document.body.appendChild(iframe);
-                try {
-                    iframe.contentWindow.localStorage.token = q;
-                    iframe.contentWindow.localStorage.default_token = q;
-                    if (target) iframe.contentWindow.localStorage.user_id_cache = JSON.stringify(target);
-                    if (tokensJson && tokensJson !== "{}") {
-                        iframe.contentWindow.localStorage.tokens = tokensJson;
-                        iframe.contentWindow.localStorage.multiaccount_tokens = tokensJson;
-                    }
-                    if (rawAud && rawAud.length > 5) {
-                        iframe.contentWindow.localStorage.MediaEngineStore = rawAud;
-                    }
-                } catch(e) {}
-                document.body.removeChild(iframe);
             } catch(e) {}
         })();`;
-        wc.on("dom-ready", () => wc.executeJavaScript(injectJs).catch(() => { }));
-        wc.on("did-finish-load", () => wc.executeJavaScript(injectJs).catch(() => { }));
-        wc.on("did-navigate", () => wc.executeJavaScript(injectJs).catch(() => { }));
+        let hasInjected = false;
+        const runInjectOnce = () => {
+            if (hasInjected || win.isDestroyed() || wc.isDestroyed()) return;
+            hasInjected = true;
+            wc.executeJavaScript(injectJs).catch(() => {});
+        };
+
+        wc.on("dom-ready", () => {
+            showWindowSafely();
+            runInjectOnce();
+        });
+        wc.on("did-finish-load", () => {
+            showWindowSafely();
+            runInjectOnce();
+        });
+        setTimeout(showWindowSafely, 3000);
 
         // Titre de la fenetre
         wc.on("page-title-updated", (e, title) => {
@@ -1138,15 +1288,18 @@ export async function openInstanceWindow(
             if (!/^https:\/\/(ptb\.|canary\.)?discord\.com/.test(url)) e.preventDefault();
         });
 
-        wc.setWindowOpenHandler(({ url }) => {
+        wc.setWindowOpenHandler(({ url, frameName }) => {
             if (url.includes("/handoff")) return { action: "deny" };
+            if (isDiscordPopoutRequest(url, frameName)) return { action: "deny" };
             if (url.startsWith("http")) require("electron").shell.openExternal(url);
             return { action: "deny" };
         });
 
         const validDomains = ["discord.com", "ptb.discord.com", "canary.discord.com"];
         const targetDomain = validDomains.includes(domain) ? domain : "discord.com";
-        await win.loadURL(`https://${targetDomain}/channels/@me`);
+        win.loadURL(`https://${targetDomain}/channels/@me`).catch(err => {
+            console.warn("[GuncordMI] loadURL navigation warning:", err);
+        });
         return { ok: true };
     } catch (e: any) {
         return { ok: false, error: e?.message ?? String(e) };
@@ -1167,7 +1320,8 @@ export async function openInstanceWindowGrouped(
     domain = "discord.com",
     blockExternalTokenAccess = false,
     performanceMode = false,
-    audioSettings?: any
+    audioSettings?: any,
+    passedSharedSettings?: Record<string, string>
 ): Promise<{ ok: boolean; error?: string; }> {
     try {
         const cleanTok = decryptTokenSync(token);
@@ -1220,8 +1374,8 @@ export async function openInstanceWindowGrouped(
             saveSharedTokenCache(null, { [userId]: token }).catch(() => {});
         }
         const effectiveAudio = audioSettings || getMasterAudioSettings();
-        const sharedSettings = await captureAndMergeSharedSettings(_);
-        const preloadPath = createTokenPreload(token, sharedSettings, userId, effectiveAudio);
+        const sharedSettings = await captureAndMergeSharedSettings(_, passedSharedSettings);
+        const preloadPath = createTokenPreload(token, sharedSettings, userId, effectiveAudio, username);
         ses.setPreloads([preloadPath]);
 
         const win = new BrowserWindow({
@@ -1238,6 +1392,7 @@ export async function openInstanceWindowGrouped(
             darkTheme: true,
             backgroundColor: "#313338",
             title: `Guncord [${username || userId}]`,
+            show: false,
             webPreferences: {
                 preload: join(__dirname, "preload.js"),
                 contextIsolation: true,
@@ -1256,6 +1411,16 @@ export async function openInstanceWindowGrouped(
         const wcId = wc.id;
         openGroupedWindows.set(userId, win);
         pendingInstanceAuth.set(wcId, { token: cleanTok, userId, username });
+
+        let hasShown = false;
+        const showWindowSafely = () => {
+            if (hasShown || win.isDestroyed()) return;
+            hasShown = true;
+            win.show();
+            win.focus();
+        };
+
+        win.once("ready-to-show", showWindowSafely);
 
         win.on("enter-html-full-screen", () => {
             if (!win.isDestroyed()) win.setFullScreen(true);
@@ -1349,27 +1514,24 @@ export async function openInstanceWindowGrouped(
                     localStorage.removeItem("AuthenticationStore");
                     localStorage.removeItem("MultiAccountStore");
                 }
-                const iframe = document.createElement("iframe");
-                iframe.style.display = "none";
-                document.body.appendChild(iframe);
-                try {
-                    iframe.contentWindow.localStorage.token = q;
-                    iframe.contentWindow.localStorage.default_token = q;
-                    if (target) iframe.contentWindow.localStorage.user_id_cache = JSON.stringify(target);
-                    if (tokensJson && tokensJson !== "{}") {
-                        iframe.contentWindow.localStorage.tokens = tokensJson;
-                        iframe.contentWindow.localStorage.multiaccount_tokens = tokensJson;
-                    }
-                    if (rawAud && rawAud.length > 5) {
-                        iframe.contentWindow.localStorage.MediaEngineStore = rawAud;
-                    }
-                } catch(e) {}
-                document.body.removeChild(iframe);
             } catch(e) {}
         })();`;
-        wc.on("dom-ready", () => wc.executeJavaScript(injectJs).catch(() => {}));
-        wc.on("did-finish-load", () => wc.executeJavaScript(injectJs).catch(() => {}));
-        wc.on("did-navigate", () => wc.executeJavaScript(injectJs).catch(() => {}));
+        let hasInjected = false;
+        const runInjectOnce = () => {
+            if (hasInjected || win.isDestroyed() || wc.isDestroyed()) return;
+            hasInjected = true;
+            wc.executeJavaScript(injectJs).catch(() => {});
+        };
+
+        wc.on("dom-ready", () => {
+            showWindowSafely();
+            runInjectOnce();
+        });
+        wc.on("did-finish-load", () => {
+            showWindowSafely();
+            runInjectOnce();
+        });
+        setTimeout(showWindowSafely, 3000);
 
         wc.on("page-title-updated", (e, title) => {
             const cleanTitle = title.replace(/^\(\d+\)\s*/, "").replace(/\s*\[.*\]$/, "");
@@ -1385,15 +1547,18 @@ export async function openInstanceWindowGrouped(
             if (!/^https:\/\/(ptb\.|canary\.)?discord\.com/.test(url)) e.preventDefault();
         });
 
-        wc.setWindowOpenHandler(({ url }) => {
+        wc.setWindowOpenHandler(({ url, frameName }) => {
             if (url.includes("/handoff")) return { action: "deny" };
+            if (isDiscordPopoutRequest(url, frameName)) return { action: "deny" };
             if (url.startsWith("http")) require("electron").shell.openExternal(url);
             return { action: "deny" };
         });
 
         const validDomains = ["discord.com", "ptb.discord.com", "canary.discord.com"];
         const targetDomain = validDomains.includes(domain) ? domain : "discord.com";
-        await win.loadURL(`https://${targetDomain}/channels/@me`);
+        win.loadURL(`https://${targetDomain}/channels/@me`).catch(err => {
+            console.warn("[GuncordMI] loadURL navigation warning:", err);
+        });
         return { ok: true };
     } catch (e: any) {
         return { ok: false, error: e?.message ?? String(e) };

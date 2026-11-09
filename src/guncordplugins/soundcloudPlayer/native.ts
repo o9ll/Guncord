@@ -108,7 +108,21 @@ export async function searchSoundCloud(
         const url = `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${clientId}&limit=${limit}&offset=${offset}`;
         return await netGet(url);
     } catch (e: any) {
-        // Return HTTP code to detect client_id expiration
+        // Retourner le code HTTP pour détecter l'expiration du client_id
+        throw new Error(e?.message ?? String(e));
+    }
+}
+
+export async function fetchSoundCloudTrending(
+    _: any,
+    clientId: string,
+    offset = 0,
+    limit = 50
+): Promise<string | null> {
+    try {
+        const url = `https://api-v2.soundcloud.com/charts?kind=trending&genre=soundcloud%3Agenres%3Aall-music&client_id=${clientId}&limit=${limit}&offset=${offset}`;
+        return await netGet(url);
+    } catch (e: any) {
         throw new Error(e?.message ?? String(e));
     }
 }
@@ -255,7 +269,9 @@ export async function getBrowserSoundCloudToken(_?: any): Promise<{
     if (!IS_ELECTRON) return null;
     if (process.platform !== "win32") return null;
     try {
-        const { spawnSync } = require("child_process") as typeof import("child_process");
+        const { execFile } = require("child_process") as typeof import("child_process");
+        const { promisify } = require("util") as typeof import("util");
+        const execFileAsync = promisify(execFile);
 
         const psScript = `
 $ErrorActionPreference = 'SilentlyContinue'
@@ -356,9 +372,9 @@ foreach ($br in $browsers) {
 Write-Output 'NOT_FOUND'
 `;
 
-        const result = spawnSync("powershell", [
+        const result = await execFileAsync("powershell", [
             "-NoProfile", "-NonInteractive", "-Command", psScript
-        ], { encoding: "utf8", timeout: 15000 });
+        ], { encoding: "utf8", timeout: 15000, windowsHide: true });
 
         const out = (result.stdout || "").trim();
         if (!out || out === "NOT_FOUND") return null;

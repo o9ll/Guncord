@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import "./style.css";
 
@@ -49,6 +37,7 @@ const guildPopoutPatch: NavContextMenuPatchCallback = (children, { guild }: { gu
             label="View Reviews"
             id="vc-rdb-server-reviews"
             icon={OpenExternalIcon}
+            leadingAccessory={{ type: "icon", icon: OpenExternalIcon }}
             action={() => openReviewsModal(guild.id, guild.name, ReviewType.Server)}
         />
     );
@@ -61,6 +50,7 @@ const userContextPatch: NavContextMenuPatchCallback = (children, { user }: { use
             label="View Reviews"
             id="vc-rdb-user-reviews"
             icon={OpenExternalIcon}
+            leadingAccessory={{ type: "icon", icon: OpenExternalIcon }}
             action={() => openReviewsModal(user.id, user.username, ReviewType.User)}
         />
     );
@@ -68,7 +58,6 @@ const userContextPatch: NavContextMenuPatchCallback = (children, { user }: { use
 
 export default definePlugin({
     name: "ReviewDB",
-    enabledByDefault: true,
     description: "Review other users (Adds a new settings to profiles)",
     dependencies: ["ProfileCollectionsAPI"],
     tags: ["Friends", "Servers"],
@@ -105,7 +94,7 @@ export default definePlugin({
                     if (lastReviewId && lastReviewId < user.lastReviewID) {
                         s.lastReviewId = user.lastReviewID;
                         if (user.lastReviewID !== 0)
-                            showToast("You have new reviews on your profile!");
+                            showToast({ text: "You have new reviews on your profile!" });
                     }
                 }
 
@@ -148,7 +137,7 @@ export default definePlugin({
 
     renderProfileCollection: {
         priority: 0,
-        render: ({ user, isSideBar = false }: { user: User; isSideBar?: boolean; }) => {
+        render: ({ user, isSideBar = false, isRedesignEnabled = false }: { user: User; isSideBar?: boolean; isRedesignEnabled?: boolean; }) => {
             const [reviewData] = useAwaiter(() => getReviews(user.id, { limit: 4 }), { deps: [user.id], fallbackValue: null });
 
             // Discord are masters at using a crap ton of html elements and css classes to create a simple ui that could have
@@ -201,7 +190,7 @@ export default definePlugin({
                 </section>
             );
 
-            return isSideBar
+            return isSideBar && !isRedesignEnabled
                 ? <div className={DMSideBarClasses.widgetPreviews}>{reviewsSection}</div>
                 : reviewsSection;
         },

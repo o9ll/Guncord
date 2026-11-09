@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { FluxDispatcher, MessageStore, SelectedChannelStore } from "@webpack/common";
+import { FluxDispatcher, MessageStore, SelectedChannelStore, UserStore } from "@webpack/common";
 
-import { Flogger, settings } from ".";
+import { Flogger, settings, recordDeleted, recordDeletedBulk } from ".";
 import * as idb from "./db";
 import { addMessage } from "./LoggedMessageManager";
 import { LoggedMessage, LoggedMessageJSON } from "./types";
@@ -44,17 +44,38 @@ async function messageDeleteHandler(payload: any) {
             message = { ...cachedMessage, deleted: true } as LoggedMessageJSON;
         }
 
+        const isBot = Boolean(
+            (message as any)?.bot ||
+            message?.author?.bot ||
+            UserStore?.getUser?.(message?.author?.id)?.bot ||
+            (message as any)?.webhookId ||
+            (message as any)?.webhook_id ||
+            message?.author?.discriminator === "0000"
+        );
+
+        const ignoreBots = settings.store.ignoreBots ?? true;
+        const ignoreWebhooks = settings.store.ignoreWebhooks ?? true;
+
+        if ((ignoreBots && isBot) || (ignoreWebhooks && ((message as any)?.webhookId || (message as any)?.webhook_id))) {
+            return FluxDispatcher.dispatch({
+                type: "MESSAGE_DELETE",
+                channelId: payload.channelId,
+                id: payload.id,
+                mlDeleted: true
+            });
+        }
+
         const ghostPinged = isGhostPinged(message as any);
 
         if (shouldIgnore({
             channelId: message?.channel_id ?? payload.channelId,
             guildId: payload.guildId ?? (message as any).guildId ?? (message as any).guild_id,
             authorId: message?.author?.id,
-            bot: (message as any).bot || message?.author?.bot,
+            bot: isBot,
             flags: message?.flags,
             ghostPinged,
             isCachedByUs: (message as LoggedMessageJSON).ourCache,
-            webhookId: (message as any).webhookId,
+            webhookId: (message as any).webhookId || (message as any).webhook_id,
             content: message?.content
         })) {
             return FluxDispatcher.dispatch({
@@ -76,32 +97,83 @@ async function messageDeleteHandler(payload: any) {
 }
 
 async function messageDeleteBulkHandler({ channelId, guildId, ids }: { channelId: string; guildId?: string; ids: string[]; }) {
+    if (!ids || ids.length === 0) return;
     const messages: LoggedMessageJSON[] = [];
+    const bulkRecordItems: { id: string; channelId?: string; attachments?: any[]; }[] = [];
+
+    const ignoreBots = settings.store.ignoreBots ?? true;
+    const ignoreWebhooks = settings.store.ignoreWebhooks ?? true;
+
     for (const id of ids) {
-        const msg = await messageDeleteHandler({ type: "MESSAGE_DELETE", channelId, guildId, id, isBulk: true });
-        if (msg) messages.push(msg as LoggedMessageJSON);
+        if (handledMessageIds.has(id)) continue;
+        let message: LoggedMessage | LoggedMessageJSON | null = oldGetMessage?.(channelId, id) as any;
+        if (message == null) {
+            const cachedMessage = cacheSentMessages.get(`${channelId},${id}`);
+            if (cachedMessage) {
+                message = { ...cachedMessage, deleted: true } as LoggedMessageJSON;
+            }
+        }
+        if (message) {
+            const isBot = Boolean(
+                message?.bot ||
+                message?.author?.bot ||
+                UserStore?.getUser?.(message?.author?.id)?.bot ||
+                (message as any)?.webhookId ||
+                (message as any)?.webhook_id ||
+                message?.author?.discriminator === "0000"
+            );
+            if ((ignoreBots && isBot) || (ignoreWebhooks && ((message as any)?.webhookId || (message as any)?.webhook_id))) {
+                continue;
+            }
+            bulkRecordItems.push({ id, channelId, attachments: message.attachments });
+            messages.push({ ...message, deleted: true } as LoggedMessageJSON);
+        }
     }
-    await idb.addMessagesBulkIDB(messages);
+
+    if (bulkRecordItems.length > 0) {
+        recordDeletedBulk(bulkRecordItems);
+    }
+    if (messages.length > 0) {
+        await idb.addMessagesBulkIDB(messages);
+    }
 }
 
 async function messageUpdateHandler(payload: any) {
-    const cachedMessage = cacheSentMessages.get(`${payload.message.channel_id},${payload.message.id}`);
+    const cachedMessage = cacheSentMessages.get(`${payload.message?.channel_id},${payload.message?.id}`);
+    const authorId = payload.message?.author?.id;
+
+    const isBot = Boolean(
+        (payload.message?.author as any)?.bot ||
+        payload.message?.bot ||
+        UserStore?.getUser?.(authorId)?.bot ||
+        payload.message?.webhookId ||
+        payload.message?.webhook_id ||
+        (payload.message?.author as any)?.discriminator === "0000"
+    );
+
+    const ignoreBots = settings.store.ignoreBots ?? true;
+    const ignoreWebhooks = settings.store.ignoreWebhooks ?? true;
+
+    if ((ignoreBots && isBot) || (ignoreWebhooks && (payload.message?.webhookId || payload.message?.webhook_id))) {
+        return;
+    }
 
     if (shouldIgnore({
         channelId: payload.message?.channel_id,
         guildId: payload.guildId ?? payload?.guild_id,
-        authorId: payload.message?.author?.id,
-        bot: (payload.message?.author as any)?.bot,
+        authorId,
+        bot: isBot,
         flags: payload.message?.flags,
         ghostPinged: isGhostPinged(payload.message as any),
         isCachedByUs: cachedMessage?.ourCache ?? false,
+        webhookId: payload.message?.webhookId || payload.message?.webhook_id,
         content: payload.message?.content
     })) return;
 
-    let message = oldGetMessage?.(payload.message.channel_id, payload.message.id) as LoggedMessage | LoggedMessageJSON | null;
+    let message = oldGetMessage?.(payload.message?.channel_id, payload.message?.id) as LoggedMessage | LoggedMessageJSON | null;
 
     if (message == null) {
-        if (cachedMessage != null && payload.message.content != null && cachedMessage.content !== payload.message.content) {
+        if (cachedMessage != null && payload.message?.content != null && cachedMessage.content !== payload.message?.content) {
             message = {
                 ...cachedMessage,
                 content: payload.message.content,
@@ -124,7 +196,26 @@ async function messageUpdateHandler(payload: any) {
 }
 
 function messageCreateHandler(payload: any) {
-    cacheSentMessages.set(`${payload.message.channel_id},${payload.message.id}`, cleanUpCachedMessage(payload.message));
+    const msg = payload?.message;
+    if (!msg) return;
+
+    const isBot = Boolean(
+        msg.author?.bot ||
+        msg.bot ||
+        UserStore?.getUser?.(msg.author?.id)?.bot ||
+        msg.webhook_id ||
+        msg.webhookId ||
+        msg.author?.discriminator === "0000"
+    );
+
+    const ignoreBots = settings.store.ignoreBots ?? true;
+    const ignoreWebhooks = settings.store.ignoreWebhooks ?? true;
+
+    if ((ignoreBots && isBot) || (ignoreWebhooks && (msg.webhook_id || msg.webhookId))) {
+        return;
+    }
+
+    cacheSentMessages.set(`${msg.channel_id},${msg.id}`, cleanUpCachedMessage(msg));
 }
 
 /**
@@ -135,31 +226,30 @@ function messageCreateHandler(payload: any) {
 async function loadMessagesSuccessHandler(payload: any) {
     try {
         const messages: any[] = payload.messages;
-        if (!Array.isArray(messages) || messages.length === 0) return;
+        if (!Array.isArray(messages)) return;
 
         const channelId: string = payload.channelId;
         if (!channelId) return;
 
-        // Discord sorts DESC (newest first), so [0] = newest, [last] = oldest
-        const newestMsg = messages[0];
-        const oldestMsg = messages[messages.length - 1];
-
-        const newestTs: string = newestMsg.timestamp;
-        const oldestTs: string = oldestMsg.timestamp;
-
-        // Query ONLY messages within the exact time window of this batch
-        const records = await idb.getMessagesByChannelBetweenTimestampsIDB(channelId, oldestTs, newestTs);
+        // Query all logged messages for this channel
+        const records = await idb.getMessagesForChannelIDB(channelId);
         if (!records.length) return;
 
-        const existingIds = new Set(messages.map((m: any) => m.id));
+        const existingIds = new Set(messages.map((m: any) => m?.id));
+        const messagesById = new Map<string, any>();
+        for (const m of messages) {
+            if (m?.id) messagesById.set(m.id, m);
+        }
 
-        // Attach edit history to existing messages
+        // Attach edit history to existing messages and re-register deleted state
         for (const record of records) {
             if (record.status === idb.DBMessageStatus.EDITED) {
-                const existing = messages.find((m: any) => m.id === record.message_id);
+                const existing = messagesById.get(record.message_id);
                 if (existing && record.message.editHistory?.length) {
                     existing.editHistory = record.message.editHistory;
                 }
+            } else if (record.status === idb.DBMessageStatus.DELETED || record.status === idb.DBMessageStatus.GHOST_PINGED) {
+                recordDeleted(record.message_id, record.channel_id, record.message?.attachments);
             }
         }
 
@@ -169,17 +259,41 @@ async function loadMessagesSuccessHandler(payload: any) {
                 (r.status === idb.DBMessageStatus.DELETED || r.status === idb.DBMessageStatus.GHOST_PINGED) &&
                 !existingIds.has(r.message_id)
             )
-            .map(r => messageJsonToMessageClass({ message: r.message }));
+            .map(r => {
+                r.message.deleted = true;
+                if (Array.isArray(r.message.attachments)) {
+                    r.message.attachments.forEach((a: any) => { a.deleted = true; });
+                }
+                const msg = messageJsonToMessageClass({ message: r.message });
+                if (msg) {
+                    msg.deleted = true;
+                    if (Array.isArray(msg.attachments)) {
+                        msg.attachments.forEach((a: any) => { a.deleted = true; });
+                    }
+                }
+                return msg;
+            })
+            .filter(Boolean);
 
         if (!toInject.length) return;
 
-        // Insert deleted messages into the array, maintaining timestamp order (DESC)
-        const DISCORD_EPOCH = 14200704e5;
-        const getTime = (id: string) => (parseInt(id) / 4194304) + DISCORD_EPOCH;
+        // Sort descending by ID (newest first)
+        toInject.sort((a: any, b: any) => {
+            try {
+                return BigInt(b.id) > BigInt(a.id) ? 1 : -1;
+            } catch {
+                return 0;
+            }
+        });
 
+        // Insert deleted messages into the array, maintaining snowflake ID order (DESC)
         for (const deleted of toInject) {
-            const deletedTime = getTime((deleted as any).id);
-            let insertAt = messages.findIndex((m: any) => getTime(m.id) < deletedTime);
+            const delId = (deleted as any).id;
+            let insertAt = -1;
+            try {
+                const delBig = BigInt(delId);
+                insertAt = messages.findIndex((m: any) => m?.id && BigInt(m.id) < delBig);
+            } catch {}
             if (insertAt === -1) insertAt = messages.length;
             messages.splice(insertAt, 0, deleted);
         }
@@ -195,29 +309,42 @@ export async function startEnhanced(this: any) {
     oldGetMessage = MessageStore.getMessage;
 
     MessageStore.getMessage = (channelId: string, messageId: string) => {
-        const MLMessage = idb.cachedMessages.get(messageId);
-        if (!MLMessage) return oldGetMessage(channelId, messageId);
+        try {
+            const MLMessage = idb.cachedMessages.get(messageId);
+            if (!MLMessage) return oldGetMessage(channelId, messageId);
 
-        if (combinedMessageCache.has(messageId)) {
-            return combinedMessageCache.get(messageId);
+            if (combinedMessageCache.has(messageId)) {
+                return combinedMessageCache.get(messageId);
+            }
+
+            if (MLMessage.deleted) {
+                const combined = messageJsonToMessageClass({ message: MLMessage });
+                if (combined) {
+                    combined.deleted = true;
+                    if (Array.isArray(combined.attachments)) {
+                        combined.attachments.forEach((a: any) => { a.deleted = true; });
+                    }
+                    combinedMessageCache.set(messageId, combined);
+                    return combined;
+                }
+            }
+
+            const latestMessage = oldGetMessage(channelId, messageId);
+            const combined = messageJsonToMessageClass({
+                message: { ...MLMessage, ...(latestMessage ?? {}) }
+            });
+
+            if (combined) {
+                combinedMessageCache.set(messageId, combined);
+                if (combinedMessageCache.size > 1000) {
+                    combinedMessageCache.delete(combinedMessageCache.keys().next().value!);
+                }
+                return combined;
+            }
+        } catch {
+            // Safe fallback to native message to prevent unhandled React render crashes
         }
-
-        if (MLMessage.deleted) {
-            const combined = messageJsonToMessageClass({ message: MLMessage });
-            combinedMessageCache.set(messageId, combined);
-            return combined;
-        }
-
-        const latestMessage = oldGetMessage(channelId, messageId);
-        const combined = messageJsonToMessageClass({
-            message: { ...MLMessage, ...(latestMessage ?? {}) }
-        });
-
-        combinedMessageCache.set(messageId, combined);
-        if (combinedMessageCache.size > 1000) {
-            combinedMessageCache.delete(combinedMessageCache.keys().next().value!);
-        }
-        return combined;
+        return oldGetMessage(channelId, messageId);
     };
 
     Native.init();

@@ -11,20 +11,6 @@
 
 /* eslint-disable */
 
-let _onekoMouseMove = null;
-let _onekoBeforeUnload = null;
-
-export function cleanupOneko() {
-    if (_onekoMouseMove) {
-        document.removeEventListener("mousemove", _onekoMouseMove);
-        _onekoMouseMove = null;
-    }
-    if (_onekoBeforeUnload) {
-        window.removeEventListener("beforeunload", _onekoBeforeUnload);
-        _onekoBeforeUnload = null;
-    }
-}
-
 export default function oneko(options = {}) {
     const {
         speed = 10,
@@ -210,34 +196,41 @@ export default function oneko(options = {}) {
 
         document.body.appendChild(nekoEl);
 
-        cleanupOneko();
-        _onekoMouseMove = function (event) {
-            mousePosX = event.clientX;
-            mousePosY = event.clientY;
-        };
-        document.addEventListener("mousemove", _onekoMouseMove);
+        document.addEventListener("mousemove", handleMouseMove);
 
         if (persistPosition) {
-            _onekoBeforeUnload = function (event) {
-                window.localStorage.setItem(
-                    "oneko",
-                    JSON.stringify({
-                        nekoPosX: nekoPosX,
-                        nekoPosY: nekoPosY,
-                        mousePosX: mousePosX,
-                        mousePosY: mousePosY,
-                        frameCount: frameCount,
-                        idleTime: idleTime,
-                        idleAnimation: idleAnimation,
-                        idleAnimationFrame: idleAnimationFrame,
-                        bgPos: nekoEl.style.backgroundPosition,
-                    })
-                );
-            };
-            window.addEventListener("beforeunload", _onekoBeforeUnload);
+            window.addEventListener("beforeunload", handleBeforeUnload);
         }
 
         window.requestAnimationFrame(onAnimationFrame);
+    }
+
+    function handleMouseMove(event) {
+        mousePosX = event.clientX;
+        mousePosY = event.clientY;
+    }
+
+    function handleBeforeUnload(event) {
+        window.localStorage.setItem(
+            "oneko",
+            JSON.stringify({
+                nekoPosX: nekoPosX,
+                nekoPosY: nekoPosY,
+                mousePosX: mousePosX,
+                mousePosY: mousePosY,
+                frameCount: frameCount,
+                idleTime: idleTime,
+                idleAnimation: idleAnimation,
+                idleAnimationFrame: idleAnimationFrame,
+                bgPos: nekoEl.style.backgroundPosition,
+            })
+        );
+    }
+
+    function destroy() {
+        document.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("beforeunload", handleBeforeUnload);
+        nekoEl.remove();
     }
 
     let lastFrameTimestamp;
@@ -352,4 +345,6 @@ export default function oneko(options = {}) {
     }
 
     init();
+
+    return destroy;
 }

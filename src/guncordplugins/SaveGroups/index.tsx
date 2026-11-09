@@ -9,6 +9,7 @@ import "./styles.css";
 import { DataStore } from "@api/index";
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
+import { debounce } from "@shared/debounce";
 import definePlugin, { OptionType } from "@utils/types";
 import type { NavContextMenuPatchCallback } from "@utils/types";
 import { findByCodeLazy, findByProps, findStore, waitFor } from "@webpack";
@@ -33,6 +34,32 @@ const DATA_STORE_SAVED_KEY = "Guncord_SaveGroups_SavedEntries";
 const DATA_STORE_KNOWN_KEY = "Guncord_SaveGroups_KnownActiveEntries";
 const LS_SAVED_SUMMARY_KEY = "Guncord_SaveGroups_Summary";
 
+let activeAccountUserId: string | null = null;
+
+function getActiveUserId(): string {
+    return UserStore?.getCurrentUser?.()?.id || "default";
+}
+
+function getSavedKey(userId?: string): string {
+    const uid = userId || getActiveUserId();
+    return `${DATA_STORE_SAVED_KEY}_${uid}`;
+}
+
+function getKnownKey(userId?: string): string {
+    const uid = userId || getActiveUserId();
+    return `${DATA_STORE_KNOWN_KEY}_${uid}`;
+}
+
+function getDeletedKey(userId?: string): string {
+    const uid = userId || getActiveUserId();
+    return `Guncord_SaveGroups_DeletedIds_${uid}`;
+}
+
+function getSummaryKey(userId?: string): string {
+    const uid = userId || getActiveUserId();
+    return `${LS_SAVED_SUMMARY_KEY}_${uid}`;
+}
+
 const createChannelRecordFromServer = findByCodeLazy(".GUILD_TEXT]", "fromServer)");
 const createMessageRecord = findByCodeLazy(".createFromServer(", ".isBlockedForMessage", "messageReference:");
 
@@ -56,11 +83,6 @@ const settings = definePluginSettings({
         description: "Save loaded message history when a group is archived.",
         default: true
     },
-    saveOnManualLeave: {
-        type: OptionType.BOOLEAN,
-        description: "Save group and message history when you leave a group voluntarily.",
-        default: true
-    },
     notifyOnSave: {
         type: OptionType.BOOLEAN,
         description: "Show a desktop notification when you are removed from a group and it gets saved.",
@@ -79,6 +101,7 @@ const savedGroups = new Map<string, SavedGroupData>();
 const hydratedChannels = new Map<string, any>();
 const knownActiveGroups = new Map<string, SavedGroupData>();
 const manuallyDeletedGroupIds = new Set<string>();
+const voluntarilyLeftGroupIds = new Set<string>();
 
 let unpatchFluxDispatch: (() => void) | null = null;
 let unpatchChannelStore: (() => void) | null = null;
@@ -92,7 +115,11 @@ let unpatchPrivateChannelSortStore: (() => void) | null = null;
 let unpatchFetchMessages: (() => void) | null = null;
 let unpatchSendMessage: (() => void) | null = null;
 let unpatchHTTPGet: (() => void) | null = null;
+let unpatchHTTPDel: (() => void) | null = null;
+let unpatchHTTPDelete: (() => void) | null = null;
 let unpatchRestGet: (() => void) | null = null;
+let unpatchRestDel: (() => void) | null = null;
+let unpatchRestDelete: (() => void) | null = null;
 let unpatchCloseMethods: (() => void)[] = [];
 
 let channelStoreListener: (() => void) | null = null;
@@ -123,6 +150,20 @@ function sanitizeForStorage(data: any): any {
 function hydrateChannelRecord(data: SavedGroupData): any {
     let baseRecord: any = null;
 
+    let effectiveName = data.name;
+    if ((!effectiveName || effectiveName === "Group DM") && Array.isArray(data.rawRecipients) && data.rawRecipients.length > 0) {
+        const derived = data.rawRecipients.map((r: any) => r?.global_name || r?.globalName || r?.username).filter(Boolean).join(", ");
+        if (derived) effectiveName = derived;
+    }
+    if ((!effectiveName || effectiveName === "Group DM") && Array.isArray(data.recipients) && data.recipients.length > 0) {
+        const derived = data.recipients.map((r: any) => {
+            const u = typeof r === "object" ? r : UserStore?.getUser?.(String(r));
+            return u?.globalName || u?.global_name || u?.username;
+        }).filter(Boolean).join(", ");
+        if (derived) effectiveName = derived;
+    }
+    if (!effectiveName) effectiveName = "Group DM";
+
     try {
         if (typeof createChannelRecordFromServer === "function") {
             const rawRecipients = Array.isArray(data.rawRecipients) && data.rawRecipients.length > 0
@@ -131,7 +172,7 @@ function hydrateChannelRecord(data: SavedGroupData): any {
                     ? data.recipients.map(r => {
                         if (typeof r === "object" && r !== null) return r;
                         const uid = String(r);
-                        const user = UserStore.getUser(uid);
+                        const user = UserStore?.getUser?.(uid);
                         return {
                             id: uid,
                             username: user?.username || "User",
@@ -145,7 +186,7 @@ function hydrateChannelRecord(data: SavedGroupData): any {
             baseRecord = createChannelRecordFromServer({
                 id: data.id,
                 type: 3,
-                name: data.name || "Group DM",
+                name: effectiveName,
                 icon: data.icon || null,
                 owner_id: data.ownerId,
                 ownerId: data.ownerId,
@@ -165,7 +206,7 @@ function hydrateChannelRecord(data: SavedGroupData): any {
         baseRecord = {
             id: data.id,
             type: 3,
-            name: data.name || "Group DM",
+            name: effectiveName,
             icon: data.icon || null,
             ownerId: data.ownerId,
             topic: data.topic || "",
@@ -177,10 +218,18 @@ function hydrateChannelRecord(data: SavedGroupData): any {
     }
 
     baseRecord.isArchivedGroup = true;
+    baseRecord.name = effectiveName;
+    baseRecord.computeTitle = () => effectiveName;
 
     // Wrap in a defensive Proxy so that any Discord Channel method returns safe defaults without throwing
     return new Proxy(baseRecord, {
         get(target, prop, receiver) {
+            if (prop === "computeTitle") {
+                return () => target.name || effectiveName;
+            }
+            if (prop === "name") {
+                return target.name || effectiveName;
+            }
             if (prop in target) {
                 const val = Reflect.get(target, prop, receiver);
                 return typeof val === "function" ? val.bind(target) : val;
@@ -295,9 +344,24 @@ function getDescendingMessages(messages: any[]): any[] {
 
 function extractGroupSnapshot(ch: any): SavedGroupData {
     const messages = settings.store.saveMessages ? getChannelMessagesSnapshot(ch.id) : [];
+    let computedName = ch.name;
+    if (!computedName && typeof ch.computeTitle === "function") {
+        try { computedName = ch.computeTitle(); } catch {}
+    }
+    if (!computedName && Array.isArray(ch.rawRecipients) && ch.rawRecipients.length > 0) {
+        computedName = ch.rawRecipients.map((r: any) => r?.global_name || r?.globalName || r?.username).filter(Boolean).join(", ");
+    }
+    if (!computedName && Array.isArray(ch.recipients) && ch.recipients.length > 0) {
+        computedName = ch.recipients.map((r: any) => {
+            const u = typeof r === "object" ? r : UserStore?.getUser?.(String(r));
+            return u?.globalName || u?.global_name || u?.username;
+        }).filter(Boolean).join(", ");
+    }
+    if (!computedName) computedName = "Group DM";
+
     return {
         id: ch.id,
-        name: ch.name || "Group DM",
+        name: computedName,
         icon: ch.icon || null,
         ownerId: ch.ownerId,
         topic: ch.topic || "",
@@ -310,14 +374,28 @@ function extractGroupSnapshot(ch: any): SavedGroupData {
     };
 }
 
+async function persistDeletedIds() {
+    try {
+        const uid = getActiveUserId();
+        await DataStore.set(getDeletedKey(uid), Array.from(manuallyDeletedGroupIds));
+    } catch (e) {
+        console.error("[SaveGroups] Failed to persist deleted group IDs:", e);
+    }
+}
+
+async function persistKnownGroupsImmediate() {
+    try {
+        const uid = getActiveUserId();
+        const clean = sanitizeForStorage(Array.from(knownActiveGroups.values()));
+        await DataStore.set(getKnownKey(uid), clean);
+    } catch {}
+}
+
 function debouncedPersistKnownGroups() {
     if (_persistKnownTimer) return;
     _persistKnownTimer = setTimeout(async () => {
         _persistKnownTimer = undefined;
-        try {
-            const clean = sanitizeForStorage(Array.from(knownActiveGroups.values()));
-            await DataStore.set(DATA_STORE_KNOWN_KEY, clean);
-        } catch {}
+        await persistKnownGroupsImmediate();
     }, 2000);
 }
 
@@ -333,7 +411,7 @@ function updateKnownActiveGroups() {
 
         let changed = false;
         for (const ch of allCandidates) {
-            if (ch && (ch.type === 3 || ch.isGroupDM?.()) && !savedGroups.has(ch.id)) {
+            if (ch && (ch.type === 3 || ch.isGroupDM?.()) && !savedGroups.has(ch.id) && !manuallyDeletedGroupIds.has(ch.id)) {
                 if (!knownActiveGroups.has(ch.id)) {
                     knownActiveGroups.set(ch.id, extractGroupSnapshot(ch));
                     changed = true;
@@ -351,7 +429,7 @@ function updateKnownActiveGroups() {
                         existing.icon = ch.icon;
                         changed = true;
                     }
-                    if (settings.store.saveMessages) {
+                    if (settings.store.saveMessages && SelectedChannelStore.getChannelId() === ch.id) {
                         const currentMsgs = getChannelMessagesSnapshot(ch.id);
                         if (currentMsgs.length > (existing.savedMessages?.length || 0)) {
                             existing.savedMessages = currentMsgs;
@@ -370,8 +448,9 @@ function updateKnownActiveGroups() {
 
 async function persistSavedGroups() {
     try {
+        const uid = getActiveUserId();
         const clean = sanitizeForStorage(Array.from(savedGroups.values()));
-        await DataStore.set(DATA_STORE_SAVED_KEY, clean);
+        await DataStore.set(getSavedKey(uid), clean);
 
         // Fallback summary in localStorage for channel existence
         try {
@@ -383,10 +462,134 @@ async function persistSavedGroups() {
                 kickedAt: g.kickedAt,
                 msgCount: g.savedMessages?.length || 0
             }));
-            localStorage.setItem(LS_SAVED_SUMMARY_KEY, JSON.stringify(summary));
+            localStorage.setItem(getSummaryKey(uid), JSON.stringify(summary));
         } catch {}
     } catch (e) {
         console.error("[SaveGroups] Failed to save groups to DataStore:", e);
+    }
+}
+
+function markVoluntaryLeave(channelId: string) {
+    if (!channelId) return;
+    const cid = String(channelId);
+    voluntarilyLeftGroupIds.add(cid);
+    manuallyDeletedGroupIds.add(cid);
+    savedGroups.delete(cid);
+    hydratedChannels.delete(cid);
+    knownActiveGroups.delete(cid);
+    persistDeletedIds();
+    persistSavedGroups();
+    persistKnownGroupsImmediate();
+    updateStyles();
+    removeArchivedNoticeBanner();
+
+    document.querySelectorAll(
+        `nav a[href*="/channels/@me/${cid}"], [class*="privateChannels"] a[href*="/channels/@me/${cid}"]`
+    ).forEach(el => {
+        el.classList.remove("vc-savegroups-kicked");
+    });
+    document.querySelectorAll(".vc-savegroups-badge").forEach(el => el.remove());
+}
+
+async function loadAccountData(userId: string) {
+    activeAccountUserId = userId;
+    savedGroups.clear();
+    hydratedChannels.clear();
+    knownActiveGroups.clear();
+    manuallyDeletedGroupIds.clear();
+    voluntarilyLeftGroupIds.clear();
+
+    // 1. Load deleted IDs first so we never re-load deleted groups
+    try {
+        const deleted = await DataStore.get<string[]>(getDeletedKey(userId));
+        if (Array.isArray(deleted)) {
+            for (const id of deleted) {
+                if (id) manuallyDeletedGroupIds.add(id);
+            }
+        }
+    } catch {}
+
+    // 2. Load saved groups
+    try {
+        let entries = await DataStore.get<SavedGroupData[]>(getSavedKey(userId));
+        // Migration from global key if account-scoped key is empty
+        if ((!entries || entries.length === 0) && userId !== "default") {
+            const legacy = await DataStore.get<SavedGroupData[]>(DATA_STORE_SAVED_KEY);
+            if (Array.isArray(legacy) && legacy.length > 0) {
+                entries = legacy;
+                await DataStore.set(getSavedKey(userId), entries);
+            }
+        }
+
+        if (Array.isArray(entries)) {
+            for (const data of entries) {
+                if (data?.id && !manuallyDeletedGroupIds.has(data.id)) {
+                    savedGroups.set(data.id, data);
+                    hydratedChannels.set(data.id, hydrateChannelRecord(data));
+                }
+            }
+        }
+    } catch (e) {
+        console.error("[SaveGroups] Failed to load saved groups:", e);
+    }
+
+    // Fallback summary in localStorage if savedGroups was empty
+    if (savedGroups.size === 0) {
+        try {
+            const rawSummary = localStorage.getItem(getSummaryKey(userId)) || localStorage.getItem(LS_SAVED_SUMMARY_KEY);
+            if (rawSummary) {
+                const parsed = JSON.parse(rawSummary);
+                if (Array.isArray(parsed)) {
+                    for (const item of parsed) {
+                        if (item?.id && !savedGroups.has(item.id) && !manuallyDeletedGroupIds.has(item.id)) {
+                            const newGroup: SavedGroupData = {
+                                id: item.id,
+                                name: item.name || "Group DM",
+                                icon: item.icon,
+                                type: 3,
+                                kickedAt: item.kickedAt || 0,
+                                savedMessages: []
+                            };
+                            savedGroups.set(item.id, newGroup);
+                            hydratedChannels.set(item.id, hydrateChannelRecord(newGroup));
+                        }
+                    }
+                }
+            }
+        } catch {}
+    }
+
+    // 3. Load known active groups
+    try {
+        const known = await DataStore.get<SavedGroupData[]>(getKnownKey(userId));
+        if (Array.isArray(known)) {
+            for (const data of known) {
+                if (data?.id && !savedGroups.has(data.id) && !manuallyDeletedGroupIds.has(data.id)) {
+                    knownActiveGroups.set(data.id, data);
+                }
+            }
+        }
+    } catch {}
+}
+
+async function switchAccountContext(newUserId: string | null) {
+    if (newUserId === activeAccountUserId) return;
+    activeAccountUserId = newUserId;
+    savedGroups.clear();
+    hydratedChannels.clear();
+    knownActiveGroups.clear();
+    manuallyDeletedGroupIds.clear();
+    voluntarilyLeftGroupIds.clear();
+    removeArchivedNoticeBanner();
+    updateStyles();
+    scanAndTagSidebarElements();
+
+    if (newUserId) {
+        await loadAccountData(newUserId);
+        updateStyles();
+        scanAndTagSidebarElements();
+        try { (ChannelStore as any)?.emitChange?.(); } catch {}
+        try { (PrivateChannelSortStore as any)?.emitChange?.(); } catch {}
     }
 }
 
@@ -413,9 +616,24 @@ async function archiveGroup(channelId: string, channelHint?: any) {
     }
 
     if (!snapshot) {
+        let computedName = existing?.name || channelHint?.name;
+        if (!computedName && typeof existing?.computeTitle === "function") {
+            try { computedName = existing.computeTitle(); } catch {}
+        }
+        if (!computedName && Array.isArray(existing?.rawRecipients) && existing.rawRecipients.length > 0) {
+            computedName = existing.rawRecipients.map((r: any) => r?.global_name || r?.globalName || r?.username).filter(Boolean).join(", ");
+        }
+        if (!computedName && Array.isArray(existing?.recipients) && existing.recipients.length > 0) {
+            computedName = existing.recipients.map((r: any) => {
+                const u = typeof r === "object" ? r : UserStore?.getUser?.(String(r));
+                return u?.globalName || u?.global_name || u?.username;
+            }).filter(Boolean).join(", ");
+        }
+        if (!computedName) computedName = "Group DM";
+
         snapshot = {
             id: channelId,
-            name: existing?.name || channelHint?.name || "Group DM",
+            name: computedName,
             icon: existing?.icon || channelHint?.icon || null,
             ownerId: existing?.ownerId || channelHint?.ownerId,
             topic: existing?.topic || channelHint?.topic || "",
@@ -525,7 +743,11 @@ function checkOfflineKicks() {
 
         if (knownActiveGroups.size === 0) return;
         for (const [id, knownData] of Array.from(knownActiveGroups.entries())) {
-            if (!currentIds.has(id) && !savedGroups.has(id) && !manuallyDeletedGroupIds.has(id)) {
+            if (manuallyDeletedGroupIds.has(id) || voluntarilyLeftGroupIds.has(id)) {
+                knownActiveGroups.delete(id);
+                continue;
+            }
+            if (!currentIds.has(id) && !savedGroups.has(id)) {
                 archiveGroup(id, knownData);
             }
         }
@@ -602,9 +824,9 @@ function startSidebarObserver() {
 
     const target = document.querySelector("nav[aria-label]") ||
         document.querySelector('[class*="privateChannels_"]') ||
-        document.querySelector('[class*="sidebar_"]') ||
-        document.body;
+        document.querySelector('[class*="sidebar_"]');
 
+    if (!target) return;
     sidebarObserver.observe(target, { childList: true, subtree: true });
     scanAndTagSidebarElements();
 }
@@ -740,8 +962,9 @@ async function deleteSavedGroup(channelId: string) {
     hydratedChannels.delete(channelId);
     knownActiveGroups.delete(channelId);
 
+    await persistDeletedIds();
     await persistSavedGroups();
-    debouncedPersistKnownGroups();
+    await persistKnownGroupsImmediate();
 
     updateStyles();
     removeArchivedNoticeBanner();
@@ -861,16 +1084,26 @@ function patchFluxDispatcher() {
         }
 
         if (type === "CONNECTION_OPEN") {
-            const privateChannels = action.privateChannels || action.initialGuildChannels || [];
-            if (Array.isArray(privateChannels)) {
-                for (const pc of privateChannels) {
-                    if (pc?.id && savedGroups.has(pc.id)) {
-                        unarchiveGroup(pc.id, pc);
+            setTimeout(() => {
+                const newUserId = action?.user?.id || UserStore?.getCurrentUser?.()?.id;
+                if (newUserId && newUserId !== activeAccountUserId) {
+                    switchAccountContext(newUserId);
+                }
+                const privateChannels = action.privateChannels || action.initialGuildChannels || [];
+                if (Array.isArray(privateChannels)) {
+                    for (const pc of privateChannels) {
+                        if (pc?.id && savedGroups.has(pc.id)) {
+                            unarchiveGroup(pc.id, pc);
+                        }
                     }
                 }
-            }
-            updateKnownActiveGroups();
-            checkOfflineKicks();
+                updateKnownActiveGroups();
+                checkOfflineKicks();
+            }, 600);
+        }
+
+        if (type === "LOGOUT") {
+            switchAccountContext(null);
         }
 
         if (type === "MESSAGE_CREATE") {
@@ -883,8 +1116,8 @@ function patchFluxDispatcher() {
         if (type === "CHANNEL_DELETE") {
             const channelId = action.channel?.id || action.channelId || action.id;
             if (channelId) {
-                if (manuallyDeletedGroupIds.has(channelId)) {
-                    manuallyDeletedGroupIds.delete(channelId);
+                if (voluntarilyLeftGroupIds.has(channelId) || manuallyDeletedGroupIds.has(channelId)) {
+                    voluntarilyLeftGroupIds.delete(channelId);
                     return origDispatch.apply(this, arguments as any);
                 }
 
@@ -905,10 +1138,12 @@ function patchFluxDispatcher() {
             const removedUserId = action.user?.id || action.userId;
             const channelId = action.channelId || action.channel?.id;
             if (currentUserId && removedUserId === currentUserId && channelId) {
-                if (!manuallyDeletedGroupIds.has(channelId)) {
-                    archiveGroup(channelId, action.channel);
-                    return Promise.resolve();
+                if (voluntarilyLeftGroupIds.has(channelId) || manuallyDeletedGroupIds.has(channelId)) {
+                    voluntarilyLeftGroupIds.delete(channelId);
+                    return origDispatch.apply(this, arguments as any);
                 }
+                archiveGroup(channelId, action.channel);
+                return Promise.resolve();
             }
         }
 
@@ -925,21 +1160,21 @@ function patchManualLeaveTracking() {
     try {
         const patchCloseMod = (mod: any) => {
             if (!mod) return;
-            const closeMethods = ["closePrivateChannel", "closeChannel", "deletePrivateChannel", "closeDM"];
+            const closeMethods = [
+                "closePrivateChannel",
+                "closeChannel",
+                "deletePrivateChannel",
+                "deleteChannel",
+                "closeDM",
+                "removeRecipient"
+            ];
 
             for (const method of closeMethods) {
                 if (typeof mod[method] === "function" && !mod[method].__guncordSaveGroupsTracked) {
                     const origFn = mod[method];
                     mod[method] = function(channelId: string, ...args: any[]) {
                         if (channelId) {
-                            const ch = ChannelStore.getChannel(channelId);
-                            const isGroup = ch?.type === 3 || ch?.isGroupDM?.() || knownActiveGroups.has(channelId);
-
-                            if (isGroup && !savedGroups.has(channelId) && settings.store.saveOnManualLeave) {
-                                // User is voluntarily leaving a group DM:
-                                // Archive immediately while messages are still in memory!
-                                archiveGroup(channelId, ch);
-                            }
+                            markVoluntaryLeave(channelId);
                         }
                         return origFn.apply(this, [channelId, ...args]);
                     };
@@ -954,11 +1189,15 @@ function patchManualLeaveTracking() {
 
         const actionMods = [
             findByProps("closePrivateChannel"),
-            findByProps("openPrivateChannel")
+            findByProps("openPrivateChannel"),
+            findByProps("deleteChannel"),
+            findByProps("removeRecipient")
         ].filter(Boolean) as any[];
 
         actionMods.forEach(patchCloseMod);
         waitFor(["closePrivateChannel"], patchCloseMod);
+        waitFor(["deleteChannel"], patchCloseMod);
+        waitFor(["removeRecipient"], patchCloseMod);
     } catch {}
 }
 
@@ -979,7 +1218,7 @@ function patchChannelStore() {
                         (r: any) => (typeof r === "string" ? r : r?.id) === currentUserId
                     );
                     if (isRecipient) {
-                        unarchiveGroup(id, realCh);
+                        setTimeout(() => unarchiveGroup(id, realCh), 50);
                         return realCh;
                     }
                 }
@@ -1140,54 +1379,92 @@ function patchPrivateChannelSortStore(sortStore: any) {
 }
 
 function patchNetworkLayer() {
-    // 1. Intercept RestAPI.get (imported directly from @webpack/common)
-    if (RestAPI && typeof RestAPI.get === "function" && !(RestAPI.get as any).__guncordSaveGroupsPatched) {
-        const origRestGet = RestAPI.get;
-        RestAPI.get = function(opts: any) {
-            const url = typeof opts === "string" ? opts : opts?.url;
-            if (url && typeof url === "string") {
-                for (const [id, savedGroup] of savedGroups) {
-                    if (url.includes(`/channels/${id}/messages`)) {
-                        const descMsgs = getDescendingMessages(savedGroup.savedMessages || []);
-                        return Promise.resolve({
-                            ok: true,
-                            status: 200,
-                            body: descMsgs,
-                            text: JSON.stringify(descMsgs),
-                            headers: {}
-                        });
-                    }
-                    if (url.includes(`/channels/${id}`)) {
-                        const groupObj = {
-                            id: savedGroup.id,
-                            type: 3,
-                            name: savedGroup.name || "Group DM",
-                            icon: savedGroup.icon || null,
-                            owner_id: savedGroup.ownerId,
-                            ownerId: savedGroup.ownerId,
-                            topic: savedGroup.topic || "",
-                            recipients: savedGroup.recipients || [],
-                            rawRecipients: savedGroup.rawRecipients || [],
-                            last_message_id: savedGroup.lastMessageId || null,
-                            lastMessageId: savedGroup.lastMessageId || null,
-                        };
-                        return Promise.resolve({
-                            ok: true,
-                            status: 200,
-                            body: groupObj,
-                            text: JSON.stringify(groupObj),
-                            headers: {}
-                        });
+    const checkDeleteUrl = (opts: any) => {
+        const url = typeof opts === "string" ? opts : opts?.url;
+        if (url && typeof url === "string") {
+            const match = url.match(/\/channels\/(\d+)(?:\/recipients(?:\/.*)?)?$/);
+            if (match && match[1]) {
+                markVoluntaryLeave(match[1]);
+            }
+        }
+    };
+
+    // 1. Intercept RestAPI.get & RestAPI.del (imported directly from @webpack/common)
+    if (RestAPI) {
+        if (typeof RestAPI.get === "function" && !(RestAPI.get as any).__guncordSaveGroupsPatched) {
+            const origRestGet = RestAPI.get;
+            RestAPI.get = function(opts: any) {
+                const url = typeof opts === "string" ? opts : opts?.url;
+                if (url && typeof url === "string") {
+                    for (const [id, savedGroup] of savedGroups) {
+                        if (url.includes(`/channels/${id}/messages`)) {
+                            const descMsgs = getDescendingMessages(savedGroup.savedMessages || []);
+                            return Promise.resolve({
+                                ok: true,
+                                status: 200,
+                                body: descMsgs,
+                                text: JSON.stringify(descMsgs),
+                                headers: {}
+                            });
+                        }
+                        if (url.includes(`/channels/${id}`)) {
+                            const groupObj = {
+                                id: savedGroup.id,
+                                type: 3,
+                                name: savedGroup.name || "Group DM",
+                                icon: savedGroup.icon || null,
+                                owner_id: savedGroup.ownerId,
+                                ownerId: savedGroup.ownerId,
+                                topic: savedGroup.topic || "",
+                                recipients: savedGroup.recipients || [],
+                                rawRecipients: savedGroup.rawRecipients || [],
+                                last_message_id: savedGroup.lastMessageId || null,
+                                lastMessageId: savedGroup.lastMessageId || null,
+                            };
+                            return Promise.resolve({
+                                ok: true,
+                                status: 200,
+                                body: groupObj,
+                                text: JSON.stringify(groupObj),
+                                headers: {}
+                            });
+                        }
                     }
                 }
-            }
-            return origRestGet.apply(this, arguments as any);
-        };
-        (RestAPI.get as any).__guncordSaveGroupsPatched = true;
-        unpatchRestGet = () => {
-            RestAPI.get = origRestGet;
-            delete (RestAPI.get as any).__guncordSaveGroupsPatched;
-        };
+                return origRestGet.apply(this, arguments as any);
+            };
+            (RestAPI.get as any).__guncordSaveGroupsPatched = true;
+            unpatchRestGet = () => {
+                RestAPI.get = origRestGet;
+                delete (RestAPI.get as any).__guncordSaveGroupsPatched;
+            };
+        }
+
+        if (typeof RestAPI.del === "function" && !(RestAPI.del as any).__guncordSaveGroupsPatched) {
+            const origRestDel = RestAPI.del;
+            RestAPI.del = function(opts: any, ...args: any[]) {
+                checkDeleteUrl(opts);
+                return origRestDel.apply(this, [opts, ...args]);
+            };
+            (RestAPI.del as any).__guncordSaveGroupsPatched = true;
+            unpatchRestDel = () => {
+                RestAPI.del = origRestDel;
+                delete (RestAPI.del as any).__guncordSaveGroupsPatched;
+            };
+        }
+
+        if (typeof (RestAPI as any).delete === "function" && !((RestAPI as any).delete as any).__guncordSaveGroupsPatched) {
+            const origRestDelete = (RestAPI as any).delete;
+            (RestAPI as any).delete = function(opts: any, ...args: any[]) {
+                checkDeleteUrl(opts);
+                return origRestDelete.apply(this, [opts, ...args]);
+            };
+            ((RestAPI as any).delete as any).__guncordSaveGroupsPatched = true;
+            unpatchRestDelete = () => {
+                (RestAPI as any).delete = origRestDelete;
+                delete ((RestAPI as any).delete as any).__guncordSaveGroupsPatched;
+            };
+        }
     }
 
     // 2. Intercept MessageActions.fetchMessages & sendMessage with waitFor for lazy-loaded webpack chunks
@@ -1235,56 +1512,80 @@ function patchNetworkLayer() {
         patchMessageActions(mod);
     });
 
-    // 3. Intercept HTTP.get with waitFor
+    // 3. Intercept HTTP.get, HTTP.del, HTTP.delete with waitFor
     const patchHTTP = (HTTP: any) => {
-        if (!HTTP || !HTTP.get || (HTTP.get as any).__guncordSaveGroupsPatched) return;
-        (HTTP.get as any).__guncordSaveGroupsPatched = true;
+        if (!HTTP || (HTTP as any).__guncordSaveGroupsPatched) return;
+        (HTTP as any).__guncordSaveGroupsPatched = true;
 
-        const origGet = HTTP.get;
-        HTTP.get = function(opts: any) {
-            const url = typeof opts === "string" ? opts : opts?.url;
-            if (url && typeof url === "string") {
-                for (const [id, savedGroup] of savedGroups) {
-                    if (url.includes(`/channels/${id}/messages`)) {
-                        const descMsgs = getDescendingMessages(savedGroup.savedMessages || []);
-                        return Promise.resolve({
-                            ok: true,
-                            status: 200,
-                            body: descMsgs,
-                            text: JSON.stringify(descMsgs),
-                            headers: {}
-                        });
-                    }
-                    if (url.includes(`/channels/${id}`)) {
-                        const groupObj = {
-                            id: savedGroup.id,
-                            type: 3,
-                            name: savedGroup.name || "Group DM",
-                            icon: savedGroup.icon || null,
-                            owner_id: savedGroup.ownerId,
-                            ownerId: savedGroup.ownerId,
-                            topic: savedGroup.topic || "",
-                            recipients: savedGroup.recipients || [],
-                            rawRecipients: savedGroup.rawRecipients || [],
-                            last_message_id: savedGroup.lastMessageId || null,
-                            lastMessageId: savedGroup.lastMessageId || null,
-                        };
-                        return Promise.resolve({
-                            ok: true,
-                            status: 200,
-                            body: groupObj,
-                            text: JSON.stringify(groupObj),
-                            headers: {}
-                        });
+        if (typeof HTTP.get === "function") {
+            const origGet = HTTP.get;
+            HTTP.get = function(opts: any) {
+                const url = typeof opts === "string" ? opts : opts?.url;
+                if (url && typeof url === "string") {
+                    for (const [id, savedGroup] of savedGroups) {
+                        if (url.includes(`/channels/${id}/messages`)) {
+                            const descMsgs = getDescendingMessages(savedGroup.savedMessages || []);
+                            return Promise.resolve({
+                                ok: true,
+                                status: 200,
+                                body: descMsgs,
+                                text: JSON.stringify(descMsgs),
+                                headers: {}
+                            });
+                        }
+                        if (url.includes(`/channels/${id}`)) {
+                            const groupObj = {
+                                id: savedGroup.id,
+                                type: 3,
+                                name: savedGroup.name || "Group DM",
+                                icon: savedGroup.icon || null,
+                                owner_id: savedGroup.ownerId,
+                                ownerId: savedGroup.ownerId,
+                                topic: savedGroup.topic || "",
+                                recipients: savedGroup.recipients || [],
+                                rawRecipients: savedGroup.rawRecipients || [],
+                                last_message_id: savedGroup.lastMessageId || null,
+                                lastMessageId: savedGroup.lastMessageId || null,
+                            };
+                            return Promise.resolve({
+                                ok: true,
+                                status: 200,
+                                body: groupObj,
+                                text: JSON.stringify(groupObj),
+                                headers: {}
+                            });
+                        }
                     }
                 }
-            }
-            return origGet.apply(this, arguments as any);
-        };
-        unpatchHTTPGet = () => {
-            HTTP.get = origGet;
-            delete (HTTP.get as any).__guncordSaveGroupsPatched;
-        };
+                return origGet.apply(this, arguments as any);
+            };
+            unpatchHTTPGet = () => {
+                HTTP.get = origGet;
+                delete (HTTP as any).__guncordSaveGroupsPatched;
+            };
+        }
+
+        if (typeof HTTP.del === "function") {
+            const origDel = HTTP.del;
+            HTTP.del = function(opts: any, ...args: any[]) {
+                checkDeleteUrl(opts);
+                return origDel.apply(this, [opts, ...args]);
+            };
+            unpatchHTTPDel = () => {
+                HTTP.del = origDel;
+            };
+        }
+
+        if (typeof HTTP.delete === "function") {
+            const origDelete = HTTP.delete;
+            HTTP.delete = function(opts: any, ...args: any[]) {
+                checkDeleteUrl(opts);
+                return origDelete.apply(this, [opts, ...args]);
+            };
+            unpatchHTTPDelete = () => {
+                HTTP.delete = origDelete;
+            };
+        }
     };
 
     const existingHTTP = (findByProps("get", "post", "put", "del") || findByProps("get", "post")) as any;
@@ -1361,17 +1662,11 @@ export default definePlugin({
             }
             updateKnownActiveGroups();
         },
-        CONNECTION_OPEN(action: any) {
-            const privateChannels = action?.privateChannels || action?.initialGuildChannels || [];
-            if (Array.isArray(privateChannels)) {
-                for (const pc of privateChannels) {
-                    if (pc?.id && savedGroups.has(pc.id)) {
-                        unarchiveGroup(pc.id, pc);
-                    }
-                }
-            }
-            updateKnownActiveGroups();
-            checkOfflineKicks();
+        CONNECTION_OPEN() {
+            // Handled cleanly via deferred dispatch in patchFluxDispatcher to avoid dispatcher race conditions
+        },
+        LOGOUT() {
+            switchAccountContext(null);
         },
         CHANNEL_SELECT(event: { channelId: string; }) {
             const cid = event?.channelId;
@@ -1411,55 +1706,8 @@ export default definePlugin({
     },
 
     async start() {
-        try {
-            const entries = await DataStore.get<SavedGroupData[]>(DATA_STORE_SAVED_KEY);
-            if (Array.isArray(entries)) {
-                for (const data of entries) {
-                    if (data?.id) {
-                        savedGroups.set(data.id, data);
-                        hydratedChannels.set(data.id, hydrateChannelRecord(data));
-                    }
-                }
-            }
-        } catch (e) {
-            console.error("[SaveGroups] Failed to load saved groups from DataStore:", e);
-        }
-
-        // Check fallback summary if savedGroups was empty
-        if (savedGroups.size === 0) {
-            try {
-                const rawSummary = localStorage.getItem(LS_SAVED_SUMMARY_KEY);
-                if (rawSummary) {
-                    const parsed = JSON.parse(rawSummary);
-                    if (Array.isArray(parsed)) {
-                        for (const item of parsed) {
-                            if (item?.id && !savedGroups.has(item.id)) {
-                                savedGroups.set(item.id, {
-                                    id: item.id,
-                                    name: item.name || "Group DM",
-                                    icon: item.icon,
-                                    type: 3,
-                                    kickedAt: item.kickedAt || 0,
-                                    savedMessages: []
-                                });
-                                hydratedChannels.set(item.id, hydrateChannelRecord(savedGroups.get(item.id)!));
-                            }
-                        }
-                    }
-                }
-            } catch {}
-        }
-
-        try {
-            const known = await DataStore.get<SavedGroupData[]>(DATA_STORE_KNOWN_KEY);
-            if (Array.isArray(known)) {
-                for (const data of known) {
-                    if (data?.id && !savedGroups.has(data.id)) {
-                        knownActiveGroups.set(data.id, data);
-                    }
-                }
-            }
-        } catch {}
+        const uid = getActiveUserId();
+        await loadAccountData(uid);
 
         patchFluxDispatcher();
         patchManualLeaveTracking();
@@ -1478,10 +1726,10 @@ export default definePlugin({
         startSidebarObserver();
 
         try {
-            channelStoreListener = () => {
+            channelStoreListener = debounce(() => {
                 updateKnownActiveGroups();
                 scanAndTagSidebarElements();
-            };
+            }, 300);
             (ChannelStore as any)?.addChangeListener?.(channelStoreListener);
         } catch {}
 
@@ -1561,9 +1809,25 @@ export default definePlugin({
             unpatchHTTPGet();
             unpatchHTTPGet = null;
         }
+        if (unpatchHTTPDel) {
+            unpatchHTTPDel();
+            unpatchHTTPDel = null;
+        }
+        if (unpatchHTTPDelete) {
+            unpatchHTTPDelete();
+            unpatchHTTPDelete = null;
+        }
         if (unpatchRestGet) {
             unpatchRestGet();
             unpatchRestGet = null;
+        }
+        if (unpatchRestDel) {
+            unpatchRestDel();
+            unpatchRestDel = null;
+        }
+        if (unpatchRestDelete) {
+            unpatchRestDelete();
+            unpatchRestDelete = null;
         }
 
         if (sidebarObserver) {

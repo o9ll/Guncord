@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
@@ -103,7 +91,7 @@ function ReactionUsers({ message, users }: { message: Message, users: User[]; })
             <div
                 onClick={handleClickAvatar}
                 onKeyDown={handleClickAvatar}
-                style={settings.store.avatarClick ? {} : { pointerEvents: "none" }}
+                style={!settings.store.clickableAvatars ? { pointerEvents: "none" } : {}}
             >
                 <UserSummaryItem
                     users={users}
@@ -119,10 +107,10 @@ function ReactionUsers({ message, users }: { message: Message, users: User[]; })
 }
 
 const settings = definePluginSettings({
-    avatarClick: {
-        description: "Toggle clicking avatars in reactions",
+    clickableAvatars: {
+        description: "While this is enabled, clicking a reacting user's avatar will open their profile instead of adding the reaction",
         type: OptionType.BOOLEAN,
-        default: false,
+        default: true,
         restartNeeded: true
     }
 });
@@ -132,7 +120,6 @@ export default definePlugin({
     description: "Renders the avatars of users who reacted to a message",
     tags: ["Reactions", "Chat", "Appearance"],
     authors: [Devs.Ven, Devs.KannaDev, Devs.newwares, Devs.paige],
-    isModified: true,
     settings,
     patches: [
         {

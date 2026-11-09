@@ -13,7 +13,7 @@ import { ModalCloseButton,ModalContent, ModalHeader, ModalRoot, openModal } from
 import { PluginNative } from "@utils/types";
 import definePlugin, { OptionType } from "@utils/types";
 import { find, findAll, findByProps, findStore } from "@webpack";
-import { React, useCallback, useEffect, useMemo,useRef, useState, IconUtils } from "@webpack/common";
+import { React, useCallback, useEffect, useMemo, useRef, useState, IconUtils, AuthenticationStore, FluxDispatcher } from "@webpack/common";
 import { Forms } from "@webpack/common";
 
 import { t } from "../autoTranslateGuncord";
@@ -26,36 +26,73 @@ const settings = definePluginSettings({
     }
 });
 
-const Native = VencordNative.pluginHelpers.TokenImporter as PluginNative<typeof import("./native")>;
+function getVencordNative(): any {
+    if (typeof window !== "undefined") {
+        if ((window as any).VencordNative) return (window as any).VencordNative;
+        if ((window as any).GuncordNative) return (window as any).GuncordNative;
+        if ((window as any).EquicordNative) return (window as any).EquicordNative;
+    }
+    try {
+        if (typeof VencordNative !== "undefined") return VencordNative;
+    } catch {}
+    return null;
+}
+
+function getNativeHelper(): any {
+    const vn = getVencordNative();
+    return vn?.pluginHelpers?.TokenImporter ?? null;
+}
+
+const Native = new Proxy({} as PluginNative<typeof import("./native")>, {
+    get(_, prop) {
+        const helper = getNativeHelper();
+        return helper?.[prop];
+    }
+});
 const STORE_KEY = "TokenImporter_accounts";
 
-interface SavedAccount { id: string; token: string; username: string; discriminator: string; avatar: string; }
+export interface SavedAccount { id: string; token: string; username: string; discriminator: string; avatar: string; }
 
 let accountsCache: SavedAccount[] | null = null;
 let loadPromise: Promise<SavedAccount[]> | null = null;
 
-function getAccounts(): Promise<SavedAccount[]> {
+export function getAccounts(): Promise<SavedAccount[]> {
     if (accountsCache !== null) return Promise.resolve(accountsCache);
     if (!loadPromise) {
-        loadPromise = DataStore.get<SavedAccount[]>(STORE_KEY).then(async v => {
-            const rawAccounts = v ?? [];
-            const decrypted: SavedAccount[] = [];
-            for (const acc of rawAccounts) {
-                let tok = acc.token;
-                if (tok.startsWith("dQw4w9WgXcQ:")) {
-                    try {
-                        const dec = await Native.decryptTokenNative(tok);
-                        if (dec) tok = dec;
-                    } catch (e) {
-                        console.error("[Guncord] decyption failed for ", acc.username, e);
+        loadPromise = (async () => {
+            try {
+                const rawAccounts = (await DataStore.get<SavedAccount[]>(STORE_KEY)) ?? [];
+                const decrypted: SavedAccount[] = [];
+                for (const acc of rawAccounts) {
+                    if (!acc) continue;
+                    let tok = typeof acc.token === "string" ? acc.token : "";
+                    if (tok.startsWith("dQw4w9WgXcQ:")) {
+                        try {
+                            const dec = await Native.decryptTokenNative?.(tok);
+                            if (dec && typeof dec === "string" && !dec.startsWith("dQw4w9WgXcQ:")) {
+                                tok = dec;
+                            }
+                        } catch (e) {
+                            console.error("[TokenImporter] decryption failed for", acc.username, e);
+                        }
                     }
+                    decrypted.push({
+                        id: String(acc.id || ""),
+                        token: tok,
+                        username: acc.username || "",
+                        discriminator: acc.discriminator ?? "0",
+                        avatar: acc.avatar || ""
+                    });
                 }
-                decrypted.push({ ...acc, token: tok });
+                accountsCache = decrypted;
+                return accountsCache;
+            } catch (err) {
+                console.error("[TokenImporter] getAccounts error:", err);
+                return accountsCache ?? [];
+            } finally {
+                loadPromise = null;
             }
-            accountsCache = decrypted;
-            loadPromise = null;
-            return accountsCache;
-        });
+        })();
     }
     return loadPromise;
 }
@@ -82,12 +119,57 @@ async function saveAccounts(accounts: SavedAccount[]): Promise<void> {
         encrypted.push({ ...a, token: tok });
     }
     await DataStore.set(STORE_KEY, encrypted);
+    try {
+        const vn = getVencordNative();
+        const miHelper = vn?.pluginHelpers?.MultiInstance;
+        if (typeof miHelper?.saveSharedAccounts === "function") {
+            miHelper.saveSharedAccounts(deduplicated).catch(() => {});
+        }
+    } catch {}
+}
+
+export async function removeAccount(id: string): Promise<void> {
+    try {
+        if (!id) return;
+        const strId = String(id);
+        const existing = await getAccounts();
+        const filtered = existing.filter(a => a.id !== strId);
+        accountsCache = filtered;
+
+        const encrypted: SavedAccount[] = [];
+        for (const a of filtered) {
+            let tok = a.token;
+            if (!tok.startsWith("dQw4w9WgXcQ:")) {
+                try {
+                    const enc = await Native.encryptToken(tok);
+                    if (enc) tok = enc;
+                } catch (e) {
+                    console.error("[TokenImporter] Failed to encrypt token for", a.username, e);
+                }
+            }
+            encrypted.push({ ...a, token: tok });
+        }
+        await DataStore.set(STORE_KEY, encrypted);
+
+        const vn = getVencordNative();
+        const miHelper = vn?.pluginHelpers?.MultiInstance;
+        if (typeof miHelper?.removeSharedAccount === "function") {
+            await miHelper.removeSharedAccount(strId).catch(() => {});
+        } else if (typeof miHelper?.saveSharedAccounts === "function") {
+            await miHelper.saveSharedAccounts(filtered, true).catch(() => {});
+        }
+        if (typeof miHelper?.removeSharedTokenFromCache === "function") {
+            await miHelper.removeSharedTokenFromCache(strId).catch(() => {});
+        }
+    } catch (e) {
+        console.error("[TokenImporter] removeAccount error:", e);
+    }
 }
 
 function autoCaptureActiveAccount() {
     try {
         const UserStore = (findStore("UserStore") || findByProps("getCurrentUser", "getUser")) as any;
-        const tokenMod = (findStore("AuthenticationStore") || findByProps("getToken")) as any;
+        const tokenMod = (findStore("AuthenticationStore") || findByProps("getToken", "getId")) as any;
         const me = UserStore?.getCurrentUser?.();
         const token = tokenMod?.getToken?.();
         if (me?.id && token) {
@@ -113,8 +195,7 @@ export async function injectAccounts(accountsToInject?: SavedAccount[]): Promise
         autoCaptureActiveAccount();
         await patchTokenStore();
 
-        const FluxDispatcher = findByProps("dispatch", "subscribe");
-        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const tokenMod = (findStore("AuthenticationStore") || AuthenticationStore) as any;
 
         const accounts = accountsToInject ?? await getAccounts();
 
@@ -216,15 +297,16 @@ function switchToAccount(token: string, userId?: string) {
     try {
         const isMultiInstance = window.location.href.includes("multi-instance=true") || (window as any).IS_MULTI_INSTANCE;
         if (isMultiInstance && userId) {
-            if (typeof VencordNative?.pluginHelpers?.MultiInstance?.openInstanceWindow === "function") {
-                VencordNative.pluginHelpers.MultiInstance.openInstanceWindow(token, userId, true);
+            const vn = getVencordNative();
+            const miHelper = vn?.pluginHelpers?.MultiInstance;
+            if (typeof miHelper?.openInstanceWindow === "function") {
+                miHelper.openInstanceWindow(token, userId, true);
                 window.close();
                 return;
             }
         }
 
-        const TokenStore = findByProps("getToken", "setToken");
-        const FluxDispatcher = findByProps("dispatch", "subscribe", "register");
+        const TokenStore = (findStore("AuthenticationStore") || AuthenticationStore) as any;
 
         if (TokenStore && typeof (TokenStore as any).setToken === "function") {
             (TokenStore as any).setToken(token);
@@ -269,7 +351,7 @@ function switchToAccount(token: string, userId?: string) {
 
 function copyMyToken() {
     try {
-        const token = findByProps("getToken")?.getToken?.();
+        const token = (findStore("AuthenticationStore") || findByProps("getToken", "getId"))?.getToken?.();
         if (token) {
             if (typeof window.DiscordNative?.clipboard?.copy === "function") {
                 window.DiscordNative.clipboard.copy(token);
@@ -359,10 +441,9 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
         }
     }, []);
 
-    async function removeAccount(id: string) {
-        const updated = accounts.filter(a => a.id !== id);
-        setAccounts(updated);
-        await saveAccounts(updated);
+    async function handleDeleteAccount(id: string) {
+        await removeAccount(id);
+        setAccounts(prev => prev.filter(a => a.id !== id));
     }
 
     async function verifyAll() {
@@ -545,7 +626,7 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
                                                                 toastMod.showToast("Token copied!", toastMod.Toasts?.Type?.SUCCESS);
                                                             }
                                                         }}><CopyIcon /></button>
-                                                        <button className="ti-del-btn" title={t("Delete")} onClick={() => removeAccount(a.id)}><TrashIcon /></button>
+                                                        <button className="ti-del-btn" title={t("Delete")} onClick={() => handleDeleteAccount(a.id)}><TrashIcon /></button>
                                                     </div>
                                                 </div>
                                             );
@@ -618,7 +699,7 @@ function TokenImporterButton() {
 
 export default definePlugin({
     name: "TokenImporter",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Import and verify Discord tokens.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["HeaderBarAPI"],

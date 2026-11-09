@@ -118,3 +118,4 @@ export function movePresetInArray(fromIndex: number, toIndex: number) {
 export function replaceAllPresets(newPresets: ProfilePresetEx[]) {
     presets = newPresets;
 }
+

@@ -27,7 +27,7 @@ function removeFriend(id: string): Promise<any> {
         }
     } catch { }
     // Method 2: direct REST API fallback
-    const token = (() => { try { return (window as any).Vencord?.Webpack?.findByProps?.("getToken")?.getToken?.() ?? ""; } catch { return ""; } })();
+    const token = (() => { try { return (window as any).Vencord?.Webpack?.findStore?.("AuthenticationStore")?.getToken?.() ?? (window as any).Vencord?.Webpack?.findByProps?.("getToken", "getId")?.getToken?.() ?? ""; } catch { return ""; } })();
     if (!token) return Promise.reject(new Error("No token"));
     return fetch(`https://discord.com/api/v9/users/@me/relationships/${encodeURIComponent(id)}`, { method: "DELETE", headers: { Authorization: token } });
 }
@@ -212,7 +212,7 @@ function BulkFriendRemoveButton() {
 
 export default definePlugin({
     name: "BulkFriendRemove",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Delete multiple friends at once.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     headerBarButton: { icon: BulkRemoveIcon, render: BulkFriendRemoveButton, priority: 5 },

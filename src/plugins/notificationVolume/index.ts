@@ -13,7 +13,7 @@ const settings = definePluginSettings({
         type: OptionType.SLIDER,
         description: "Notification volume",
         markers: [0, 25, 50, 75, 100],
-        default: 50,
+        default: 100,
         stickToMarkers: false
     }
 });
@@ -34,3 +34,4 @@ export default definePlugin({
         },
     ],
 });
+

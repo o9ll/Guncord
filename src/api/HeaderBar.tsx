@@ -8,10 +8,36 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Logger } from "@utils/Logger";
 import { classes } from "@utils/misc";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { Clickable, Tooltip, useEffect, useState, Popout, useRef, showToast, Toasts } from "@webpack/common";
+import { Clickable, Tooltip, useEffect, useState, Popout, useRef, showToast, Toasts, React } from "@webpack/common";
 import type { ComponentType, JSX, MouseEventHandler, ReactNode } from "react";
 import { Settings } from "@api/Settings";
 import { showNotification } from "@api/Notifications";
+let _HeaderPluginContext: React.Context<string | null> | null = null;
+export function getHeaderPluginContext() {
+    if (!_HeaderPluginContext && React?.createContext) {
+        _HeaderPluginContext = React.createContext<string | null>(null);
+    }
+    return _HeaderPluginContext;
+}
+
+function openHeaderPluginSettingsModal(id?: string | null) {
+    if (!id) return;
+    try {
+        const { openPluginModal } = require("@components/settings/tabs/plugins/PluginModal");
+        const pluginModule = require("~plugins");
+        const allPlugins = pluginModule.default ?? pluginModule;
+        const plugin =
+            allPlugins[id] ??
+            allPlugins[id.toLowerCase()] ??
+            allPlugins[id.charAt(0).toUpperCase() + id.slice(1)] ??
+            Object.values(allPlugins).find((p: any) => p?.name?.toLowerCase() === id.toLowerCase());
+        if (plugin) {
+            openPluginModal(plugin);
+        }
+    } catch (e) {
+        console.error("Failed to open header plugin settings modal:", e);
+    }
+}
 
 const GUNCORD_LOGO_URI = "data:image/png;base64,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";
 
@@ -98,11 +124,26 @@ export function HeaderBarButton(props: HeaderBarButtonProps & { ref?: React.RefO
         "aria-label": ariaLabel,
     } = props;
 
+    const HeaderPluginContext = getHeaderPluginContext();
+    const pluginKey = HeaderPluginContext ? React.useContext(HeaderPluginContext) : null;
     const label = ariaLabel ?? (typeof tooltip === "string" ? tooltip : undefined);
 
     if (!Tooltip || !Clickable || !Icon) {
         return null;
     }
+
+    const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (onContextMenu) {
+            onContextMenu(e);
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        if (!e.defaultPrevented && pluginKey) {
+            e.preventDefault();
+            openHeaderPluginSettingsModal(pluginKey);
+        }
+    };
 
     return (
         <Tooltip text={tooltip ?? ""} position={position} shouldShow={tooltip != null}>
@@ -112,7 +153,7 @@ export function HeaderBarButton(props: HeaderBarButtonProps & { ref?: React.RefO
                     className={classes(HeaderBarClasses.clickable, "guncord-header-btn", className)}
                     style={{ justifyContent: "center", cursor: "pointer" }}
                     onClick={onClick}
-                    onContextMenu={onContextMenu}
+                    onContextMenu={handleContextMenu}
                     onMouseEnter={onMouseEnter}
                     onMouseLeave={onMouseLeave}
                     role="button"
@@ -233,11 +274,11 @@ const NON_REACT_SELECTORS = [
 function hideSettingsSidebarElements(hide: boolean) {
     try {
         // Direct modern Discord settings sidebar targeting
-        document.querySelectorAll('li:has([data-settings-sidebar-item*="equicord"]), li:has([data-settings-sidebar-item*="guncord"]), li:has([data-settings-sidebar-item*="illegalcord"]), li:has([data-list-item-id*="settings-sidebar___equicord"]), li:has([data-list-item-id*="settings-sidebar___guncord"]), li:has([data-list-item-id*="settings-sidebar___illegalcord"])').forEach(el => {
+        document.querySelectorAll('li:has([data-settings-sidebar-item*="equicord"]), li:has([data-settings-sidebar-item*="guncord"]), li:has([data-settings-sidebar-item*="guncord"]), li:has([data-list-item-id*="settings-sidebar___equicord"]), li:has([data-list-item-id*="settings-sidebar___guncord"]), li:has([data-list-item-id*="settings-sidebar___guncord"])').forEach(el => {
             (el as HTMLElement).style.display = hide ? "none" : "";
         });
 
-        document.querySelectorAll('[data-settings-sidebar-item*="equicord"], [data-settings-sidebar-item*="guncord"], [data-settings-sidebar-item*="illegalcord"], [data-list-item-id*="settings-sidebar___equicord"], [data-list-item-id*="settings-sidebar___guncord"], [data-list-item-id*="settings-sidebar___illegalcord"]').forEach(el => {
+        document.querySelectorAll('[data-settings-sidebar-item*="equicord"], [data-settings-sidebar-item*="guncord"], [data-settings-sidebar-item*="guncord"], [data-list-item-id*="settings-sidebar___equicord"], [data-list-item-id*="settings-sidebar___guncord"], [data-list-item-id*="settings-sidebar___guncord"]').forEach(el => {
             (el as HTMLElement).style.display = hide ? "none" : "";
         });
 
@@ -416,8 +457,17 @@ export function removeStealthListener(fn: () => void) { stealthListeners.delete(
 // COMPACT MODE
 // ══════════════════════════════════════════════════════════════════
 
+function readPersistedCompact(): boolean {
+    try {
+        const fromSettings = (Settings?.plugins as Record<string, { active?: boolean; }> | undefined)?.CompactMode?.active;
+        if (typeof fromSettings === "boolean") return fromSettings;
+    } catch { }
+    try { return localStorage.getItem("Guncord_compactMode") === "1"; } catch { }
+    return false;
+}
+
 let _compactActive = false;
-try { _compactActive = localStorage.getItem("Guncord_compactMode") === "1"; } catch { }
+try { _compactActive = readPersistedCompact(); } catch { }
 
 export function isCompactModeEnabled(): boolean {
     return _compactActive;
@@ -425,17 +475,15 @@ export function isCompactModeEnabled(): boolean {
 
 function persistCompact(v: boolean) {
     try { v ? localStorage.setItem("Guncord_compactMode", "1") : localStorage.removeItem("Guncord_compactMode"); } catch { }
+    try {
+        const plugins = Settings?.plugins as Record<string, { active?: boolean; }> | undefined;
+        if (plugins?.CompactMode) plugins.CompactMode.active = v;
+    } catch { }
 }
 
 export function syncCompactBodyClass() {
-    try {
-        const stored = localStorage.getItem("Guncord_compactMode");
-        if (stored === "1" && !_compactActive) {
-            _compactActive = true;
-        } else if (stored !== "1" && _compactActive) {
-            _compactActive = false;
-        }
-    } catch { }
+    _compactActive = readPersistedCompact();
+    persistCompact(_compactActive);
 
     try {
         if (_compactActive) {
@@ -563,13 +611,33 @@ function CompactSettingsPopout({ closePopout }: { closePopout: () => void; }) {
             <div className="nc-settings-popout-grid">
                 {Array.from(headerBarButtons)
                     .sort(([, a], [, b]) => a.priority - b.priority)
-                    .map(([id, { render: Button }]) => (
-                        <div key={id} style={{ display: "contents" }}>
+                    .map(([id, { render: Button }]) => {
+                        const HeaderPluginContext = getHeaderPluginContext();
+                        const content = (
                             <ErrorBoundary noop>
                                 <Button />
                             </ErrorBoundary>
-                        </div>
-                    ))}
+                        );
+                        return (
+                            <div
+                                key={id}
+                                style={{ display: "contents" }}
+                                onContextMenu={e => {
+                                    if (e.defaultPrevented) return;
+                                    e.preventDefault();
+                                    openHeaderPluginSettingsModal(id);
+                                }}
+                            >
+                                {HeaderPluginContext ? (
+                                    <HeaderPluginContext.Provider value={id}>
+                                        {content}
+                                    </HeaderPluginContext.Provider>
+                                ) : (
+                                    content
+                                )}
+                            </div>
+                        );
+                    })}
             </div>
         </div>
     );
@@ -616,13 +684,6 @@ function CompactHeaderBarToggle() {
                     </div>
                 )}
             </Popout>
-            <HeaderBarButton
-                icon={GearIcon}
-                tooltip="Guncord Settings"
-                onClick={() => {
-                    import("@guncordplugins/compactMode/GuncordModal").then(m => m.openGuncordModal());
-                }}
-            />
         </div>
     );
 }
@@ -822,10 +883,30 @@ function HeaderBarButtons() {
                 .map(([id, entry]) => {
                     const Button = entry?.render;
                     if (!Button) return null;
-                    return (
+                    const HeaderPluginContext = getHeaderPluginContext();
+                    const content = (
                         <ErrorBoundary noop key={id}>
                             <Button />
                         </ErrorBoundary>
+                    );
+                    return (
+                        <div
+                            key={id}
+                            style={{ display: "contents" }}
+                            onContextMenu={e => {
+                                if (e.defaultPrevented) return;
+                                e.preventDefault();
+                                openHeaderPluginSettingsModal(id);
+                            }}
+                        >
+                            {HeaderPluginContext ? (
+                                <HeaderPluginContext.Provider value={id}>
+                                    {content}
+                                </HeaderPluginContext.Provider>
+                            ) : (
+                                content
+                            )}
+                        </div>
                     );
                 })}
         </div>
@@ -868,10 +949,30 @@ function ChannelToolbarButtons() {
                 .map(([id, entry]) => {
                     const Button = entry?.render;
                     if (!Button) return null;
-                    return (
+                    const HeaderPluginContext = getHeaderPluginContext();
+                    const content = (
                         <ErrorBoundary noop key={id}>
                             <Button />
                         </ErrorBoundary>
+                    );
+                    return (
+                        <div
+                            key={id}
+                            style={{ display: "contents" }}
+                            onContextMenu={e => {
+                                if (e.defaultPrevented) return;
+                                e.preventDefault();
+                                openHeaderPluginSettingsModal(id);
+                            }}
+                        >
+                            {HeaderPluginContext ? (
+                                <HeaderPluginContext.Provider value={id}>
+                                    {content}
+                                </HeaderPluginContext.Provider>
+                            ) : (
+                                content
+                            )}
+                        </div>
                     );
                 })}
         </div>

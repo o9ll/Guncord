@@ -6,6 +6,8 @@
 
 import "./styles.css";
 
+import { playAudio } from "@api/AudioPlayer";
+
 import { proxyLazy } from "@utils/lazy";
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { StartAt, OptionType } from "@utils/types";
@@ -31,6 +33,7 @@ function formatDate(date: Date): string {
 
 const LS_LAST_SEEN = "guncord_official_dm_last_seen";
 const LS_LAST_TS = "guncord_official_dm_last_ts";
+const LS_LAST_ACK = "guncord_official_dm_last_ack";
 
 export const settings = definePluginSettings({
     isDmClosed: {
@@ -61,10 +64,75 @@ function setItemSafe(key: string, val: string): void {
 
 let lastSeenPostId = getItemSafe(LS_LAST_SEEN) || "";
 let lastPostTimestamp = Number(getItemSafe(LS_LAST_TS) || 0);
+let lastAckTimestamp = Number(getItemSafe(LS_LAST_ACK) || 0);
+if (!lastAckTimestamp && lastPostTimestamp > 0) {
+    lastAckTimestamp = lastPostTimestamp;
+    setItemSafe(LS_LAST_ACK, String(lastAckTimestamp));
+}
+
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 let unreadCount = 0;
 let domObserver: MutationObserver | null = null;
 let isAppLoaded = false;
+
+function emitAllNotificationStores(): void {
+    try { (findStore("ReadStateStore") as any)?.emitChange(); } catch {}
+    try { (findStore("GuildReadStateStore") as any)?.emitChange(); } catch {}
+    try { (findStore("PrivateChannelSortStore") as any)?.emitChange(); } catch {}
+    try { (findStore("ChannelStore") as any)?.emitChange(); } catch {}
+    setTimeout(() => {
+        scanAndFixGuncordDmElements();
+    }, 50);
+}
+
+function triggerGuncordNotification(post: any): void {
+    playNotificationSoundSafe();
+
+    try {
+        openUrgentMessageModal();
+    } catch {}
+
+    try {
+        const bodyText = htmlToMarkdown(post?.content || "").slice(0, 120) || t("There's an official message from the Guncord team that needs your attention.");
+        const Notifications = (window as any).Vencord?.Api?.Notifications;
+        if (Notifications?.showNotification) {
+            Notifications.showNotification({
+                title: "Guncord",
+                body: bodyText,
+                icon: guncordAvatarUrl,
+                onClick: () => {
+                    try {
+                        NavigationRouter.transitionTo(`/channels/@me/${GUNCORD_CHANNEL_ID}`);
+                    } catch {}
+                }
+            });
+        } else if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            const notif = new Notification("Guncord", {
+                body: bodyText,
+                icon: guncordAvatarUrl
+            });
+            notif.onclick = () => {
+                try {
+                    window.focus();
+                    NavigationRouter.transitionTo(`/channels/@me/${GUNCORD_CHANNEL_ID}`);
+                } catch {}
+            };
+        }
+    } catch {}
+}
+
+function playNotificationSoundSafe(): void {
+    try {
+        const soundModule = findByProps("playSound", "createSound") as any;
+        if (typeof soundModule?.playSound === "function") {
+            soundModule.playSound("message1");
+            return;
+        }
+    } catch {}
+    try {
+        playAudio("message1");
+    } catch {}
+}
 
 const guncordAvatarUrl = GUNCORD_AVATAR_BASE64;
 
@@ -159,6 +227,27 @@ function scanAndFixGuncordDmElements() {
                 el.addEventListener("mouseenter", () => { hoveredIsGuncord = true; });
                 el.addEventListener("mouseleave", () => { hoveredIsGuncord = false; });
             }
+
+            // 3. Ensure red ping badge is rendered inside the Guncord DM list item when unreadCount > 0
+            const existingCustomBadge = el.querySelector(".guncord-dm-ping-badge") as HTMLElement | null;
+            const hasNativeBadge = el.querySelector('[class*="numberBadge"], [class*="mentionsBadge"]');
+            if (unreadCount > 0 && SelectedChannelStore?.getChannelId?.() !== GUNCORD_CHANNEL_ID) {
+                if (hasNativeBadge) {
+                    if (existingCustomBadge) existingCustomBadge.remove();
+                } else {
+                    const layoutEl = el.querySelector('[class*="layout"], [class*="children"]') || el;
+                    if (!existingCustomBadge) {
+                        const badge = document.createElement("div");
+                        badge.className = "guncord-dm-ping-badge";
+                        badge.textContent = String(unreadCount);
+                        layoutEl.appendChild(badge);
+                    } else if (existingCustomBadge.textContent !== String(unreadCount)) {
+                        existingCustomBadge.textContent = String(unreadCount);
+                    }
+                }
+            } else if (existingCustomBadge) {
+                existingCustomBadge.remove();
+            }
         }
 
         // 2. If tooltip is visible and hovered element is Guncord, fix tooltip text
@@ -191,7 +280,7 @@ function startDomObserver() {
         document.querySelector<Element>("[class*=\"privateChannels\"]") ??
         document.querySelector<Element>("nav[aria-label]") ??
         document.querySelector<Element>("[class*=\"sidebar\"]") ??
-        document.body;
+        null; if (!target) { setTimeout(startDomObserver, 500); return; }
     domObserver.observe(target, { childList: true, subtree: true });
 }
 
@@ -326,6 +415,9 @@ const rawGuncordChannel = {
     name: "Guncord",
     guild_id: null,
     guildId: null,
+    lastMessageId: lastSeenPostId || null,
+    last_message_id: lastSeenPostId || null,
+    lastPinTimestamp: lastPostTimestamp || null,
     getGuildId: () => null,
     getRecipientId: () => GUNCORD_USER_ID,
     recipients: [GUNCORD_USER_ID],
@@ -404,6 +496,9 @@ export const GUNCORD_CHANNEL = proxyLazy(() => {
                 ch.isOfficialSystem = () => true;
                 ch.isSystemDM = () => true;
                 ch.getRecipientId = () => GUNCORD_USER_ID;
+                ch.lastMessageId = lastSeenPostId || null;
+                ch.last_message_id = lastSeenPostId || null;
+                ch.lastPinTimestamp = lastPostTimestamp || null;
                 return ch;
             }
         }
@@ -430,6 +525,7 @@ let unpatchIntlFormat: (() => void) | null = null;
 let unpatchUserProfileStore: (() => void) | null = null;
 let unpatchSnowflakeUtils: (() => void) | null = null;
 let unpatchDisplayProfile: (() => void) | null = null;
+let unpatchGuildReadState: (() => void) | null = null;
 let unpatchSectionStores: (() => void)[] = [];
 let unpatchAvatarFns: (() => void)[] = [];
 
@@ -534,26 +630,38 @@ function convertPostToMessage(post: any): any {
     return msgRecord;
 }
 
-function injectSinglePost(post: any) {
-    if (!post || !post.id || settings.store.isDmClosed) return;
+function injectSinglePost(post: any, isInitialLoad = false) {
+    if (!post || !post.id) return;
     const postId = String(post.id);
     if (knownPostIds.has(postId)) return;
     knownPostIds.add(postId);
 
     const postDate = new Date(post.created_at).getTime();
+    const isNew = Boolean(lastSeenPostId) && (function() {
+        try { return BigInt(postId) > BigInt(lastSeenPostId); } catch { return postId !== lastSeenPostId; }
+    })();
+
+    if (isNew && settings.store.isDmClosed) {
+        settings.store.isDmClosed = false;
+    }
+
+    if (settings.store.isDmClosed) return;
+
     if (postDate > lastPostTimestamp) {
         lastPostTimestamp = postDate;
         setItemSafe(LS_LAST_TS, String(lastPostTimestamp));
     }
 
-    const isNew = Boolean(lastSeenPostId) && (function() {
-        try { return BigInt(postId) > BigInt(lastSeenPostId); } catch { return postId !== lastSeenPostId; }
-    })();
-
     if (!lastSeenPostId || isNew) {
         lastSeenPostId = postId;
         setItemSafe(LS_LAST_SEEN, lastSeenPostId);
     }
+
+    try {
+        (GUNCORD_CHANNEL as any).lastMessageId = postId;
+        (GUNCORD_CHANNEL as any).last_message_id = postId;
+        (GUNCORD_CHANNEL as any).lastPinTimestamp = postDate;
+    } catch {}
 
     const msgRecord = convertPostToMessage(post);
 
@@ -576,18 +684,22 @@ function injectSinglePost(post: any) {
         });
     } catch {}
 
-    if (SelectedChannelStore.getChannelId() !== GUNCORD_CHANNEL_ID) {
+    const isCurrentChannel = SelectedChannelStore.getChannelId() === GUNCORD_CHANNEL_ID;
+    if (!isCurrentChannel && !isInitialLoad) {
         unreadCount++;
-        try { (findStore("ReadStateStore") as any)?.emitChange(); } catch {}
-        try { (findStore("PrivateChannelSortStore") as any)?.emitChange(); } catch {}
-        try { (findStore("ChannelStore") as any)?.emitChange(); } catch {}
+        triggerGuncordNotification(post);
+    } else if (isCurrentChannel) {
+        lastAckTimestamp = Math.max(Date.now(), postDate);
+        setItemSafe(LS_LAST_ACK, String(lastAckTimestamp));
     }
+
+    emitAllNotificationStores();
 }
 
 let wsRetryCount = 0;
 
 function connectMastodonStreaming() {
-    if (streamingSocket || settings.store.isDmClosed) return;
+    if (streamingSocket) return;
 
     try {
         const url = STREAMING_URLS[streamUrlIdx % STREAMING_URLS.length];
@@ -620,12 +732,10 @@ function connectMastodonStreaming() {
 
         ws.onclose = () => {
             streamingSocket = null;
-            if (!settings.store.isDmClosed) {
-                if (reconnectTimer) clearTimeout(reconnectTimer);
-                wsRetryCount++;
-                const delay = Math.min(30000 * Math.pow(1.5, Math.min(wsRetryCount, 4)), 120000);
-                reconnectTimer = setTimeout(connectMastodonStreaming, delay);
-            }
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            wsRetryCount++;
+            const delay = Math.min(30000 * Math.pow(1.5, Math.min(wsRetryCount, 4)), 120000);
+            reconnectTimer = setTimeout(connectMastodonStreaming, delay);
         };
     } catch (e) {
         streamingSocket = null;
@@ -768,7 +878,6 @@ export function openUrgentMessageModal() {
 }
 
 async function checkAndInjectPosts(isInitialLoad = false) {
-    if (settings.store.isDmClosed) return;
     try {
         const posts = await fetchMastodonFeed();
         if (!Array.isArray(posts) || posts.length === 0) return;
@@ -776,7 +885,28 @@ async function checkAndInjectPosts(isInitialLoad = false) {
         const previousLastTs = Number(getItemSafe(LS_LAST_TS) || 0);
         const previousLastSeenId = getItemSafe(LS_LAST_SEEN);
 
-        if (!settings.store.isDmClosed) {
+        // Keep posts ordered NEWEST FIRST (descending timestamp order) for LOAD_MESSAGES_SUCCESS
+        const sortedPosts = [...posts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const messageRecords: any[] = [];
+        const newPostsToNotify: any[] = [];
+        let hasNewWhileOffline = false;
+
+        if (sortedPosts.length > 0) {
+            const newestDate = new Date(sortedPosts[0].created_at).getTime();
+            const newestId = String(sortedPosts[0].id);
+
+            const isNewerThanSaved = (previousLastTs > 0 && newestDate > previousLastTs) ||
+                Boolean(previousLastSeenId && (function() {
+                    try { return BigInt(newestId) > BigInt(previousLastSeenId); } catch { return newestId !== previousLastSeenId; }
+                })());
+
+            // If a brand new post arrived, reopen DM if it had been closed
+            if (isNewerThanSaved && settings.store.isDmClosed) {
+                settings.store.isDmClosed = false;
+            }
+
+            if (settings.store.isDmClosed) return;
+
             setTimeout(() => {
                 try {
                     FluxDispatcher.dispatch({
@@ -785,77 +915,92 @@ async function checkAndInjectPosts(isInitialLoad = false) {
                     });
                 } catch {}
             }, 0);
-        }
 
-        // Keep posts ordered NEWEST FIRST (descending timestamp order) for LOAD_MESSAGES_SUCCESS
-        const sortedPosts = [...posts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        let newPostCount = 0;
-        const messageRecords: any[] = [];
+            try {
+                (GUNCORD_CHANNEL as any).lastMessageId = newestId;
+                (GUNCORD_CHANNEL as any).last_message_id = newestId;
+                (GUNCORD_CHANNEL as any).lastPinTimestamp = newestDate;
+            } catch {}
 
-        if (sortedPosts.length > 0) {
-            const newestDate = new Date(sortedPosts[0].created_at).getTime();
+            if (!lastAckTimestamp) {
+                lastAckTimestamp = previousLastTs > 0 ? previousLastTs : newestDate;
+                setItemSafe(LS_LAST_ACK, String(lastAckTimestamp));
+            }
 
-            // Detect if new posts arrived while Discord was closed
-            if (isInitialLoad && previousLastTs > 0) {
-                const isNewerThanSaved = newestDate > previousLastTs || (previousLastSeenId && String(sortedPosts[0].id) !== previousLastSeenId);
-                if (isNewerThanSaved && !settings.store.isDmClosed) {
-                    setTimeout(() => {
-                        openUrgentMessageModal();
-                    }, 1200);
-                }
+            if (isInitialLoad && isNewerThanSaved) {
+                hasNewWhileOffline = true;
             }
 
             if (newestDate > lastPostTimestamp) {
                 lastPostTimestamp = newestDate;
                 setItemSafe(LS_LAST_TS, String(lastPostTimestamp));
             }
+        } else if (settings.store.isDmClosed) {
+            return;
         }
 
         for (const post of sortedPosts) {
             const postId = String(post.id);
-            knownPostIds.add(postId);
-
-            const msgRecord = convertPostToMessage(post);
-            messageRecords.push(msgRecord);
-
+            const isKnown = knownPostIds.has(postId);
             const isNew = Boolean(lastSeenPostId) && (function() {
                 try { return BigInt(postId) > BigInt(lastSeenPostId); } catch { return postId !== lastSeenPostId; }
             })();
 
-            if (isNew && !isInitialLoad) {
-                newPostCount++;
+            const postDate = new Date(post.created_at).getTime();
+            const isUnread = lastAckTimestamp > 0 && postDate > lastAckTimestamp;
+
+            if (!isKnown && isNew && !isInitialLoad) {
+                newPostsToNotify.push(post);
+            } else {
+                if (isInitialLoad && (isUnread || (hasNewWhileOffline && isNew)) && !isKnown) {
+                    if (SelectedChannelStore.getChannelId() !== GUNCORD_CHANNEL_ID) {
+                        unreadCount++;
+                    }
+                }
+                knownPostIds.add(postId);
             }
 
-            if (!lastSeenPostId || isNew) {
-                lastSeenPostId = postId;
+            const msgRecord = convertPostToMessage(post);
+            messageRecords.push(msgRecord);
+        }
+
+        if (isInitialLoad && hasNewWhileOffline && SelectedChannelStore.getChannelId() !== GUNCORD_CHANNEL_ID) {
+            if (unreadCount === 0) unreadCount = 1;
+            setTimeout(() => {
+                triggerGuncordNotification(sortedPosts[0]);
+            }, 1200);
+        }
+
+        if (sortedPosts.length > 0 && newPostsToNotify.length === 0) {
+            const newestId = String(sortedPosts[0].id);
+            if (!lastSeenPostId || (function() {
+                try { return BigInt(newestId) > BigInt(lastSeenPostId); } catch { return newestId !== lastSeenPostId; }
+            })()) {
+                lastSeenPostId = newestId;
                 setItemSafe(LS_LAST_SEEN, lastSeenPostId);
             }
         }
 
         setTimeout(() => {
-            if (isInitialLoad || newPostCount > 0) {
-                try {
-                    FluxDispatcher.dispatch({
-                        type: "LOAD_MESSAGES_SUCCESS",
-                        channelId: GUNCORD_CHANNEL_ID,
-                        messages: messageRecords,
-                        isBefore: false,
-                        isAfter: false,
-                        hasMoreBefore: false,
-                        hasMoreAfter: false,
-                        limit: 50,
-                    });
-                } catch {}
+            try {
+                FluxDispatcher.dispatch({
+                    type: "LOAD_MESSAGES_SUCCESS",
+                    channelId: GUNCORD_CHANNEL_ID,
+                    messages: messageRecords,
+                    isBefore: false,
+                    isAfter: false,
+                    hasMoreBefore: false,
+                    hasMoreAfter: false,
+                    limit: 50,
+                });
+            } catch {}
+
+            // Inject newest posts chronologically (oldest to newest) so notifications fire cleanly
+            for (const newPost of [...newPostsToNotify].reverse()) {
+                injectSinglePost(newPost, false);
             }
 
-            if (newPostCount > 0) {
-                if (!settings.store.isDmClosed && SelectedChannelStore.getChannelId() !== GUNCORD_CHANNEL_ID) {
-                    unreadCount += newPostCount;
-                    try { (findStore("ReadStateStore") as any)?.emitChange(); } catch {}
-                    try { (findStore("PrivateChannelSortStore") as any)?.emitChange(); } catch {}
-                    try { (findStore("ChannelStore") as any)?.emitChange(); } catch {}
-                }
-            }
+            emitAllNotificationStores();
         }, 10);
     } catch (e) {
         console.warn("[GuncordOfficialDM] Error checking posts:", e);
@@ -900,8 +1045,10 @@ function handleChannelSelect(e: any) {
             }, 0);
         }
         unreadCount = 0;
+        lastAckTimestamp = Math.max(Date.now(), lastPostTimestamp);
+        setItemSafe(LS_LAST_ACK, String(lastAckTimestamp));
         setTimeout(() => {
-            try { (findStore("ReadStateStore") as any)?.emitChange(); } catch {}
+            emitAllNotificationStores();
         }, 0);
         checkAndInjectPosts(true);
     }
@@ -951,7 +1098,7 @@ export function GuncordSystemBanner() {
             </div>
             <button
                 className="guncord-official-banner-btn"
-                onClick={() => window.open("https://guncord.com", "_blank")}
+                onClick={() => window.open("https://guncord.st", "_blank")}
             >
                 En savoir plus
             </button>
@@ -979,8 +1126,8 @@ export default definePlugin({
         {
             find: '"sticker")',
             replacement: {
-                match: /0===(\i)\.length(?=.{0,25}?\(0,\i\.jsxs?\)\(.{0,75}?children:\1)/,
-                replace: "(Vencord.Api.ChatButtons._injectButtons($1,arguments[0]),$self.isGuncordChannel(arguments[0])?$self.renderBanner():$&)"
+                match: /0===(\i)\.length(?=\)+\?null:\(0,\i\.jsxs?\)\("div")/,
+                replace: "($self.isGuncordChannel(arguments[0])?$self.renderBanner():$&)"
             }
         },
         // Inject username + creation date in DM sidebar profile panel
@@ -1023,7 +1170,13 @@ export default definePlugin({
         if (closed) {
             return channelIds.filter((id: string) => id !== GUNCORD_CHANNEL_ID);
         }
-        return channelIds;
+        const filtered = channelIds.filter((id: string) => id !== GUNCORD_CHANNEL_ID);
+        const savedIndex = filtered.indexOf("999999999999999991");
+        if (savedIndex === 0) {
+            filtered.splice(1, 0, GUNCORD_CHANNEL_ID);
+            return filtered;
+        }
+        return [GUNCORD_CHANNEL_ID, ...filtered];
     },
 
     renderGuncordProfileSections({ userId, isSideBar }: { userId: string, isSideBar: boolean }) {
@@ -1320,32 +1473,120 @@ export default definePlugin({
 
         startDomObserver();
 
-        // Patch ReadStateStore to show red ping badge for new unread Guncord posts
-        try {
-            const ReadStateStore = findStore("ReadStateStore") as any;
-            if (ReadStateStore) {
-                const origGetMentionCount = ReadStateStore.getMentionCount;
-                ReadStateStore.getMentionCount = function(channelId: string) {
-                    if (channelId === GUNCORD_CHANNEL_ID) return unreadCount;
-                    return origGetMentionCount.apply(this, arguments as any);
-                };
-                unpatchReadStateGetMention = () => { ReadStateStore.getMentionCount = origGetMentionCount; };
+        // Patch GuildReadStateStore for Home / App unread badges
+        const patchGuildReadStateStore = (GuildStore: any) => {
+            if (!GuildStore || (GuildStore as any).__guncordPatched) return;
+            (GuildStore as any).__guncordPatched = true;
+            const unpatches: (() => void)[] = [];
 
-                const origGetUnreadCount = ReadStateStore.getUnreadCount;
-                ReadStateStore.getUnreadCount = function(channelId: string) {
-                    if (channelId === GUNCORD_CHANNEL_ID) return unreadCount;
-                    return origGetUnreadCount.apply(this, arguments as any);
+            if (typeof GuildStore.getTotalMentionCount === "function") {
+                const orig = GuildStore.getTotalMentionCount;
+                GuildStore.getTotalMentionCount = function(...args: any[]) {
+                    return orig.apply(this, args) + unreadCount;
                 };
-                unpatchReadStateGetUnread = () => { ReadStateStore.getUnreadCount = origGetUnreadCount; };
-
-                const origHasUnread = ReadStateStore.hasUnread;
-                ReadStateStore.hasUnread = function(channelId: string) {
-                    if (channelId === GUNCORD_CHANNEL_ID) return unreadCount > 0;
-                    return origHasUnread.apply(this, arguments as any);
-                };
-                unpatchReadStateHasUnread = () => { ReadStateStore.hasUnread = origHasUnread; };
+                unpatches.push(() => { GuildStore.getTotalMentionCount = orig; });
             }
-        } catch {}
+
+            if (typeof GuildStore.hasAnyUnread === "function") {
+                const orig = GuildStore.hasAnyUnread;
+                GuildStore.hasAnyUnread = function(...args: any[]) {
+                    return orig.apply(this, args) || unreadCount > 0;
+                };
+                unpatches.push(() => { GuildStore.hasAnyUnread = orig; });
+            }
+
+            unpatchGuildReadState = () => {
+                unpatches.forEach(fn => fn());
+                delete (GuildStore as any).__guncordPatched;
+            };
+        };
+
+        const existingGuildRSStore = (findStore("GuildReadStateStore") || findByProps("getTotalMentionCount")) as any;
+        if (existingGuildRSStore) {
+            patchGuildReadStateStore(existingGuildRSStore);
+        }
+        waitFor(filters.byStoreName("GuildReadStateStore"), patchGuildReadStateStore);
+
+        // Patch ReadStateStore comprehensively to show red ping badge for new unread Guncord posts
+        const patchReadStateStore = (RSStore: any) => {
+            if (!RSStore || (RSStore as any).__guncordPatched) return;
+            (RSStore as any).__guncordPatched = true;
+            const unpatches: (() => void)[] = [];
+
+            const patchMethod = (name: string, impl: (...args: any[]) => any) => {
+                if (typeof RSStore[name] === "function") {
+                    const orig = RSStore[name];
+                    RSStore[name] = function(...args: any[]) {
+                        return impl.call(this, orig, ...args);
+                    };
+                    unpatches.push(() => { RSStore[name] = orig; });
+                }
+            };
+
+            patchMethod("getMentionCount", (orig, channelId) => {
+                if (channelId === GUNCORD_CHANNEL_ID) return unreadCount;
+                return orig.call(RSStore, channelId);
+            });
+
+            patchMethod("getUnreadCount", (orig, channelId) => {
+                if (channelId === GUNCORD_CHANNEL_ID) return unreadCount;
+                return orig.call(RSStore, channelId);
+            });
+
+            patchMethod("hasUnread", (orig, channelId) => {
+                if (channelId === GUNCORD_CHANNEL_ID) return unreadCount > 0;
+                return orig.call(RSStore, channelId);
+            });
+
+            patchMethod("hasUnreadOrMentions", (orig, channelId) => {
+                if (channelId === GUNCORD_CHANNEL_ID) return unreadCount > 0;
+                return orig.call(RSStore, channelId);
+            });
+
+            patchMethod("hasNotableUnread", (orig, channelId) => {
+                if (channelId === GUNCORD_CHANNEL_ID) return unreadCount > 0;
+                return orig.call(RSStore, channelId);
+            });
+
+            patchMethod("hasTrackedUnread", (orig, channelId) => {
+                if (channelId === GUNCORD_CHANNEL_ID) return unreadCount > 0;
+                return orig.call(RSStore, channelId);
+            });
+
+            patchMethod("getIsMentionLowImportance", (orig, channelId) => {
+                if (channelId === GUNCORD_CHANNEL_ID) return false;
+                return orig.call(RSStore, channelId);
+            });
+
+            patchMethod("lastMessageId", (orig, channelId) => {
+                if (channelId === GUNCORD_CHANNEL_ID) return lastSeenPostId || (GUNCORD_CHANNEL as any).lastMessageId || null;
+                return orig.call(RSStore, channelId);
+            });
+
+            patchMethod("lastMessageTimestamp", (orig, channelId) => {
+                if (channelId === GUNCORD_CHANNEL_ID) return lastPostTimestamp || 0;
+                return orig.call(RSStore, channelId);
+            });
+
+            patchMethod("getMentionChannelIds", (orig) => {
+                const list = orig.call(RSStore) || [];
+                if (unreadCount > 0 && !list.includes(GUNCORD_CHANNEL_ID)) {
+                    return [...list, GUNCORD_CHANNEL_ID];
+                }
+                return list;
+            });
+
+            unpatchReadStateGetMention = () => {
+                unpatches.forEach(fn => fn());
+                delete (RSStore as any).__guncordPatched;
+            };
+        };
+
+        const existingRSStore = (findStore("ReadStateStore") || findByProps("getMentionCount", "hasUnread")) as any;
+        if (existingRSStore) {
+            patchReadStateStore(existingRSStore);
+        }
+        waitFor(filters.byStoreName("ReadStateStore"), patchReadStateStore);
 
         // Intercept MessageActions.fetchMessages to prevent 404 REST calls
         try {
@@ -1366,6 +1607,19 @@ export default definePlugin({
         // Intercept HTTP.get and HTTP.post REST calls to prevent 404 errors for fake channel/user ID
         try {
             const HTTP = (findByProps("get", "post", "put", "del") || findByProps("get", "post")) as any;
+            const createFakeRestChain = (responseObj: any) => {
+                const p = Promise.resolve(responseObj) as any;
+                const chainMethods = ["query", "send", "set", "type", "accept", "timeout", "retry", "redirects", "on", "ok", "end"];
+                for (const m of chainMethods) {
+                    p[m] = function(arg?: any) {
+                        if (m === "end" && typeof arg === "function") {
+                            try { arg(null, responseObj); } catch {}
+                        }
+                        return p;
+                    };
+                }
+                return p;
+            };
             if (HTTP) {
                 if (HTTP.get) {
                     const origGet = HTTP.get;
@@ -1373,7 +1627,7 @@ export default definePlugin({
                         const url = typeof opts === "string" ? opts : opts?.url;
                         if (url && (url.includes(GUNCORD_CHANNEL_ID) || url.includes(GUNCORD_USER_ID) || url.includes("999999999999999999"))) {
                             if (url.includes("/profile")) {
-                                return Promise.resolve({
+                                return createFakeRestChain({
                                     ok: true,
                                     status: 200,
                                     body: {
@@ -1408,7 +1662,7 @@ export default definePlugin({
                                     headers: {},
                                 });
                             }
-                            return Promise.resolve({
+                            return createFakeRestChain({
                                 ok: true,
                                 status: 200,
                                 body: [],
@@ -1426,7 +1680,7 @@ export default definePlugin({
                     HTTP.post = function(opts: any) {
                         const url = typeof opts === "string" ? opts : opts?.url;
                         if (url && (url.includes(GUNCORD_CHANNEL_ID) || url.includes(GUNCORD_USER_ID) || url.includes("999999999999999999"))) {
-                            return Promise.resolve({
+                            return createFakeRestChain({
                                 ok: true,
                                 status: 200,
                                 body: {
@@ -1451,7 +1705,7 @@ export default definePlugin({
                     httpAny[fnName] = function(opts: any) {
                         const url = typeof opts === "string" ? opts : opts?.url;
                         if (url && (url.includes(GUNCORD_CHANNEL_ID) || url.includes(GUNCORD_USER_ID) || url.includes("999999999999999999"))) {
-                            return Promise.resolve({
+                            return createFakeRestChain({
                                 ok: true,
                                 status: 200,
                                 body: {},
@@ -1648,7 +1902,17 @@ export default definePlugin({
                             return id !== GUNCORD_CHANNEL_ID;
                         });
 
-                        filtered.unshift(entryToInsert);
+                        const savedIndex = filtered.findIndex((item: any) => {
+                            const id = typeof item === "string" ? item : (item?.id || item?.channelId);
+                            return id === "999999999999999991";
+                        });
+
+                        if (savedIndex === 0) {
+                            filtered.splice(1, 0, entryToInsert);
+                        } else {
+                            filtered.unshift(entryToInsert);
+                        }
+
                         return filtered;
                     };
                     sortUnpatches.push(() => {
@@ -1678,8 +1942,7 @@ export default definePlugin({
         setTimeout(() => {
             isAppLoaded = true;
             checkAndInjectPosts(true);
-            connectMastodonStreaming();
-            pollInterval = setInterval(() => checkAndInjectPosts(false), 300000);
+            pollInterval = setInterval(() => checkAndInjectPosts(false), 30000);
         }, 1000);
         }, 500); // end deferred startup — all store patches run after first paint + CONNECTION_OPEN
     },
@@ -1707,6 +1970,7 @@ export default definePlugin({
         if (unpatchReadStateGetMention) unpatchReadStateGetMention();
         if (unpatchReadStateGetUnread) unpatchReadStateGetUnread();
         if (unpatchReadStateHasUnread) unpatchReadStateHasUnread();
+        if (unpatchGuildReadState) unpatchGuildReadState();
         if (unpatchIntlString) unpatchIntlString();
         if (unpatchIntlFormat) unpatchIntlFormat();
         if (unpatchUserProfileStore) unpatchUserProfileStore();

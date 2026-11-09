@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import "./styles.css";
 
@@ -25,7 +13,7 @@ import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { AuthSessionsStore, Constants, React, RestAPI, SettingsRouter, Tooltip } from "@webpack/common";
+import { AuthSessionsStore, Constants, React, RestAPI, SettingsRouter, Tooltip, useState } from "@webpack/common";
 
 import { NewButton, RenameButton } from "./components/RenameButton";
 import { Session, SessionInfo } from "./types";
@@ -45,6 +33,7 @@ const settings = definePluginSettings({
         description: "How often to check for new sessions in the background (if enabled), in minutes",
         type: OptionType.NUMBER,
         default: 20,
+        min: 1,
         restartNeeded: true
     }
 });
@@ -83,12 +72,12 @@ export default definePlugin({
     renderName: ErrorBoundary.wrap(({ session }: SessionInfo) => {
         const savedSession = savedSessionsCache.get(session.id_hash);
 
-        const state = React.useState(savedSession?.name ? `${savedSession.name}*` : getDefaultName(session.client_info));
-        const [title, setTitle] = state;
+        const state = useState(savedSession?.name ? `${savedSession.name}*` : getDefaultName(session.client_info));
+        const [title] = state;
         // Show a "NEW" badge if the session is seen for the first time
         return (
             <>
-                <Paragraph size="md" weight="semibold" color="text-strong">{title}</Paragraph>
+                <Paragraph size="md" weight="semibold" style={{ color: "var(--text-strong, var(--text-default))" }}>{title}</Paragraph>
                 <div className={cl("footer-buttons")}>
                     {(savedSession == null || savedSession.isNew) && (
                         <NewButton />
@@ -104,7 +93,7 @@ export default definePlugin({
 
         return (
             <div className={cl("description")}>
-                <Paragraph size="sm" weight="normal" color="text-muted">{label}</Paragraph>
+                <Paragraph size="sm" weight="normal" style={{ color: "var(--text-muted, var(--text-default))" }}>{label}</Paragraph>
                 {timeLabel && (
                     <>
                         {" \xb7 "}

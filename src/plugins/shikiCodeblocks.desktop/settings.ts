@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { definePluginSettings } from "@api/Settings";
 import { disableStyle, enableStyle } from "@api/Styles";
@@ -25,7 +13,7 @@ import { OptionType } from "@utils/types";
 import { shiki } from "./api/shiki";
 import { themes } from "./api/themes";
 import deviconStyle from "./devicon.css?managed";
-import { DeviconSetting, HljsSetting } from "./types";
+import { DeviconSetting, HighlighterSetting } from "./types";
 
 const themeNames = Object.keys(themes) as (keyof typeof themes)[];
 
@@ -49,29 +37,34 @@ export const settings = definePluginSettings({
             shiki.setTheme(value || settings.store.theme);
         },
     },
-    tryHljs: {
+    tryDiscordHighlighter: {
         type: OptionType.SELECT,
-        displayName: "Try Highlight.js",
+        displayName: "Try Discord's highlighter",
         description: "Use the more lightweight default Discord highlighter and theme.",
         options: [
             {
                 label: "Never",
-                value: HljsSetting.Never,
+                value: HighlighterSetting.Never,
             },
             {
-                label: "Prefer Shiki instead of Highlight.js",
-                value: HljsSetting.Secondary,
+                label: "Prefer Shiki instead of Discord's highlighter",
+                value: HighlighterSetting.Secondary,
                 default: true,
             },
             {
-                label: "Prefer Highlight.js instead of Shiki",
-                value: HljsSetting.Primary,
+                label: "Prefer Discord's highlighter instead of Shiki",
+                value: HighlighterSetting.Primary,
             },
             {
                 label: "Always",
-                value: HljsSetting.Always,
+                value: HighlighterSetting.Always,
             },
         ],
+    },
+    ignoredLanguages: {
+        type: OptionType.STRING,
+        description: "Comma separated list of languages to leave to Discord's default codeblocks",
+        default: "ansi",
     },
     useDevIcon: {
         type: OptionType.SELECT,

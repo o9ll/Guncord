@@ -20,7 +20,10 @@ import { runtimeHashMessageKey } from "./intlHash";
 import { Patch, PatchReplacement, ReplaceFn } from "./types";
 
 export function canonicalizeMatch<T extends RegExp | string>(match: T): T {
-    let partialCanon = typeof match === "string" ? match : match.source;
+    if (Array.isArray(match)) {
+        return match.map(m => canonicalizeMatch(m)) as unknown as T;
+    }
+    let partialCanon = typeof match === "string" ? match : match?.source ?? "";
     partialCanon = partialCanon.replaceAll(/#{intl::([\w$+/]*)(?:::(\w+))?}/g, (_, key, modifier) => {
         const hashed = modifier === "raw" ? key : runtimeHashMessageKey(key);
         if (modifier === "hash") return hashed;

@@ -145,7 +145,7 @@ const buildConfigs = ([
         outfile: "dist/desktop/renderer.js",
         format: "iife",
         target: ["esnext"],
-        footer: { js: "//# sourceURL=file:///VencordRenderer\n" + sourceMapFooter("renderer") },
+        footer: { js: "//# sourceURL=file:///VencordRenderer\nObject.assign(typeof window !== 'undefined' ? window : globalThis, { Vencord, Equicord: Vencord, Guncord: Vencord });\n" + sourceMapFooter("renderer") },
         globalName: "Vencord",
         sourcemap,
         plugins: [
@@ -197,7 +197,7 @@ const buildConfigs = ([
         outfile: "dist/guncord/renderer.js",
         format: "iife",
         target: ["esnext"],
-        footer: { js: "//# sourceURL=file:///VencordDesktopRenderer\n" + sourceMapFooter("renderer") },
+        footer: { js: "//# sourceURL=file:///VencordDesktopRenderer\nObject.assign(typeof window !== 'undefined' ? window : globalThis, { Vencord, Equicord: Vencord, Guncord: Vencord });\n" + sourceMapFooter("renderer") },
         globalName: "Vencord",
         sourcemap,
         plugins: [
@@ -238,6 +238,18 @@ await Promise.all([
         main: "main.js"
     }))
 ]);
+
+// Copy multi-instance icons from assets to dist
+try {
+    const { cp } = await import("fs/promises");
+    const iconsSrc = join(dirname(fileURLToPath(import.meta.url)), "../../assets/multi-instance-icons");
+    if (await exists(iconsSrc)) {
+        await Promise.all([
+            cp(iconsSrc, "dist/desktop/multi-instance-icons", { recursive: true }),
+            cp(iconsSrc, "dist/guncord/multi-instance-icons", { recursive: true })
+        ]);
+    }
+} catch { }
 
 await Promise.all([
     createPackage("dist/desktop", "dist/desktop.asar"),

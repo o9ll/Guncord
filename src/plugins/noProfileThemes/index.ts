@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
@@ -27,9 +15,12 @@ export default definePlugin({
     authors: [Devs.TheKodeToad],
     patches: [
         {
-            find: "hasThemeColors(){",
+            find: "canEditThemes(){",
             replacement: {
-                match: /get canUsePremiumProfileCustomization\(\){return /,
+                // FakeProfileThemes patches the same function to always return true. If both are enabled, the final code will be
+                // `return $self.isCurrentUser(this?.userId) && true`, which still works
+                // This relies on the fact that FakeProfileThemes is applied first due to alphabetical order
+                match: /get canEditThemes\(\){return /,
                 replace: "$&$self.isCurrentUser(this?.userId)&&"
             }
         },
@@ -37,3 +28,4 @@ export default definePlugin({
 
     isCurrentUser: (userId: string) => userId === UserStore.getCurrentUser()?.id,
 });
+

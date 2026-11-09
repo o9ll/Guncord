@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { execSync } from "child_process";
 import fs from "fs";
 import http from "http";
 import https from "https";
-import path from "path";
 import os from "os";
+import path from "path";
 
 async function main() {
     const rawVersion = process.argv[2] || "1.27.2";
@@ -136,36 +137,28 @@ async function main() {
     }
 
     // 1b. Ensure multiplatform GUI installers exist for Linux & macOS
-    console.log("  Verification/Download of Linux and macOS installers...");
-    const platformBinaries = [
-        { remote: "Equilotl", local: "Guncord-Linux" },
-        { remote: "Equilotl-x11", local: "Guncord-Linux-x11" },
-        { remote: "Equilotl-wayland", local: "Guncord-Linux-wayland" },
-        { remote: "Equilotl-darwin-arm64.zip", local: "Guncord-darwin-arm64.zip" },
-        { remote: "Equilotl-darwin-x64.zip", local: "Guncord-darwin-x64.zip" }
-    ];
-    const installerBaseUrl = "https://github.com/Equicord/Equilotl/releases/latest/download/";
+    console.log("  Generation des installateurs natifs macOS et Linux...");
     const installerOutDir = path.join("release", "installer");
     if (!fs.existsSync(installerOutDir)) fs.mkdirSync(installerOutDir, { recursive: true });
 
-    for (const b of platformBinaries) {
-        const dest = path.join(installerOutDir, b.local);
-        if (fs.existsSync(dest) && fs.statSync(dest).size > 100000) {
-            continue;
+    // Package native macOS installer (.app in zip)
+    try {
+        console.log("    -> Generation des installateurs macOS (Guncord-darwin-arm64.zip & x64.zip)...");
+        execSync("python scripts/build/package-macos-installer.py", { stdio: "inherit" });
+    } catch (e) {
+        console.warn("    [Avertissement] Echec compilation installateur macOS:", e.message);
+    }
+
+    // Linux installers: install.sh standalone executable
+    try {
+        const installShContent = fs.readFileSync(path.join("install.sh"));
+        for (const linuxName of ["Guncord-Linux", "Guncord-Linux-x11", "Guncord-Linux-wayland"]) {
+            const dest = path.join(installerOutDir, linuxName);
+            fs.writeFileSync(dest, installShContent);
         }
-        try {
-            console.log(`    -> Downloading ${b.local}...`);
-            const res = await fetch(installerBaseUrl + b.remote, {
-                headers: { "User-Agent": "Guncord (https://github.com/o9ll/Guncord)" }
-            });
-            if (res.ok) {
-                const buf = Buffer.from(await res.arrayBuffer());
-                fs.writeFileSync(dest, buf);
-                console.log(`       OK : ${b.local} (${(buf.length / (1024 * 1024)).toFixed(1)} MB)`);
-            }
-        } catch (e) {
-            console.warn(`    [Warning] Failed to download ${b.remote}:`, e.message);
-        }
+        console.log("    -> Installateurs Linux prets (copies autonomes de install.sh).");
+    } catch (e) {
+        console.warn("    [Avertissement] Echec preparation installateur Linux:", e.message);
     }
 
     const releaseId = release.id;

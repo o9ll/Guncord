@@ -1,24 +1,13 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
-import { BaseText } from "@components/BaseText";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { HeadingTertiary } from "@components/Heading";
+import { Heading } from "@components/Heading";
+import { Paragraph } from "@components/Paragraph";
+import { PermissionsSortOrder, settings } from "@plugins/permissionsViewer";
 import { cl, getGuildPermissionSpecMap, getSortedRolesForMember, sortUserRoles } from "@plugins/permissionsViewer/utils";
 import { getIntlMessage } from "@utils/discord";
 import { classes } from "@utils/misc";
@@ -27,7 +16,6 @@ import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findCssClassesLazy } from "@webpack";
 import { PermissionsBits, Tooltip, useMemo, UserStore } from "@webpack/common";
 
-import { PermissionsSortOrder, settings } from "..";
 import openRolesAndUsersPermissionsModal from "./RolesAndUsersPermissions";
 
 interface UserPermission {
@@ -57,13 +45,12 @@ function FakeRole({ text, color, ...props }: FakeRoleProps) {
                 />
             </div>
             <div className={RoleClasses.roleName}>
-                <BaseText
-                    size="xs"
-                    weight="medium"
+                <Paragraph
                     className={RoleClasses.roleNameOverflow}
+                    size="xs" weight="medium"
                 >
                     {text}
-                </BaseText>
+                </Paragraph>
             </div>
         </div>
     );
@@ -77,7 +64,7 @@ interface GrantedByTooltipProps {
 function GrantedByTooltip({ roleName, roleColor }: GrantedByTooltipProps) {
     return (
         <>
-            <BaseText size="sm">Granted By</BaseText>
+            <Paragraph weight="medium">Granted By</Paragraph>
             <FakeRole text={roleName} color={roleColor} />
         </>
     );
@@ -137,7 +124,7 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
 
     return <div>
         <div className={cl("user-header-container")}>
-            <HeadingTertiary>Permissions</HeadingTertiary>
+            <Heading tag="h4">Permissions</Heading>
             <div className={cl("user-header-btns")}>
                 <Tooltip text={`Sorting by ${permissionsSortOrder === PermissionsSortOrder.HighestRole ? "Highest Role" : "Lowest Role"}`}>
                     {tooltipProps => (
@@ -205,3 +192,4 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
 }
 
 export default ErrorBoundary.wrap(UserPermissionsComponent, { noop: true });
+

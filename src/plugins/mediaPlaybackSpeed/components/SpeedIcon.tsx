@@ -19,3 +19,4 @@ function SpeedIcon() {
 }
 
 export default SpeedIcon;
+

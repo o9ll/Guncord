@@ -66,3 +66,4 @@ export default definePlugin({
 function channelName(channel, withPrefix = false) {
     return computeChannelName(channel, UserStore, RelationshipStore, withPrefix);
 }
+

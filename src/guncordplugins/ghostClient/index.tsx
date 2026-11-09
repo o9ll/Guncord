@@ -9,11 +9,13 @@ import "./styles.css";
 import { isPluginEnabled } from "@api/PluginManager";
 import { DataStore } from "@api/index";
 import { UserAreaButton as RawUserAreaButton } from "@api/UserArea";
+import { Button } from "@components/Button";
+import { FormSwitch } from "@components/FormSwitch";
+import { ModalCloseButton } from "@utils/modal";
 import definePlugin, { PluginNative } from "@utils/types";
 import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { React, ReactDOM, Toasts, useState, useEffect, useRef, useCallback, SettingsRouter, Slider, Select } from "@webpack/common";
+import { React, ReactDOM, Toasts, useState, useEffect, useRef, useCallback, SettingsRouter, Slider, Select, Text, Tooltip } from "@webpack/common";
 import { t } from "../autoTranslateGuncord";
-import { openTokenImporterModal } from "../tokenImporter";
 
 // UserAreaButton 100% sûr - aucun proxy lazy Webpack pour éviter les erreurs de type Reflect
 const UserAreaButton: any = (props: any) => {
@@ -47,6 +49,8 @@ const UserAreaButton: any = (props: any) => {
 
 const VoiceStateStore = findStoreLazy("VoiceStateStore");
 const ChannelStore = findStoreLazy("ChannelStore");
+const SelectedChannelStore = findStoreLazy("SelectedChannelStore");
+const GuildStore = findStoreLazy("GuildStore");
 const FluxDispatcher = findByPropsLazy("dispatch", "subscribe");
 const UserStore = findStoreLazy("UserStore");
 
@@ -57,12 +61,123 @@ const DS_KEY_SELECTED = "guncord-ghost-selected";
 const DS_KEY_JOIN_DELAY = "guncord-ghost-join-delay";
 const DS_KEY_VOLUME = "guncord-ghost-volume-booster";
 const DS_KEY_VOCAL_BOOST = "guncord-ghost-vocal-boost";
+const DS_KEY_EQ_BASS = "guncord-ghost-eq-bass";
+const DS_KEY_EQ_TREBLE = "guncord-ghost-eq-treble";
+const DS_KEY_EQ_MID = "guncord-ghost-eq-mid";
+const DS_KEY_EQ_ENABLED = "guncord-ghost-eq-enabled";
+const DS_KEY_SHOW_EQ = "guncord-ghost-show-eq";
+
+const DS_KEY_SHOW_AMP_PAN = "guncord-ghost-show-amp-pan";
+const DS_KEY_AMP_CONFIG = "guncord-ghost-amp-config";
+const DS_KEY_CUSTOM_PANS = "guncord-ghost-custom-pans";
+const DS_KEY_CUSTOM_OPUS = "guncord-ghost-custom-opus";
+
+let ghostShowAmpPan: boolean = false;
+let ghostAmpConfig: any = null;
+
+const STEREO_MODES = [
+    "BetterDiscord Stereo", "Lightcord Stereo", "Ethercord Stereo",
+    "Dream Stereo", "PxCord Stereo", "Justice Stereo",
+    "Ascend Lightcord Stereo", "Premium Lightcord Stereo",
+    "Ripcord Stereo", "Skenzo Lightcord Stereo", "Ultimate HyperStereo", "JJK Stereo *"
+];
+
+const BASE_PAN_TYPES = [
+    "Balance", "Equal Power", "Linear", "QuickHaas", "Pancake",
+    "Polarity", "Mid-Side", "LCR", "Circular", "Auto Pan", "10D Hyper",
+    "Center", "Left", "Right", "Inhead", "Overhead", "Below Head",
+    "Far Right", "Far Left", "Center Left", "Center Right",
+    "Center Far Right", "Center Far Left",
+    "Inhead Left", "Inhead Right", "Inhead Far Right", "Inhead Far Left",
+    "Overhead Left", "Overhead Right", "Overhead Far Right", "Overhead Far Left",
+    "Upfront Center", "Upfront Center Right", "Upfront Center Left",
+    "Upfront Center Far Right", "Upfront Center Far Left",
+    "Upfront Overhead", "Upfront Overhead Center",
+    "Upfront Overhead Center Left", "Upfront Overhead Center Right",
+    "Upfront Overhead Center Far Right", "Upfront Overhead Center Far Left",
+    "Behind Head", "Behind Head Right", "Behind Head Far Right", "Behind Head Far Left",
+    "Mono", "Wide", "Narrow", "Close", "Deep",
+    "Dolby Cinema Wide", "Piercing", "QuickHass Deluxe", "Polarity v2",
+    "Premium Pancake", "Wide (Both Ears)", "Mono (Both Ears)",
+    "Narrow (Both Ears)", "Piercing (Both Ears)", "Piercing Mono", "Piercing Wide",
+    "Overhead (Both Ears)", "IMAX x Dolby Cinema Wide (Both Ears)",
+    "Infinite Wideness", "Infinite Wideness (Both Ears)",
+    "Piercing Infinite Wideness (Both Ears)", "Mono Wide", "Narrow Wide",
+    "Dolby Cinema Mono", "Quickhass Deluxe x IMAX (Both Ears)",
+    "Deluxe Wide x Infinite Wideness"
+];
+
+const SUPER_PANS = [
+    "None", "Gojo Infinity", "Upgraded Infinity *", "JJK Pattern",
+    "Domain Expansion", "Hollow Purple", "Ultra Instinct", "Paradox Chaos"
+];
+
+const NOT_NATTY_MODES = [
+    "Off", "Raw Loudness", "Soft Clip", "Upmix Stereo",
+    "Raw + Soft Clip", "Raw + Upmix", "Soft Clip + Upmix", "All Combined",
+    "Aggressive Soft Clipping", "Aggressive Upmix", "Aggressive Raw Loudness",
+    "Aggressive Combination", "Filterless Soft Clipping",
+    "Filterless Raw Loudness", "Filterless Upmix", "Filterless Combination",
+    "Filterless Aggressive Raw Loudness X4", "Filterless Aggressive Soft Clipping X4",
+    "Filterless Aggressive Upmix X4", "Filterless Aggressive Combination X4"
+];
+
+const BASE_OPUS_BITRATES = [
+    { id: "12000", label: "12k  Voice" },
+    { id: "24000", label: "24k  Qualite" },
+    { id: "64000", label: "64k  Discord defaut" },
+    { id: "128000", label: "128k Haute qualite" },
+    { id: "256000", label: "256k Ultra" },
+    { id: "510000", label: "510k MAX BLOW" }
+];
+
+const defaultAmpConfig = {
+    enabled: false,
+    deess: false,
+    vocalBoost: false,
+    stereoMode: 0,
+    panType: 0,
+    superPan: 0,
+    panManual: 0.0,
+    stereoWidth: 0.0,
+    reverb: 0.0,
+    spatialExpander: 0.0,
+    notNatty: 0,
+    masterBoost: 0.0,
+    preGain: 0.0,
+    postGain: 0.0,
+    saturation: 0.0,
+    codecGain: 0.0,
+    presenceDb: 0.0,
+    airDb: 0.0,
+    bodyDb: 0.0,
+    rumbleHz: 0.0,
+    echoCancel: false,
+    noiseSup: false,
+    highpass: false,
+    hardClip: false,
+    softClip: false,
+    compressor: false,
+    limiter: false,
+    opusBitrate: 64000,
+    opusBoost: false,
+    pitchEnabled: false,
+    pitchSemitones: 0.0,
+    eightD: false,
+    eightDSpeed: 1.0
+};
+
 const TI_ACCOUNTS_KEY = "TokenImporter_accounts";
 
 let ghostMicLabel: string = "default";
 let ghostJoinDelay: number = 0;
 let isConnectingBatch = false;
 let ghostVolumeMultiplier: number = 1.0;
+let ghostEqBass: number = 0.0;
+let ghostEqTreble: number = 0.0;
+let ghostEqMid: number = 0.0;
+let ghostEqEnabled: boolean = false;
+let ghostShowEq: boolean = false;
 let ghostVocalBoost: boolean = false;
 let _voiceSyncUnsub: (() => void) | null = null;
 
@@ -143,6 +258,22 @@ const Native = {
         if (n?.setVolume) { try { await n.setVolume(volume, vocalBoost); return; } catch {} }
         await sfetch("/set-volume", { volume, vocalBoost });
     },
+    
+    async setAmpPanParams(params: any): Promise<void> {
+        const n = getNative();
+        if (n?.setAmpPanParams) { try { await n.setAmpPanParams(params); return; } catch {} }
+        await sfetch("/set-amp-pan", params);
+    },
+    async getAmpPanParams(): Promise<any> {
+        const n = getNative();
+        if (n?.getAmpPanParams) { try { return await n.getAmpPanParams(); } catch {} }
+        return await sfetch("/get-amp-pan");
+    },
+async setEq(bass: number, treble: number, mid: number, enabled = true): Promise<void> {
+        const n = getNative();
+        if (n?.setEq) { try { await n.setEq(bass, treble, mid, enabled); return; } catch {} }
+        await sfetch("/set-eq", { bass, treble, mid, enabled });
+    },
     async setMute(userId: string, muted: boolean): Promise<void> {
         const n = getNative();
         if (n?.setMute) { try { await n.setMute(userId, muted); return; } catch {} }
@@ -191,9 +322,8 @@ const Native = {
 // ─── Icons (Strict Zero-Emoji, Minimalist SVG Primitives) ────────────────────
 function GhostIcon({ width = 20, height = 20, className }: { width?: number; height?: number; className?: string; }) {
     return (
-        <svg aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width={width} height={height} className={className} fill="none" viewBox="0 0 24 24">
-            <path fill="currentColor" d="M16 6a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM2 20.53A9.53 9.53 0 0 1 11.53 11h.94c1.28 0 2.5.25 3.61.7.41.18.36.77-.05.96a7 7 0 0 0-3.65 8.6c.11.36-.13.74-.5.74H6.15a.5.5 0 0 1-.5-.55l.27-2.6c.02-.26-.27-.37-.41-.16-.48.74-1.03 1.8-1.32 2.9a.53.53 0 0 1-.5.41h-.22C2.66 22 2 21.34 2 20.53Z" />
-            <path fill="currentColor" d="M24 19a5 5 0 1 1-10 0 5 5 0 0 1 10 0Z" />
+        <svg className={`vc-ic-save-icon ${className ?? ""}`} aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width={width} height={height} fill="none" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M12.47 11c1.17 0 2.3.21 3.33.6.42.16.38.8.01 1.06-.9.63-1.5 1.67-1.5 2.9v1.58c0 .4-.25.76-.6.97l-.33.23A3.4 3.4 0 0 0 12 20.79l-.01.22v.22l.01.1c.04.34-.2.67-.54.67H6.15a.5.5 0 0 1-.5-.55l.27-2.6c.02-.26-.28-.37-.41-.16-.48.74-1.03 1.8-1.32 2.9a.53.53 0 0 1-.5.41h-.22C2.66 22 2 21.34 2 20.53A9.53 9.53 0 0 1 11.53 11h.94ZM12 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM16.31 15.55c0-1.06 1.05-1.8 2.05-1.46l4.66 1.59c.58.2.98.75.98 1.37v5.47c-.04.82-.92 1.48-2 1.48-1.11 0-2.01-.68-2.01-1.53 0-.84.9-1.52 2-1.52l.3.01v-3l-4.28-1.46v4.52c0 .84-.9 1.52-2 1.52-1.11 0-2.01-.69-2.01-1.53 0-.84.9-1.53 2-1.53l.31.02v-3.95Z" />
         </svg>
     );
 }
@@ -285,8 +415,19 @@ function defaultState(): GhostState {
 // ─── State global réactif ─────────────────────────────────────────────────────
 const ghostStates = new Map<string, GhostState>();
 const _leavingUsers = new Set<string>();
+const _manuallyDisabledUsers = new Set<string>();
 const _cachedGuildsMap = new Map<string, Set<string>>();
 let _cancelBatch = false;
+
+function boostLocalGhostVolume(userId: string) {
+    try {
+        const MediaEngineActions = findByProps("setLocalVolume");
+        if (MediaEngineActions?.setLocalVolume) {
+            MediaEngineActions.setLocalVolume(userId, 200);
+        }
+    } catch {}
+}
+
 let ghostListeners: Array<() => void> = [];
 function notify() { ghostListeners.forEach(f => f()); }
 
@@ -294,35 +435,44 @@ const _pendingDisconnectTimers = new Map<string, ReturnType<typeof setTimeout>>(
 
 function syncGhostStateFromDiscord(userId: string) {
     try {
+        const myId = getMyId();
+        if (myId && userId === myId) return;
+        const cur = ghostStates.get(userId) ?? defaultState();
+        if (_manuallyDisabledUsers.has(userId)) {
+            if (cur.active || cur.connecting) {
+                ghostStates.set(userId, { ...cur, active: false, connecting: false });
+                notify();
+            }
+            return;
+        }
         if (_leavingUsers.has(userId)) {
             const vs = VoiceStateStore?.getVoiceStateForUser?.(userId);
             if (!vs || !vs.channelId) {
                 _leavingUsers.delete(userId);
+                ghostStates.set(userId, { ...cur, active: false, connecting: false });
+                notify();
             }
             return;
         }
-        const cur = ghostStates.get(userId) ?? defaultState();
-        // Ne JAMAIS écraser active ou connecting pendant qu'un compte se connecte
-        if (cur.connecting) return;
+        // Ne bloquer que si un batch est véritablement en cours d'exécution
+        if (cur.connecting && isConnectingBatch) return;
 
         const vs = VoiceStateStore?.getVoiceStateForUser?.(userId);
         if (!vs || !vs.channelId) {
-            if (cur.active) {
-                // Debounce de 2.5s pour absorber les micro-déconnexions / glissades de salon vocal Discord
-                if (!_pendingDisconnectTimers.has(userId)) {
-                    const timer = setTimeout(() => {
-                        _pendingDisconnectTimers.delete(userId);
-                        const freshVs = VoiceStateStore?.getVoiceStateForUser?.(userId);
-                        if (!freshVs || !freshVs.channelId) {
-                            const freshCur = ghostStates.get(userId) ?? defaultState();
-                            if (!freshCur.connecting && !_leavingUsers.has(userId)) {
-                                ghostStates.set(userId, { ...freshCur, active: false, connecting: false, streaming: false, camera: false });
-                                notify();
-                            }
-                        }
-                    }, 2500);
-                    _pendingDisconnectTimers.set(userId, timer);
+            if (cur.active || cur.connecting) {
+                if (_pendingDisconnectTimers.has(userId)) {
+                    clearTimeout(_pendingDisconnectTimers.get(userId)!);
                 }
+                const timer = setTimeout(() => {
+                    _pendingDisconnectTimers.delete(userId);
+                    const freshVs = VoiceStateStore?.getVoiceStateForUser?.(userId);
+                    if (!freshVs || !freshVs.channelId) {
+                        const freshCur = ghostStates.get(userId) ?? defaultState();
+                        ghostStates.set(userId, { ...freshCur, active: false, connecting: false, streaming: false, camera: false });
+                        notify();
+                    }
+                }, 5000);
+                _pendingDisconnectTimers.set(userId, timer);
             }
             return;
         }
@@ -339,7 +489,7 @@ function syncGhostStateFromDiscord(userId: string) {
         const camera = Boolean(vs.selfVideo);
         const streaming = Boolean(vs.selfStream);
 
-        if (cur.active !== active || cur.muted !== muted || cur.deafened !== deafened || cur.camera !== camera || cur.streaming !== streaming) {
+        if (cur.active !== active || cur.connecting || cur.muted !== muted || cur.deafened !== deafened || cur.camera !== camera || cur.streaming !== streaming) {
             ghostStates.set(userId, {
                 ...cur,
                 active,
@@ -368,16 +518,37 @@ function getMyId(): string {
     try { return UserStore?.getCurrentUser?.()?.id ?? ""; } catch { return ""; }
 }
 
-function getMyVoiceState() {
+function getMyVoiceState(): { channelId: string; guildId: string; isDM?: boolean } | null {
     try {
         const id = getMyId();
-        if (!id) return null;
-        const vs = VoiceStateStore?.getVoiceStateForUser?.(id);
-        if (vs?.channelId) return { channelId: vs.channelId, guildId: vs.guildId ?? ChannelStore?.getChannel?.(vs.channelId)?.guild_id ?? "" };
-        const chId = VoiceStateStore?.getCurrentClientVoiceChannelId?.();
-        if (chId) { const ch = ChannelStore?.getChannel?.(chId); return { channelId: chId, guildId: ch?.guild_id ?? "" }; }
-    } catch {}
-    return null;
+        let channelId = "";
+        let guildId = "";
+
+        if (id) {
+            const vs = VoiceStateStore?.getVoiceStateForUser?.(id);
+            if (vs?.channelId) {
+                channelId = vs.channelId;
+                guildId = vs.guildId ?? "";
+            }
+        }
+
+        if (!channelId) {
+            channelId = SelectedChannelStore?.getVoiceChannelId?.() ?? "";
+        }
+
+        if (!channelId) return null;
+
+        const ch = ChannelStore?.getChannel?.(channelId);
+        if (ch) {
+            guildId = guildId || ch.guild_id || (typeof ch.getGuildId === "function" ? ch.getGuildId() : "") || "";
+            const isDM = ch.type === 1 || ch.type === 3 || Boolean(ch.isDM?.()) || Boolean(ch.isGroupDM?.());
+            return { channelId, guildId: guildId || "", isDM: Boolean(isDM) };
+        }
+
+        return { channelId, guildId: guildId || "" };
+    } catch {
+        return null;
+    }
 }
 
 function avatarUrl(userId: string, avatar: string | null) {
@@ -444,22 +615,27 @@ async function validateToken(rawToken: string): Promise<GhostAccount | null> {
                     token
                 };
             }
+            return null;
         }
     } catch {}
 
     try {
-        const r = await fetch("https://discord.com/api/v9/users/@me", {
-            headers: { Authorization: token },
-            signal: AbortSignal.timeout(6000),
-        });
-        if (r.ok) {
-            const d = await r.json();
-            return {
-                userId: d.id,
-                username: d.global_name || d.username,
-                avatar: d.avatar ? String(d.avatar).split("/").pop()?.split(".")[0] || null : null,
-                token
-            };
+        const netFetch = (VencordNative as any)?.guncord?.netFetch;
+        if (typeof netFetch === "function") {
+            const r = await netFetch("https://discord.com/api/v9/users/@me", {
+                headers: { Authorization: token },
+                timeout: 6000,
+            });
+            if (r?.ok && r.body) {
+                const d = JSON.parse(r.body);
+                return {
+                    userId: d.id,
+                    username: d.global_name || d.username,
+                    avatar: d.avatar ? String(d.avatar).split("/").pop()?.split(".")[0] || null : null,
+                    token
+                };
+            }
+            return null;
         }
     } catch {}
 
@@ -475,12 +651,14 @@ async function getAllSavedAccounts(forceScan = false): Promise<GhostAccount[]> {
         return savedAccounts;
     }
 
+    const myId = getMyId();
     const combined = new Map<string, GhostAccount>();
 
     // 1. Lire les comptes de TokenImporter
     const tiAccsRaw = await DataStore.get<any[]>(TI_ACCOUNTS_KEY) ?? [];
     for (const a of tiAccsRaw) {
         const uid = a.id || a.userId;
+        if (myId && uid === myId) continue;
         let tk = cleanToken(a.token);
         if (tk.startsWith("dQw4w9WgXcQ:")) {
             tk = await decryptToken(tk);
@@ -500,6 +678,7 @@ async function getAllSavedAccounts(forceScan = false): Promise<GhostAccount[]> {
     const gc2Accs = await DataStore.get<any[]>("guncord-ghost-v2-tokens") ?? [];
     for (const a of [...gc1Accs, ...gc2Accs]) {
         const uid = a.userId || a.id;
+        if (myId && uid === myId) continue;
         let tk = cleanToken(a.token);
         if (tk.startsWith("dQw4w9WgXcQ:")) {
             tk = await decryptToken(tk);
@@ -531,6 +710,7 @@ async function getAllSavedAccounts(forceScan = false): Promise<GhostAccount[]> {
 
                         const verified = await validateToken(decrypted);
                         if (verified && verified.userId) {
+                            if (myId && String(verified.userId) === String(myId)) continue;
                             combined.set(verified.userId, verified);
                         }
                     }
@@ -544,7 +724,6 @@ async function getAllSavedAccounts(forceScan = false): Promise<GhostAccount[]> {
     }
 
     // Ne jamais inclure l'utilisateur actuel
-    const myId = getMyId();
     if (myId) combined.delete(myId);
 
     const result = Array.from(combined.values());
@@ -554,6 +733,7 @@ async function getAllSavedAccounts(forceScan = false): Promise<GhostAccount[]> {
 }
 
 async function ghostDeactivate(userId: string) {
+    _manuallyDisabledUsers.add(userId);
     if (_pendingDisconnectTimers.has(userId)) {
         clearTimeout(_pendingDisconnectTimers.get(userId)!);
         _pendingDisconnectTimers.delete(userId);
@@ -567,15 +747,18 @@ async function ghostDisableClean(targetIds?: string[]): Promise<{ forcedIds: str
     _cancelBatch = true;
     isConnectingBatch = false;
 
-    const ids = targetIds && targetIds.length > 0
+    const myId = getMyId();
+    const ids = (targetIds && targetIds.length > 0
         ? targetIds
-        : Array.from(new Set([...ghostStates.keys(), ...savedAccounts.map(a => a.userId)]));
+        : Array.from(new Set([...ghostStates.keys(), ...savedAccounts.map(a => a.userId)]))
+    ).filter(id => id && (!myId || String(id) !== String(myId)));
     if (!ids.length) return { forcedIds: [] };
 
     const curVoice = getMyVoiceState();
     const guildId = curVoice?.guildId;
 
     for (const userId of ids) {
+        _manuallyDisabledUsers.add(userId);
         if (_pendingDisconnectTimers.has(userId)) {
             clearTimeout(_pendingDisconnectTimers.get(userId)!);
             _pendingDisconnectTimers.delete(userId);
@@ -641,6 +824,7 @@ function startFollowing() {
 
             const activeAccs = accounts.filter(a =>
                 !_leavingUsers.has(a.userId) &&
+                !_manuallyDisabledUsers.has(a.userId) &&
                 (ghostStates.get(a.userId)?.active === true || ghostStates.get(a.userId)?.connecting === true)
             );
             if (!activeAccs.length) return;
@@ -650,15 +834,7 @@ function startFollowing() {
             if (ghostJoinDelay === 0) {
                 await Promise.all(activeAccs.map(async acc => {
                     if (newCh) {
-                        if (guild) {
-                            const known = _cachedGuildsMap.get(acc.userId);
-                            if (known && !known.has(guild)) {
-                                const cur = ghostStates.get(acc.userId) ?? defaultState();
-                                ghostStates.set(acc.userId, { ...cur, active: false, connecting: false, error: t("Not in server") });
-                                notify();
-                                return;
-                            }
-                        }
+
                         let realToken = acc.token;
                         try { realToken = await decryptToken(acc.token); } catch {}
                         const cur = ghostStates.get(acc.userId) ?? defaultState();
@@ -690,15 +866,7 @@ function startFollowing() {
                 for (let i = 0; i < activeAccs.length; i++) {
                     const acc = activeAccs[i];
                     if (newCh) {
-                        if (guild) {
-                            const known = _cachedGuildsMap.get(acc.userId);
-                            if (known && !known.has(guild)) {
-                                const cur = ghostStates.get(acc.userId) ?? defaultState();
-                                ghostStates.set(acc.userId, { ...cur, active: false, connecting: false, error: t("Not in server") });
-                                notify();
-                                continue;
-                            }
-                        }
+
                         let realToken = acc.token;
                         try { realToken = await decryptToken(acc.token); } catch {}
                         const cur = ghostStates.get(acc.userId) ?? defaultState();
@@ -821,40 +989,68 @@ function TokenControls({ acc, state }: { acc: GhostAccount; state: GhostState })
     }
 
     return (
-        <>
-            <button
-                className={`gc-ctrl-btn ${state.muted ? "gc-ctrl-btn--muted" : ""}`}
-                title={state.muted ? t("Unmute") : t("Mute")}
-                onClick={() => toggle("mute")}
-                disabled={!!busy}
-            >
-                {state.muted ? <MicOffIcon /> : <MicIcon />}
-            </button>
-            <button
-                className={`gc-ctrl-btn ${state.deafened ? "gc-ctrl-btn--deafened" : ""}`}
-                title={state.deafened ? t("Undeafen") : t("Deafen")}
-                onClick={() => toggle("deafen")}
-                disabled={!!busy}
-            >
-                {state.deafened ? <DeafenIcon /> : <UndeafenIcon />}
-            </button>
-            <button
-                className={`gc-ctrl-btn ${state.streaming ? "gc-ctrl-btn--streaming" : ""}`}
-                title={state.streaming ? t("Stop stream") : t("Start stream")}
-                onClick={() => toggle("stream")}
-                disabled={!!busy}
-            >
-                <StreamIcon />
-            </button>
-            <button
-                className={`gc-ctrl-btn ${state.camera ? "gc-ctrl-btn--cam" : ""}`}
-                title={state.camera ? t("Turn off camera") : t("Turn on camera")}
-                onClick={() => toggle("camera")}
-                disabled={!!busy}
-            >
-                <CamIcon />
-            </button>
-        </>
+        <div className="gc-account-actions">
+            <Tooltip text={state.muted ? t("Unmute") : t("Mute")}>
+                {(props: any) => (
+                    <Button
+                        {...props}
+                        size="iconOnly"
+                        variant={state.muted ? "dangerPrimary" : "secondary"}
+                        className="gc-action-btn"
+                        onClick={() => toggle("mute")}
+                        disabled={!!busy}
+                        aria-label={state.muted ? t("Unmute") : t("Mute")}
+                    >
+                        {state.muted ? <MicOffIcon width={14} height={14} /> : <MicIcon width={14} height={14} />}
+                    </Button>
+                )}
+            </Tooltip>
+            <Tooltip text={state.deafened ? t("Undeafen") : t("Deafen")}>
+                {(props: any) => (
+                    <Button
+                        {...props}
+                        size="iconOnly"
+                        variant={state.deafened ? "dangerPrimary" : "secondary"}
+                        className="gc-action-btn"
+                        onClick={() => toggle("deafen")}
+                        disabled={!!busy}
+                        aria-label={state.deafened ? t("Undeafen") : t("Deafen")}
+                    >
+                        {state.deafened ? <DeafenIcon width={14} height={14} /> : <UndeafenIcon width={14} height={14} />}
+                    </Button>
+                )}
+            </Tooltip>
+            <Tooltip text={state.streaming ? t("Stop stream") : t("Start stream")}>
+                {(props: any) => (
+                    <Button
+                        {...props}
+                        size="iconOnly"
+                        variant={state.streaming ? "primary" : "secondary"}
+                        className="gc-action-btn"
+                        onClick={() => toggle("stream")}
+                        disabled={!!busy}
+                        aria-label={state.streaming ? t("Stop stream") : t("Start stream")}
+                    >
+                        <StreamIcon width={14} height={14} />
+                    </Button>
+                )}
+            </Tooltip>
+            <Tooltip text={state.camera ? t("Turn off camera") : t("Turn on camera")}>
+                {(props: any) => (
+                    <Button
+                        {...props}
+                        size="iconOnly"
+                        variant={state.camera ? "primary" : "secondary"}
+                        className="gc-action-btn"
+                        onClick={() => toggle("camera")}
+                        disabled={!!busy}
+                        aria-label={state.camera ? t("Turn off camera") : t("Turn on camera")}
+                    >
+                        <CamIcon width={14} height={14} />
+                    </Button>
+                )}
+            </Tooltip>
+        </div>
     );
 }
 
@@ -869,29 +1065,123 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
     const [sliderKey, setSliderKey] = useState(0);
     const [dshowDevices, setDshowDevices] = useState<string[]>([]);
     const [serverInstalled, setServerInstalled] = useState<boolean>(true);
+    const [showEq, setShowEq] = useState(false);
+    const [eqBass, setEqBass] = useState(ghostEqBass);
+    const [eqTreble, setEqTreble] = useState(ghostEqTreble);
+    const [eqMid, setEqMid] = useState(ghostEqMid);
+    const [eqEnabled, setEqEnabled] = useState(ghostEqEnabled);
+    const [showAmpPan, setShowAmpPan] = useState(false);
+    const [ampConfig, setAmpConfig] = useState<any>(ghostAmpConfig || defaultAmpConfig);
+    const [customPans, setCustomPans] = useState<string[]>([]);
+    const [customOpus, setCustomOpus] = useState<{ id: string; label: string }[]>([]);
+
+    const updateAmp = (partial: any) => {
+        setAmpConfig((prev: any) => {
+            const next = { ...prev, ...partial };
+            ghostAmpConfig = next;
+            DataStore.set(DS_KEY_AMP_CONFIG, next).catch(() => {});
+            Native.setAmpPanParams(next).catch(() => {});
+            return next;
+        });
+    };
+
+    const resetAllAmpSettings = () => {
+        const fresh = { ...defaultAmpConfig, enabled: false };
+        setAmpConfig(fresh);
+        ghostAmpConfig = fresh;
+        DataStore.set(DS_KEY_AMP_CONFIG, fresh).catch(() => {});
+        Native.setAmpPanParams(fresh).catch(() => {});
+    };
+
+    const addCustomPan = () => {
+        const name = window.prompt(t("Name of custom pan (e.g. 8D Extreme):"));
+        if (name && name.trim()) {
+            const trimmed = name.trim();
+            const next = [...customPans, trimmed];
+            setCustomPans(next);
+            DataStore.set(DS_KEY_CUSTOM_PANS, next).catch(() => {});
+            updateAmp({ panType: BASE_PAN_TYPES.length + customPans.length });
+        }
+    };
+
+    const addCustomOpus = () => {
+        const bpsStr = window.prompt(t("Bitrate in bps (e.g. 320000):"));
+        if (!bpsStr) return;
+        const bps = parseInt(bpsStr.trim(), 10);
+        if (isNaN(bps) || bps <= 0) return;
+        const lbl = window.prompt(t("Label (e.g. 320k Custom):")) || `${Math.round(bps / 1000)}k Custom`;
+        const next = [...customOpus, { id: String(bps), label: lbl }];
+        setCustomOpus(next);
+        DataStore.set(DS_KEY_CUSTOM_OPUS, next).catch(() => {});
+        updateAmp({ opusBitrate: bps });
+    };
+
+
+    const applyEq = (bass: number, treble: number, mid: number, enabled: boolean) => {
+        setEqBass(bass);
+        setEqTreble(treble);
+        setEqMid(mid);
+        setEqEnabled(enabled);
+        ghostEqBass = bass;
+        ghostEqTreble = treble;
+        ghostEqMid = mid;
+        ghostEqEnabled = enabled;
+        DataStore.set(DS_KEY_EQ_BASS, bass);
+        DataStore.set(DS_KEY_EQ_TREBLE, treble);
+        DataStore.set(DS_KEY_EQ_MID, mid);
+        DataStore.set(DS_KEY_EQ_ENABLED, enabled);
+        Native.setEq(bass, treble, mid, enabled).catch(() => {});
+    };
     const states = useGhostStates();
     const popoverRef = useRef<HTMLDivElement>(null);
+    const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
+
+    useEffect(() => {
+        const onResize = () => setWindowSize({ w: window.innerWidth, h: window.innerHeight });
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
+    }, []);
 
     const style = React.useMemo<React.CSSProperties>(() => {
-        if (!anchorRect) return { position: "fixed", bottom: 60, left: 8, zIndex: 995 };
-        const PW = 380, margin = 10;
-        let left = anchorRect.left;
+        const margin = 10;
+        const PW = 380 + (showEq ? 260 : 0) + (showAmpPan ? 390 : 0);
+
+        let left = anchorRect ? anchorRect.left : margin;
         if (left + PW > window.innerWidth - margin) left = window.innerWidth - PW - margin;
         if (left < margin) left = margin;
 
-        const bottom = Math.max(margin, window.innerHeight - anchorRect.top + 8);
-        const maxHeight = Math.max(260, anchorRect.top - 16);
+        let bottom = anchorRect ? Math.max(margin, window.innerHeight - anchorRect.top + 8) : 60;
+        const maxAllowed = Math.min(window.innerHeight - 20, 680);
+
+        // Clamping: ensure the popover wrapper NEVER extends beyond the top of the window!
+        if (bottom + maxAllowed > window.innerHeight - margin) {
+            bottom = Math.max(margin, window.innerHeight - maxAllowed - margin);
+        }
+
+        const maxHeight = Math.max(220, window.innerHeight - bottom - margin);
+
         return {
             position: "fixed",
             left,
             bottom,
             maxHeight,
+            maxWidth: `calc(100vw - ${left + margin}px)`,
             zIndex: 995
         };
-    }, [anchorRect]);
+    }, [anchorRect, showEq, showAmpPan, windowSize]);
+
+    const handleWrapperWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+        const target = e.target as HTMLElement;
+        const isInsideVerticalScroller = target.closest(".gc-popover-body, .gc-amp-panel, .gc-vm-panel, .gc-accounts");
+        if (!isInsideVerticalScroller && popoverRef.current) {
+            popoverRef.current.scrollLeft += e.deltaY;
+        }
+    };
 
     useEffect(() => {
         Native.isServerInstalled().then(v => setServerInstalled(Boolean(v))).catch(() => setServerInstalled(true));
+        Native.setEq(ghostEqBass, ghostEqTreble, ghostEqMid, ghostEqEnabled).catch(() => {});
+        Native.setAmpPanParams(ghostAmpConfig || defaultAmpConfig).catch(() => {});
 
         const syncStates = (accs: GhostAccount[]) => {
             for (const a of accs) {
@@ -929,6 +1219,51 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                 syncStates(v);
             });
         }
+
+        setShowAmpPan(false);
+        ghostShowAmpPan = false;
+        setShowEq(false);
+        ghostShowEq = false;
+        Promise.all([
+            DataStore.get(DS_KEY_EQ_BASS),
+            DataStore.get(DS_KEY_EQ_TREBLE),
+            DataStore.get(DS_KEY_EQ_MID),
+            DataStore.get(DS_KEY_EQ_ENABLED),
+        ]).then(([b, tr, m, en]) => {
+            const nextBass = typeof b === "number" ? b : ghostEqBass;
+            const nextTreble = typeof tr === "number" ? tr : ghostEqTreble;
+            const nextMid = typeof m === "number" ? m : ghostEqMid;
+            const nextEn = typeof en === "boolean" ? en : ghostEqEnabled;
+            setEqBass(nextBass);
+            setEqTreble(nextTreble);
+            setEqMid(nextMid);
+            setEqEnabled(nextEn);
+            ghostEqBass = nextBass;
+            ghostEqTreble = nextTreble;
+            ghostEqMid = nextMid;
+            ghostEqEnabled = nextEn;
+            Native.setEq(nextBass, nextTreble, nextMid, nextEn).catch(() => {});
+        }).catch(() => {});
+        DataStore.get(DS_KEY_AMP_CONFIG).then((v: any) => {
+            if (v && typeof v === "object") {
+                const merged = { ...defaultAmpConfig, ...v };
+                setAmpConfig(merged);
+                ghostAmpConfig = merged;
+                Native.setAmpPanParams(merged).catch(() => {});
+            }
+        }).catch(() => {});
+        DataStore.get(DS_KEY_CUSTOM_PANS).then((v: any) => {
+            if (Array.isArray(v)) setCustomPans(v);
+        }).catch(() => {});
+        DataStore.get(DS_KEY_CUSTOM_OPUS).then((v: any) => {
+            if (Array.isArray(v)) setCustomOpus(v);
+        }).catch(() => {});
+        Native.getAmpPanParams().then((res: any) => {
+            if (res?.config) {
+                setAmpConfig(res.config);
+                ghostAmpConfig = res.config;
+            }
+        }).catch(() => {});
 
         DataStore.get(DS_KEY_AUTO_FOLLOW).then((v: boolean | null) => {
             const f = v ?? false;
@@ -1016,9 +1351,9 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
     const isAll = selectedId === "all";
 
     function extractOptionValue(raw: any): string {
-        if (!raw) return "all";
-        if (typeof raw === "string") return raw;
+        if (raw === undefined || raw === null) return "";
         if (typeof raw === "number") return String(raw);
+        if (typeof raw === "string") return raw;
         if (raw instanceof Set) {
             const first = raw.values().next().value;
             return extractOptionValue(first);
@@ -1036,7 +1371,7 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
     }
 
     function handleAccountSelect(raw: any) {
-        const val = extractOptionValue(raw);
+        const val = extractOptionValue(raw) || "all";
         if (val !== "all" && val === myId) {
             Toasts.show({ message: t("You cannot connect your own account as a ghost"), type: Toasts.Type.FAILURE, id: Toasts.genId() });
             return;
@@ -1188,44 +1523,144 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
     ];
 
     const handleMicSelect = (raw: any) => {
-        const v = extractOptionValue(raw);
+        const v = extractOptionValue(raw) || "default";
         setMicLabel(v);
         ghostMicLabel = v;
         DataStore.set(DS_KEY_MIC_DEVICE, v);
         Native.setMicDevice(v).catch(() => {});
     };
 
+    const stereoOptions = STEREO_MODES.map((mode, i) => ({
+        key: String(i),
+        value: i,
+        label: mode,
+    }));
+
+    const panOptions = [
+        ...BASE_PAN_TYPES.map((pt, i) => ({ key: String(i), value: i, label: pt })),
+        ...customPans.map((pt, i) => ({ key: String(BASE_PAN_TYPES.length + i), value: BASE_PAN_TYPES.length + i, label: pt })),
+    ];
+
+    const notNattyOptions = NOT_NATTY_MODES.map((nn, i) => ({
+        key: String(i),
+        value: i,
+        label: nn,
+    }));
+
+    const opusBitrateOptions = [
+        ...BASE_OPUS_BITRATES.map(br => ({ key: br.id, value: parseInt(br.id, 10), label: br.label })),
+        ...customOpus.map(br => ({ key: br.id, value: parseInt(br.id, 10), label: br.label })),
+    ];
+
+    const handleStereoSelect = (raw: any) => {
+        const num = parseInt(extractOptionValue(raw), 10);
+        if (!isNaN(num)) updateAmp({ stereoMode: num });
+    };
+
+    const handlePanTypeSelect = (raw: any) => {
+        const num = parseInt(extractOptionValue(raw), 10);
+        if (!isNaN(num)) updateAmp({ panType: num });
+    };
+
+    const handleNotNattySelect = (raw: any) => {
+        const num = parseInt(extractOptionValue(raw), 10);
+        if (!isNaN(num)) updateAmp({ notNatty: num });
+    };
+
+    const handleOpusBitrateSelect = (raw: any) => {
+        const num = parseInt(extractOptionValue(raw), 10);
+        if (!isNaN(num)) updateAmp({ opusBitrate: num });
+    };
+
     return (
-        <div ref={popoverRef} className="gc-popover" style={style}>
+        <div ref={popoverRef} className="gc-popover-wrapper" style={style} onWheel={handleWrapperWheel}>
+            <div className="gc-popover">
             <div className="gc-popover-header">
-                <GhostIcon width={16} height={16} />
-                <span className="gc-popover-title">{t("Ghost Accounts")}</span>
-                <button className="gc-popover-close" onClick={onClose} title={t("Close")}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+                    <GhostIcon width={16} height={16} />
+                    <Text variant="text-md/bold" color="header-primary" className="gc-popover-title">
+                        {t("Ghost Accounts")}
+                    </Text>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <Tooltip text={t("Amp & Pan Engine")}>
+                        {(props: any) => (
+                            <button
+                                {...props}
+                                className={`gc-amp-header-btn ${showAmpPan ? "gc-amp-header-btn--active" : ""}`}
+                                onClick={() => {
+                                    const next = !showAmpPan;
+                                    setShowAmpPan(next);
+                                    ghostShowAmpPan = next;
+                                    DataStore.set(DS_KEY_SHOW_AMP_PAN, next);
+                                }}
+                                aria-label={t("Amp & Pan Engine")}
+                            >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
+                                    <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+                                    <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+                                    <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
+                                </svg>
+                            </button>
+                        )}
+                    </Tooltip>
+                    <Tooltip text={t("Equalizer")}>
+                        {(props: any) => (
+                            <button
+                                {...props}
+                                className={`gc-eq-header-btn ${showEq ? "gc-eq-header-btn--active" : ""}`}
+                                onClick={() => {
+                                    const next = !showEq;
+                                    setShowEq(next);
+                                    ghostShowEq = next;
+                                    DataStore.set(DS_KEY_SHOW_EQ, next);
+                                }}
+                                aria-label={t("Equalizer")}
+                            >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="18" y1="20" x2="18" y2="10" />
+                                    <line x1="12" y1="20" x2="12" y2="4" />
+                                    <line x1="6" y1="20" x2="6" y2="14" />
+                                </svg>
+                            </button>
+                        )}
+                    </Tooltip>
+                    <ModalCloseButton onClick={onClose} />
+                </div>
             </div>
 
             <div className="gc-popover-body">
                 {/* Server alert banner */}
                 {!serverInstalled && (
                     <div className="gc-server-alert">
-                        <div className="gc-server-alert-title">{t("Companion Server Required")}</div>
-                        <div className="gc-server-alert-desc">{t("The background server is required to connect voice and stream audio.")}</div>
-                        <button
-                            className="gc-server-install-btn"
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
+                            <Text variant="text-xs/bold" color="text-danger" style={{ textTransform: "uppercase", letterSpacing: 0.5 }}>
+                                {t("Companion Server Required")}
+                            </Text>
+                            <Text variant="text-xs/normal" color="text-muted">
+                                {t("The background ghost-server is required to connect voice and stream audio.")}
+                            </Text>
+                        </div>
+                        <Button
+                            size="small"
+                            variant="dangerPrimary"
                             onClick={() => {
                                 onClose();
                                 SettingsRouter.openUserSettings("guncord_ghost_client_installer_panel");
                             }}
                         >
                             {t("Open Installer")}
-                        </button>
+                        </Button>
                     </div>
                 )}
 
                 {/* Account and Mic Selectors */}
                 <div className="gc-dropdown-wrap">
-                    <div className="gc-dropdown-label"><UserIcon /><span>{t("Active accounts")}</span></div>
+                    <div className="gc-dropdown-label">
+                        <UserIcon />
+                        <Text variant="eyebrow" color="header-secondary">{t("Active accounts")}</Text>
+                    </div>
                     <Select
                         options={accountOptions}
                         value={selectedId}
@@ -1243,7 +1678,10 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                     />
                 </div>
                 <div className="gc-dropdown-wrap">
-                    <div className="gc-dropdown-label"><MicIcon /><span>{t("Source microphone")}</span></div>
+                    <div className="gc-dropdown-label">
+                        <MicIcon />
+                        <Text variant="eyebrow" color="header-secondary">{t("Source microphone")}</Text>
+                    </div>
                     <Select
                         options={micOptions}
                         value={micLabel}
@@ -1260,60 +1698,76 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
 
                 <div className="gc-popover-divider" />
 
-                {/* Auto-follow toggle */}
-                <div className="gc-follow-row" onClick={() => toggleAutoFollow(!autoFollow)}>
-                    <div className="gc-follow-info">
-                        <span className="gc-follow-title">{t("Automatic voice tracking")}</span>
-                        <span className="gc-follow-sub">{t("Ghosts join your channel in real time")}</span>
-                    </div>
-                    <div className={`gc-toggle ${autoFollow ? "gc-toggle--on" : ""}`}><div className="gc-toggle-thumb" /></div>
-                </div>
+                {/* Auto-follow toggle (Discord native FormSwitch) */}
+                <FormSwitch
+                    title={t("Automatic voice tracking")}
+                    description={t("Ghosts join your channel in real time")}
+                    value={autoFollow}
+                    onChange={toggleAutoFollow}
+                    hideBorder={true}
+                    className="gc-form-switch"
+                />
 
                 {/* Join delay */}
                 <div className="gc-delay-row">
                     <div className="gc-delay-info">
-                        <span className="gc-delay-title"><TimerIcon /> {t("Join delay")}</span>
-                        <span className="gc-delay-sub">{t("Delay between each token connection")}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <TimerIcon width={14} height={14} />
+                            <Text variant="text-sm/semibold" color="header-primary">{t("Join delay")}</Text>
+                        </div>
+                        <Text variant="text-xs/normal" color="text-muted">{t("Delay between each token connection")}</Text>
                     </div>
                     <div className="gc-delay-ctrl">
-                        <button className="gc-delay-btn" onClick={() => {
-                            const v = Math.max(0, joinDelay - 50);
-                            setJoinDelay(v); ghostJoinDelay = v; DataStore.set(DS_KEY_JOIN_DELAY, v);
-                        }}>−</button>
-                        <span className="gc-delay-val">{joinDelay}ms</span>
-                        <button className="gc-delay-btn" onClick={() => {
-                            const v = Math.min(5000, joinDelay + 50);
-                            setJoinDelay(v); ghostJoinDelay = v; DataStore.set(DS_KEY_JOIN_DELAY, v);
-                        }}>+</button>
+                        <Button
+                            size="small"
+                            variant="secondary"
+                            className="gc-stepper-btn"
+                            onClick={() => {
+                                const v = Math.max(0, joinDelay - 50);
+                                setJoinDelay(v); ghostJoinDelay = v; DataStore.set(DS_KEY_JOIN_DELAY, v);
+                            }}
+                        >
+                            −
+                        </Button>
+                        <Text variant="text-xs/bold" color="header-primary" className="gc-delay-val">
+                            {joinDelay}ms
+                        </Text>
+                        <Button
+                            size="small"
+                            variant="secondary"
+                            className="gc-stepper-btn"
+                            onClick={() => {
+                                const v = Math.min(5000, joinDelay + 50);
+                                setJoinDelay(v); ghostJoinDelay = v; DataStore.set(DS_KEY_JOIN_DELAY, v);
+                            }}
+                        >
+                            +
+                        </Button>
                     </div>
                 </div>
 
                 {/* Volume Booster */}
-                <div style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                    padding: "9px 11px",
-                    background: "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(255,255,255,0.06)",
-                    borderRadius: 6,
-                    boxSizing: "border-box"
-                }}>
+                <div className="gc-booster-card">
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div className="gc-delay-info">
-                            <span className="gc-delay-title" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                <VolumeIcon /> {t("Volume Booster")}
-                            </span>
-                            <span className="gc-delay-sub">{t("Radically amplifies or lowers selected device volume")}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <VolumeIcon width={14} height={14} />
+                                <Text variant="text-sm/semibold" color="header-primary">{t("Volume Booster")}</Text>
+                            </div>
+                            <Text variant="text-xs/normal" color="text-muted">{t("Radically amplifies or lowers selected device volume")}</Text>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: volumeMultiplier > 1 ? "#faa61a" : "#fff", minWidth: 40, textAlign: "right", fontFamily: "monospace" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <Text
+                                variant="text-xs/bold"
+                                color={volumeMultiplier > 1 ? "status-warning" : "header-primary"}
+                                style={{ minWidth: 40, textAlign: "right", fontFamily: "var(--font-code, monospace)" }}
+                            >
                                 {Math.round(volumeMultiplier * 100)}%
-                            </span>
-                            <button
-                                className="gc-delay-btn"
-                                title={t("Reset volume")}
-                                style={{ width: "auto", padding: "2px 6px", fontSize: 11 }}
+                            </Text>
+                            <Button
+                                size="small"
+                                variant="secondary"
+                                className="gc-reset-btn"
                                 onClick={() => {
                                     setVolumeMultiplier(1.0);
                                     ghostVolumeMultiplier = 1.0;
@@ -1323,11 +1777,11 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                                 }}
                             >
                                 {t("Reset")}
-                            </button>
+                            </Button>
                         </div>
                     </div>
                     {Slider ? (
-                        <div style={{ padding: "4px 2px 8px" }}>
+                        <div style={{ padding: "6px 2px 2px" }}>
                             <Slider
                                 key={sliderKey}
                                 minValue={0}
@@ -1364,8 +1818,8 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                                 height: 6,
                                 borderRadius: 3,
                                 cursor: "pointer",
-                                accentColor: "#5865f2",
-                                background: "rgba(255,255,255,0.15)",
+                                accentColor: "var(--brand-500, #5865f2)",
+                                background: "var(--background-modifier-accent)",
                             }}
                         />
                     )}
@@ -1374,10 +1828,14 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                 <div className="gc-popover-divider" />
 
                 {/* Accounts list header */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div className="gc-section-label">{t("Accounts (Native + Imported)")}</div>
-                    <button
-                        style={{ background: "none", border: "none", color: "#5865f2", fontSize: 11, fontWeight: 600, cursor: "pointer", padding: "2px 4px" }}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2, flexShrink: 0 }}>
+                    <Text variant="eyebrow" color="header-secondary">
+                        {t("Accounts (Native + Imported)")}
+                    </Text>
+                    <Button
+                        size="small"
+                        variant="link"
+                        className="gc-reverify-btn"
                         onClick={async () => {
                             Toasts.show({ message: t("Checking tokens..."), type: Toasts.Type.INFO, id: Toasts.genId() });
                             let ok = 0;
@@ -1398,14 +1856,16 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                         }}
                     >
                         {t("Re-verify")}
-                    </button>
+                    </Button>
                 </div>
 
                 {/* Batch controls */}
                 {accounts.length > 0 && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5 }}>
-                        <button
-                            className="gc-batch-btn"
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, flexShrink: 0 }}>
+                        <Button
+                            size="small"
+                            variant={accounts.some(a => ghostStates.get(a.userId)?.muted) ? "dangerPrimary" : "secondary"}
+                            className="gc-batch-button"
                             title={t("Mute / Unmute all tokens")}
                             onClick={async () => {
                                 const anyMuted = accounts.some(a => ghostStates.get(a.userId)?.muted);
@@ -1420,9 +1880,11 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                             }}
                         >
                             {accounts.some(a => ghostStates.get(a.userId)?.muted) ? t("Unmute All") : t("Mute All")}
-                        </button>
-                        <button
-                            className="gc-batch-btn"
+                        </Button>
+                        <Button
+                            size="small"
+                            variant={accounts.some(a => ghostStates.get(a.userId)?.deafened) ? "dangerPrimary" : "secondary"}
+                            className="gc-batch-button"
                             title={t("Deafen / Undeafen all tokens")}
                             onClick={async () => {
                                 const anyDeaf = accounts.some(a => ghostStates.get(a.userId)?.deafened);
@@ -1437,26 +1899,11 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                             }}
                         >
                             {accounts.some(a => ghostStates.get(a.userId)?.deafened) ? t("Undeaf All") : t("Deafen All")}
-                        </button>
-                        <button
-                            className="gc-batch-btn"
-                            title={t("Start / Stop stream for all tokens")}
-                            onClick={async () => {
-                                const anyStream = accounts.some(a => ghostStates.get(a.userId)?.streaming);
-                                const next = !anyStream;
-                                const ids = accounts.map(a => a.userId);
-                                Native.setStreamAll(ids, next).catch(() => {});
-                                for (const a of accounts) {
-                                    const cur = ghostStates.get(a.userId) ?? defaultState();
-                                    ghostStates.set(a.userId, { ...cur, streaming: next });
-                                }
-                                notify();
-                            }}
-                        >
-                            {accounts.some(a => ghostStates.get(a.userId)?.streaming) ? t("Stop All") : t("Stream All")}
-                        </button>
-                        <button
-                            className="gc-batch-btn"
+                        </Button>
+                        <Button
+                            size="small"
+                            variant={accounts.some(a => ghostStates.get(a.userId)?.camera) ? "primary" : "secondary"}
+                            className="gc-batch-button"
                             title={t("Turn on / off camera for all tokens")}
                             onClick={async () => {
                                 const anyCam = accounts.some(a => ghostStates.get(a.userId)?.camera);
@@ -1471,7 +1918,7 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                             }}
                         >
                             {accounts.some(a => ghostStates.get(a.userId)?.camera) ? t("Cam Off All") : t("Cam All")}
-                        </button>
+                        </Button>
                     </div>
                 )}
 
@@ -1479,7 +1926,9 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                 <div className="gc-accounts">
                     {accounts.length === 0 && (
                         <div className="gc-empty">
-                            {t("No accounts — tokens are automatically scanned from local Discord clients or imported from TokenImporter.")}
+                            <Text variant="text-xs/normal" color="text-muted">
+                                {t("No accounts — tokens are automatically scanned from local Discord clients or imported from TokenImporter.")}
+                            </Text>
                         </div>
                     )}
                     {accounts.map(acc => {
@@ -1495,8 +1944,10 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                                         <div className={`gc-status-dot ${isStreaming ? "gc-dot--stream" : isActive ? "gc-dot--voice" : isConnecting ? "gc-dot--connecting" : "gc-dot--off"}`} />
                                     </div>
                                     <div className="gc-account-info">
-                                        <span className="gc-account-name" title={acc.username}>{acc.username}</span>
-                                        <span className="gc-account-status">
+                                        <Text variant="text-sm/semibold" color="header-primary" className="gc-account-name" title={acc.username}>
+                                            {acc.username}
+                                        </Text>
+                                        <Text variant="text-xs/normal" color="text-muted" className="gc-account-status">
                                             {isConnecting
                                                 ? t("Connecting to voice...")
                                                 : isStreaming
@@ -1510,21 +1961,28 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
                                                                 : state.error
                                                                     ? `${t("Error: ")}${state.error.slice(0, 35)}`
                                                                     : t("Disconnected")}
-                                        </span>
+                                        </Text>
                                     </div>
                                 </div>
-                                <div className="gc-account-actions">
+                                <div className="gc-account-actions-wrap">
                                     <TokenControls acc={acc} state={state} />
-                                    <button
-                                        className="gc-btn-del"
-                                        title={t("Delete account")}
-                                        onClick={async () => {
-                                            await ghostDeactivate(acc.userId);
-                                            await saveAccounts(accounts.filter(a => a.userId !== acc.userId));
-                                        }}
-                                    >
-                                        <TrashIcon />
-                                    </button>
+                                    <Tooltip text={t("Delete account")}>
+                                        {(props: any) => (
+                                            <Button
+                                                {...props}
+                                                size="iconOnly"
+                                                variant="dangerSecondary"
+                                                className="gc-action-btn gc-action-del-btn"
+                                                onClick={async () => {
+                                                    await ghostDeactivate(acc.userId);
+                                                    await saveAccounts(accounts.filter(a => a.userId !== acc.userId));
+                                                }}
+                                                aria-label={t("Delete account")}
+                                            >
+                                                <TrashIcon width={14} height={14} />
+                                            </Button>
+                                        )}
+                                    </Tooltip>
                                 </div>
                             </div>
                         );
@@ -1533,34 +1991,726 @@ function GhostPopover({ onClose, anchorRect }: { onClose: () => void; anchorRect
 
                 {/* TokenImporter helper notice text (replaces manual token textarea) */}
                 <div className="gc-popover-divider" />
-                <div style={{
-                    padding: "8px 10px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    background: "rgba(255,255,255,0.02)",
-                    borderRadius: 6,
-                    border: "1px solid rgba(255,255,255,0.05)",
-                    cursor: "pointer"
-                }} onClick={handleOpenTokenImporter}>
-                    <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", lineHeight: 1.4 }}>
+                <div className="gc-importer-card" onClick={handleOpenTokenImporter}>
+                    <Text variant="text-xs/normal" color="text-muted" style={{ lineHeight: 1.4 }}>
                         {t("Manage and add accounts from the TokenImporter plugin.")}
-                    </span>
-                    <button
-                        className="gc-batch-btn"
-                        style={{ whiteSpace: "nowrap", flexShrink: 0, padding: "4px 8px" }}
-                        onClick={(e) => {
+                    </Text>
+                    <Button
+                        size="small"
+                        variant="primary"
+                        className="gc-importer-btn"
+                        onClick={(e: React.MouseEvent) => {
                             e.stopPropagation();
                             handleOpenTokenImporter();
                         }}
                     >
                         TokenImporter
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>
-    );
+
+        {/* ⚡ 1:1 AUTHENTIC AMP & PAN ENGINE PANEL */}
+        {showAmpPan && (
+            <div className="gc-amp-panel">
+                {/* Note supérieure */}
+                <div className="gc-amp-note">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                    <span>{t("The amp panel never touches the system microphone - only the Discord audio stream")}</span>
+                </div>
+
+                {/* Titre et switch ON/OFF principal */}
+                <div className="gc-amp-title-row">
+                    <span className="gc-amp-title">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                            <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
+                            <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+                            <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+                            <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
+                        </svg>
+                        <span>{t("Amp & Pan Engine")}</span>
+                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <button
+                            className={`gc-amp-switch ${ampConfig.enabled ? "gc-amp-switch--on" : ""}`}
+                            onClick={() => updateAmp({ enabled: !ampConfig.enabled })}
+                            title={ampConfig.enabled ? t("Disable Amp Engine") : t("Enable Amp Engine")}
+                        >
+                            <div className="gc-amp-switch-knob" />
+                        </button>
+                        <ModalCloseButton
+                            onClick={() => {
+                                setShowAmpPan(false);
+                                ghostShowAmpPan = false;
+                                DataStore.set(DS_KEY_SHOW_AMP_PAN, false);
+                            }}
+                        />
+                    </div>
+                </div>
+
+                {/* TRAITEMENT VOCAL */}
+                <div className="gc-amp-section-lbl">{t("Vocal Processing")}</div>
+                <div className="gc-amp-btn-grid">
+                    <button
+                        className={`gc-amp-btn ${ampConfig.deess ? "gc-amp-btn--active" : ""}`}
+                        onClick={() => updateAmp({ deess: !ampConfig.deess })}
+                    >
+                        De-Esser
+                    </button>
+                    <button
+                        className={`gc-amp-btn ${ampConfig.vocalBoost ? "gc-amp-btn--active" : ""}`}
+                        onClick={() => updateAmp({ vocalBoost: !ampConfig.vocalBoost })}
+                    >
+                        Vocal Forward
+                    </button>
+                </div>
+
+                {/* STEREO & PANS */}
+                <div className="gc-amp-field-row" style={{ marginTop: 8 }}>
+                    <span className="gc-amp-field-lbl">{t("Stereo Mode")}</span>
+                    <div className="gc-amp-select-wrap">
+                        <div className="gc-amp-select-inner">
+                            <Select
+                                options={stereoOptions}
+                                value={ampConfig.stereoMode}
+                                isSelected={(item: any) => extractOptionValue(item) === String(ampConfig.stereoMode)}
+                                select={handleStereoSelect}
+                                onSelectionChange={handleStereoSelect}
+                                onChange={handleStereoSelect}
+                                serialize={(v: any) => extractOptionValue(v)}
+                                closeOnSelect={true}
+                                maxVisibleItems={8}
+                                popoutPosition="bottom"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="gc-amp-field-row">
+                    <span className="gc-amp-field-lbl">{t("Pan Type")}</span>
+                    <div className="gc-amp-select-wrap">
+                        <div className="gc-amp-select-inner">
+                            <Select
+                                options={panOptions}
+                                value={ampConfig.panType}
+                                isSelected={(item: any) => extractOptionValue(item) === String(ampConfig.panType)}
+                                select={handlePanTypeSelect}
+                                onSelectionChange={handlePanTypeSelect}
+                                onChange={handlePanTypeSelect}
+                                serialize={(v: any) => extractOptionValue(v)}
+                                closeOnSelect={true}
+                                maxVisibleItems={8}
+                                popoutPosition="bottom"
+                            />
+                        </div>
+                        <button className="gc-amp-plus-btn" onClick={addCustomPan} title={t("Add Custom Pan Type")}>+</button>
+                    </div>
+                </div>
+
+                <div className="gc-amp-section-lbl" style={{ marginTop: 8 }}>{t("8D Audio Orbit")}</div>
+                <button
+                    className={`gc-amp-btn gc-amp-btn-full ${ampConfig.eightD ? "gc-amp-btn--active" : ""}`}
+                    onClick={() => updateAmp({ eightD: !ampConfig.eightD })}
+                    title={t("360° binaural rotation: sound slowly rotates front, back, left, and right around your head")}
+                >
+                    {t("360° 8D Audio Rotation (Slow Head Orbit)")}
+                </button>
+                <div className="gc-amp-slider-row" style={{ marginTop: 4 }}>
+                    <span className="gc-amp-slider-lbl">{t("Orbit Speed")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0.2"
+                            max="5.0"
+                            step="0.1"
+                            value={ampConfig.eightDSpeed ?? 1.0}
+                            onChange={e => updateAmp({ eightDSpeed: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{(ampConfig.eightDSpeed ?? 1.0).toFixed(1)}x</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-section-lbl" style={{ marginTop: 8 }}>{t("Super Pan")}</div>
+                <div className="gc-superpan-grid">
+                    {SUPER_PANS.map((sp, i) => (
+                        <button
+                            key={sp}
+                            className={`gc-superpan-box ${ampConfig.superPan === i ? "gc-superpan-box--active" : ""}`}
+                            onClick={() => updateAmp({ superPan: i })}
+                            title={sp}
+                        >
+                            {sp}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Manual Pan")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="-1"
+                            max="1"
+                            step="0.01"
+                            value={ampConfig.panManual}
+                            onChange={e => updateAmp({ panManual: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.panManual * 100) / 100}</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Stereo Width")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0"
+                            max="5"
+                            step="0.01"
+                            value={ampConfig.stereoWidth}
+                            onChange={e => updateAmp({ stereoWidth: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.stereoWidth * 10) / 10}</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Reverb / Spatial")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={ampConfig.reverb}
+                            onChange={e => updateAmp({ reverb: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.reverb * 100) / 100}</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Spatial Expander")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0"
+                            max="5"
+                            step="0.01"
+                            value={ampConfig.spatialExpander}
+                            onChange={e => updateAmp({ spatialExpander: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.spatialExpander * 10) / 10}</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-field-row" style={{ marginTop: 4 }}>
+                    <span className="gc-amp-field-lbl">{t("Not Natty Mode")}</span>
+                    <div className="gc-amp-select-wrap">
+                        <div className="gc-amp-select-inner">
+                            <Select
+                                options={notNattyOptions}
+                                value={ampConfig.notNatty}
+                                isSelected={(item: any) => extractOptionValue(item) === String(ampConfig.notNatty)}
+                                select={handleNotNattySelect}
+                                onSelectionChange={handleNotNattySelect}
+                                onChange={handleNotNattySelect}
+                                serialize={(v: any) => extractOptionValue(v)}
+                                closeOnSelect={true}
+                                maxVisibleItems={8}
+                                popoutPosition="bottom"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* GAINS */}
+                <div className="gc-amp-section-lbl">{t("Gains")}</div>
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Master Boost")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0"
+                            max="20"
+                            step="0.1"
+                            value={ampConfig.masterBoost}
+                            onChange={e => updateAmp({ masterBoost: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.masterBoost)}</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Pre-Amplifier")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0"
+                            max="10"
+                            step="0.1"
+                            value={ampConfig.preGain}
+                            onChange={e => updateAmp({ preGain: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.preGain)}</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Post Gain")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0"
+                            max="15"
+                            step="0.1"
+                            value={ampConfig.postGain}
+                            onChange={e => updateAmp({ postGain: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.postGain)}</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Saturation")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0"
+                            max="10"
+                            step="0.1"
+                            value={ampConfig.saturation}
+                            onChange={e => updateAmp({ saturation: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.saturation)}</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Codec Gain")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0"
+                            max="8"
+                            step="0.1"
+                            value={ampConfig.codecGain}
+                            onChange={e => updateAmp({ codecGain: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.codecGain)}</span>
+                    </div>
+                </div>
+
+                {/* EQ CLARTE */}
+                <div className="gc-amp-slider-row" style={{ marginTop: 8 }}>
+                    <span className="gc-amp-slider-lbl">{t("Presence (3kHz)")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0"
+                            max="20"
+                            step="0.5"
+                            value={ampConfig.presenceDb}
+                            onChange={e => updateAmp({ presenceDb: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.presenceDb)}</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Air (10kHz+)")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0"
+                            max="20"
+                            step="0.5"
+                            value={ampConfig.airDb}
+                            onChange={e => updateAmp({ airDb: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.airDb)}</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Body (800Hz)")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="-12"
+                            max="12"
+                            step="0.5"
+                            value={ampConfig.bodyDb}
+                            onChange={e => updateAmp({ bodyDb: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.bodyDb)}</span>
+                    </div>
+                </div>
+
+                <div className="gc-amp-slider-row">
+                    <span className="gc-amp-slider-lbl">{t("Low-cut")}</span>
+                    <div className="gc-amp-range-wrap">
+                        <input
+                            type="range"
+                            className="gc-amp-range"
+                            min="0"
+                            max="300"
+                            step="10"
+                            value={ampConfig.rumbleHz}
+                            onChange={e => updateAmp({ rumbleHz: parseFloat(e.target.value) })}
+                        />
+                        <span className="gc-amp-slider-val">{Math.round(ampConfig.rumbleHz)}</span>
+                    </div>
+                </div>
+
+                {/* ECHO & BRUIT */}
+                <div className="gc-amp-section-lbl" style={{ marginTop: 8 }}>{t("Echo & Noise")}</div>
+                <div className="gc-amp-btn-grid">
+                    <button
+                        className={`gc-amp-btn ${ampConfig.echoCancel ? "gc-amp-btn--active" : ""}`}
+                        onClick={() => updateAmp({ echoCancel: !ampConfig.echoCancel })}
+                    >{t("Echo cancel")}</button>
+                    <button
+                        className={`gc-amp-btn ${ampConfig.noiseSup ? "gc-amp-btn--active" : ""}`}
+                        onClick={() => updateAmp({ noiseSup: !ampConfig.noiseSup })}
+                    >{t("Noise suppression")}</button>
+                    <button
+                        className={`gc-amp-btn ${ampConfig.highpass ? "gc-amp-btn--active" : ""}`}
+                        onClick={() => updateAmp({ highpass: !ampConfig.highpass })}
+                    >
+                        High-Pass 200Hz
+                    </button>
+                </div>
+
+                {/* DROWN & OVERRIDE */}
+                <div className="gc-amp-section-lbl" style={{ marginTop: 8 }}>{t("Drown & Override")}</div>
+                <div className="gc-amp-btn-grid">
+                    <button
+                        className={`gc-amp-btn ${ampConfig.hardClip ? "gc-amp-btn--active" : ""}`}
+                        onClick={() => updateAmp({ hardClip: !ampConfig.hardClip })}
+                    >
+                        Hard Clip +70dB
+                    </button>
+                    <button
+                        className={`gc-amp-btn ${ampConfig.softClip ? "gc-amp-btn--active" : ""}`}
+                        onClick={() => updateAmp({ softClip: !ampConfig.softClip })}
+                    >
+                        Soft Clip Amp
+                    </button>
+                    <button
+                        className={`gc-amp-btn ${ampConfig.compressor ? "gc-amp-btn--active" : ""}`}
+                        onClick={() => updateAmp({ compressor: !ampConfig.compressor })}
+                    >{t("Compressor x4")}</button>
+                    <button
+                        className={`gc-amp-btn ${ampConfig.limiter ? "gc-amp-btn--active" : ""}`}
+                        onClick={() => updateAmp({ limiter: !ampConfig.limiter })}
+                    >{t("Lookahead limiter")}</button>
+                </div>
+
+                {/* OPUS CODEC */}
+                <div className="gc-amp-section-lbl" style={{ marginTop: 8 }}>{t("Opus Codec")}</div>
+                <div className="gc-amp-field-row">
+                    <span className="gc-amp-field-lbl">{t("Opus Bitrate")}</span>
+                    <div className="gc-amp-select-wrap">
+                        <div className="gc-amp-select-inner">
+                            <Select
+                                options={opusBitrateOptions}
+                                value={ampConfig.opusBitrate}
+                                isSelected={(item: any) => extractOptionValue(item) === String(ampConfig.opusBitrate)}
+                                select={handleOpusBitrateSelect}
+                                onSelectionChange={handleOpusBitrateSelect}
+                                onChange={handleOpusBitrateSelect}
+                                serialize={(v: any) => extractOptionValue(v)}
+                                closeOnSelect={true}
+                                maxVisibleItems={8}
+                                popoutPosition="bottom"
+                            />
+                        </div>
+                        <button className="gc-amp-plus-btn" onClick={addCustomOpus} title={t("Add Custom Bitrate")}>+</button>
+                    </div>
+                </div>
+                <button
+                    className={`gc-amp-btn gc-amp-btn-full ${ampConfig.opusBoost ? "gc-amp-btn--active" : ""}`}
+                    onClick={() => updateAmp({ opusBoost: !ampConfig.opusBoost })}
+                >
+                    Opus 510k Boost MAX
+                </button>
+
+                {/* PITCH SHIFTER */}
+                <div className="gc-amp-section-lbl" style={{ marginTop: 8 }}>{t("Pitch Shifter")}</div>
+                <div className="gc-amp-pitch-container">
+                    <div className="gc-amp-title-row" style={{ borderBottom: "none", paddingBottom: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: "#dbdee1" }}>{t("Pitch Shifter (system mic)")}</span>
+                        <button
+                            className={`gc-amp-switch ${ampConfig.pitchEnabled ? "gc-amp-switch--on" : ""}`}
+                            onClick={() => updateAmp({ pitchEnabled: !ampConfig.pitchEnabled })}
+                            title={ampConfig.pitchEnabled ? "Désactiver le pitch shifter" : "Activer le pitch shifter"}
+                        >
+                            <div className="gc-amp-switch-knob" />
+                        </button>
+                    </div>
+
+                    <div className="gc-amp-pitch-track-wrap">
+                        <span className="gc-amp-pitch-bound-lbl" style={{ textAlign: "left" }}>{t("Low")}</span>
+                        <div className="gc-amp-pitch-slider-area">
+                            <span className="gc-amp-pitch-thumb-val">
+                                {ampConfig.pitchSemitones.toFixed(1).replace(".", ",")}
+                            </span>
+                            <input
+                                type="range"
+                                className="gc-amp-range"
+                                min="-12"
+                                max="12"
+                                step="0.5"
+                                value={ampConfig.pitchSemitones}
+                                onChange={e => updateAmp({ pitchSemitones: parseFloat(e.target.value) })}
+                                style={{ width: "100%" }}
+                            />
+                            <div className="gc-amp-pitch-marks">
+                                <span>-12</span>
+                                <span>-6</span>
+                                <span>0</span>
+                                <span>+6</span>
+                                <span>+12</span>
+                            </div>
+                        </div>
+                        <span className="gc-amp-pitch-bound-lbl" style={{ textAlign: "right" }}>{t("High")}</span>
+                    </div>
+
+                    <div className="gc-amp-pitch-sub">
+                        {ampConfig.pitchSemitones.toFixed(1)} {t("semitones")}
+                    </div>
+
+                    <div className="gc-amp-pitch-footer">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="#f0b232"/></svg>
+                        <span>{t("Applied to the microphone selected in Settings")}</span>
+                    </div>
+                </div>
+
+                {/* FOOTER RESET ALL SETTINGS */}
+                <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingTop: 10,
+                    marginTop: 6,
+                    borderTop: "1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))"
+                }}>
+                    <Button
+                        size="small"
+                        variant="secondary"
+                        onClick={resetAllAmpSettings}
+                        title={t("Reset all Amp & Pan Engine settings to default (0)")}
+                    >
+                        {t("Reset all settings to 0")}
+                    </Button>
+                    <span style={{ fontSize: 10, color: "var(--text-muted, #949ba4)", fontWeight: 600 }}>
+                        AMP & PAN ENGINE
+                    </span>
+                </div>
+            </div>
+        )}
+
+        {/* 1:1 AUTHENTIC VOICEMEETER EQUALIZER PANEL */}
+        {showEq && (
+            <div className="gc-vm-panel">
+
+
+                <div className="gc-vm-title-bar">
+                    <span className="gc-vm-title-text">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg><span>EQUALIZER</span>
+                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <button
+                            className={`gc-vm-power-btn ${eqEnabled ? "gc-vm-power-btn--on" : ""}`}
+                            onClick={() => applyEq(eqBass, eqTreble, eqMid, !eqEnabled)}
+                            title={eqEnabled ? "Bypass" : "Activer"}
+                        >
+                            {eqEnabled ? "ON" : "BYP"}
+                        </button>
+                        <ModalCloseButton
+                            onClick={() => {
+                                setShowEq(false);
+                                ghostShowEq = false;
+                                DataStore.set(DS_KEY_SHOW_EQ, false);
+                            }}
+                        />
+                    </div>
+                </div>
+
+                {/* 3 KNOBS (EXACTEMENT COMME LA PHOTO) */}
+                <div className="gc-vm-knobs-area">
+                    {/* HAUT : TREBLE KNOB (Gaucher) + LABEL & VALEUR ORANGE (Droite) */}
+                    <div className="gc-vm-row-treble">
+                        <div
+                            className="gc-vm-knob"
+                            title="Treble : Glisser haut/bas (-12.0 à +12.0 dB)"
+                            onMouseDown={(e) => {
+                                const startY = e.clientY;
+                                const startVal = eqTreble;
+                                const onMove = (ev: MouseEvent) => {
+                                    const diff = (startY - ev.clientY) * 0.25;
+                                    const next = Math.max(-12, Math.min(12, Math.round((startVal + diff) * 10) / 10));
+                                    applyEq(eqBass, next, eqMid, eqEnabled);
+                                };
+                                const onUp = () => {
+                                    window.removeEventListener("mousemove", onMove);
+                                    window.removeEventListener("mouseup", onUp);
+                                };
+                                window.addEventListener("mousemove", onMove);
+                                window.addEventListener("mouseup", onUp);
+                            }}
+                        >
+                            <div
+                                className="gc-vm-knob-dot-container"
+                                style={{ transform: `rotate(${(eqTreble / 12) * 135}deg)` }}
+                            >
+                                <div className="gc-vm-knob-dot" />
+                            </div>
+                        </div>
+                        <div className="gc-vm-text-block">
+                            <span className="gc-vm-text-label">Treble</span>
+                            <span className={`gc-vm-text-val ${eqTreble > 0 ? "gc-vm-val--orange" : eqTreble < 0 ? "gc-vm-val--cyan" : "gc-vm-val--neutral"}`}>
+                                {eqTreble.toFixed(1)}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* MILIEU : VALEUR BLEUE/CYAN (Gauche) + MID KNOB (Droite) -> ZIGZAG COMME LA PHOTO */}
+                    <div className="gc-vm-row-mid">
+                        <div className="gc-vm-text-block" style={{ alignItems: "flex-end", textAlign: "right" }}>
+                            <span className={`gc-vm-text-val ${eqMid > 0 ? "gc-vm-val--orange" : eqMid < 0 ? "gc-vm-val--cyan" : "gc-vm-val--neutral"}`}>
+                                {eqMid.toFixed(1)}
+                            </span>
+                        </div>
+                        <div
+                            className="gc-vm-knob"
+                            title="Mid : Glisser haut/bas (-12.0 à +12.0 dB)"
+                            onMouseDown={(e) => {
+                                const startY = e.clientY;
+                                const startVal = eqMid;
+                                const onMove = (ev: MouseEvent) => {
+                                    const diff = (startY - ev.clientY) * 0.25;
+                                    const next = Math.max(-12, Math.min(12, Math.round((startVal + diff) * 10) / 10));
+                                    applyEq(eqBass, eqTreble, next, eqEnabled);
+                                };
+                                const onUp = () => {
+                                    window.removeEventListener("mousemove", onMove);
+                                    window.removeEventListener("mouseup", onUp);
+                                };
+                                window.addEventListener("mousemove", onMove);
+                                window.addEventListener("mouseup", onUp);
+                            }}
+                        >
+                            <div
+                                className="gc-vm-knob-dot-container"
+                                style={{ transform: `rotate(${(eqMid / 12) * 135}deg)` }}
+                            >
+                                <div className="gc-vm-knob-dot" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* BAS : BASS KNOB (Gaucher) + VALEUR ORANGE & LABEL (Droite) */}
+                    <div className="gc-vm-row-bass">
+                        <div
+                            className="gc-vm-knob"
+                            title="Bass : Glisser haut/bas (-12.0 à +12.0 dB)"
+                            onMouseDown={(e) => {
+                                const startY = e.clientY;
+                                const startVal = eqBass;
+                                const onMove = (ev: MouseEvent) => {
+                                    const diff = (startY - ev.clientY) * 0.25;
+                                    const next = Math.max(-12, Math.min(12, Math.round((startVal + diff) * 10) / 10));
+                                    applyEq(next, eqTreble, eqMid, eqEnabled);
+                                };
+                                const onUp = () => {
+                                    window.removeEventListener("mousemove", onMove);
+                                    window.removeEventListener("mouseup", onUp);
+                                };
+                                window.addEventListener("mousemove", onMove);
+                                window.addEventListener("mouseup", onUp);
+                            }}
+                        >
+                            <div
+                                className="gc-vm-knob-dot-container"
+                                style={{ transform: `rotate(${(eqBass / 12) * 135}deg)` }}
+                            >
+                                <div className="gc-vm-knob-dot" />
+                            </div>
+                        </div>
+                        <div className="gc-vm-text-block">
+                            <span className={`gc-vm-text-val ${eqBass > 0 ? "gc-vm-val--orange" : eqBass < 0 ? "gc-vm-val--cyan" : "gc-vm-val--neutral"}`}>
+                                {eqBass.toFixed(1)}
+                            </span>
+                            <span className="gc-vm-text-label">Bass</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* PRESETS VOICEMEETER */}
+                <div className="gc-vm-presets">
+                    <span className="gc-vm-presets-title">{t("Quick Presets")}</span>
+                    <div className="gc-vm-preset-grid">
+                        <button
+                            className="gc-vm-preset-item"
+                            style={{ borderColor: "#3ea08f", color: "#e85d4e" }}
+                            onClick={() => applyEq(12.0, 12.0, -3.9, true)}
+                            title="Treble 12.0 | Bass 12.0 | Mid -3.9"
+                        >
+                            Photo 12dB
+                        </button>
+                        <button
+                            className="gc-vm-preset-item"
+                            onClick={() => applyEq(12.0, 6.0, 0.0, true)}
+                        >
+                            Bass Boost
+                        </button>
+                        <button
+                            className="gc-vm-preset-item"
+                            onClick={() => applyEq(4.0, 10.0, 1.5, true)}
+                        >
+                            Clarté Hi-Fi
+                        </button>
+                        <button
+                            className="gc-vm-preset-item"
+                            onClick={() => applyEq(0.0, 0.0, 0.0, true)}
+                        >
+                            Flat (0.0)
+                        </button>
+                    </div>
+                </div>
+
+                {/* FOOTER */}
+                <div className="gc-vm-footer">
+                    <button
+                        className="gc-vm-reset-btn"
+                        onClick={() => applyEq(0.0, 0.0, 0.0, true)}
+                        title={t("Reset all potentiometers to zero")}
+                    >{t("Reset 0 dB")}</button>
+                    <span className="gc-vm-limiter-badge">
+                        ● LIMITER TANH
+                    </span>
+                </div>
+            </div>
+        )}
+    </div>
+);
 }
 
 // ─── UserArea Button Component ────────────────────────────────────────────────
@@ -1569,30 +2719,54 @@ const GhostUserAreaButton = ({ iconForeground, hideTooltips, nameplate }: any) =
     const [showPopover, setShowPopover] = useState(false);
     const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
     const btnRef = useRef<HTMLDivElement>(null);
-    const anyActive = Array.from(states.values()).some(s => s.active || s.connecting);
+
+    const myId = getMyId();
+    const myVs = getMyVoiceState();
+
+    // Actif UNIQUEMENT si une connexion est activement en cours pour un compte fantôme (exclut myId),
+    // ou si au moins un compte fantôme est véritablement connecté DANS MON SALON VOCAL ACTUEL
+    const anyActive = Boolean(
+        (isConnectingBatch && Array.from(states.entries()).some(([uid, s]) => (!myId || uid !== myId) && s.connecting)) ||
+        (myVs?.channelId && Array.from(states.entries()).some(([uid, s]) => {
+            if (!uid || (myId && uid === myId)) return false;
+            if (!s.active) return false;
+            try {
+                const vs = VoiceStateStore?.getVoiceStateForUser?.(uid);
+                return vs?.channelId === myVs.channelId;
+            } catch {
+                return false;
+            }
+        }))
+    );
 
     useEffect(() => {
         if (!showPopover) return;
-        const handler = (e: MouseEvent) => {
+        const handler = (e: Event) => {
             const tgt = e.target as HTMLElement;
-            if (tgt.closest(".gc-popover")) return;
+            if (!tgt) return;
+            if (tgt.closest(".gc-popover") || tgt.closest(".gc-popover-wrapper") || tgt.closest(".gc-vm-panel") || tgt.closest(".gc-amp-panel")) return;
             if (tgt.closest("[role='listbox']") || tgt.closest("[role='option']") || tgt.closest("[class*='popout']") || tgt.closest("[class*='layerContainer']")) return;
-            if (btnRef.current?.contains(tgt)) return;
+
+            if (btnRef.current?.contains(tgt)) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
             setShowPopover(false);
         };
         const timer = setTimeout(() => {
-            document.addEventListener("mousedown", handler);
-            document.addEventListener("contextmenu", handler);
-        }, 150);
+            document.addEventListener("pointerdown", handler, true);
+            document.addEventListener("contextmenu", handler, true);
+        }, 50);
         return () => {
             clearTimeout(timer);
-            document.removeEventListener("mousedown", handler);
-            document.removeEventListener("contextmenu", handler);
+            document.removeEventListener("pointerdown", handler, true);
+            document.removeEventListener("contextmenu", handler, true);
         };
     }, [showPopover]);
 
     async function handleLeftClick(e?: any) {
         if (e && e.button !== undefined && e.button !== 0) return;
+        if (showPopover) setShowPopover(false);
 
         if (isConnectingBatch) {
             _cancelBatch = true;
@@ -1601,18 +2775,12 @@ const GhostUserAreaButton = ({ iconForeground, hideTooltips, nameplate }: any) =
             return;
         }
 
-        const isAnyActive = Array.from(ghostStates.values()).some(s => s.active || s.connecting)
-            || savedAccounts.some(a => {
-                try { return Boolean(VoiceStateStore?.getVoiceStateForUser?.(a.userId)?.channelId); }
-                catch { return false; }
-            });
-
-        if (isAnyActive) {
-            await ghostDisableClean();
+        const vs = getMyVoiceState();
+        if (!vs?.channelId) {
+            Toasts.show({ message: t("Join a voice channel first"), type: Toasts.Type.FAILURE, id: Toasts.genId() });
+            openPopover();
             return;
         }
-
-        _cancelBatch = false;
 
         const isInstalled = await Native.isServerInstalled().catch(() => true);
         if (!isInstalled) {
@@ -1624,11 +2792,11 @@ const GhostUserAreaButton = ({ iconForeground, hideTooltips, nameplate }: any) =
         const storedAccounts = await getAllSavedAccounts(false);
         const storedSelected = await DataStore.get(DS_KEY_SELECTED) as any ?? "all";
         const myId = getMyId();
-        const filteredAccounts = storedAccounts.filter(a => a.userId !== myId);
+        const filteredAccounts = storedAccounts.filter(a => a?.userId && (!myId || String(a.userId) !== String(myId)));
 
         let selectedArray: string[] = [];
         if (Array.isArray(storedSelected)) {
-            selectedArray = storedSelected;
+            selectedArray = storedSelected.map(String);
         } else if (typeof storedSelected === "string" && storedSelected) {
             selectedArray = [storedSelected];
         } else {
@@ -1636,9 +2804,10 @@ const GhostUserAreaButton = ({ iconForeground, hideTooltips, nameplate }: any) =
         }
 
         const isAll = selectedArray.includes("all");
-        const targets = isAll
+        const targets = (isAll
             ? filteredAccounts
-            : filteredAccounts.filter(a => selectedArray.includes(a.userId));
+            : filteredAccounts.filter(a => selectedArray.includes(String(a.userId)))
+        ).filter(a => a?.userId && (!myId || String(a.userId) !== String(myId)));
 
         if (targets.length === 0) {
             Toasts.show({ message: t("No accounts selected"), type: Toasts.Type.FAILURE, id: Toasts.genId() });
@@ -1646,45 +2815,64 @@ const GhostUserAreaButton = ({ iconForeground, hideTooltips, nameplate }: any) =
             return;
         }
 
-        const vs = getMyVoiceState();
-        if (!vs?.channelId) {
-            Toasts.show({ message: t("Join a voice channel first"), type: Toasts.Type.FAILURE, id: Toasts.genId() });
+        // Si au moins un compte cible est véritablement connecté dans mon salon vocal ou en cours de connexion, le clic sert de toggle pour déconnecter
+        const anyTargetActive = targets.some(a => {
+            const uid = String(a.userId);
+            if (!uid || (myId && uid === String(myId))) return false;
+            const s = ghostStates.get(uid);
+            const userVs = VoiceStateStore?.getVoiceStateForUser?.(uid);
+            const isInCurrentChannel = Boolean(userVs?.channelId && userVs.channelId === vs.channelId);
+            return (isConnectingBatch && s?.connecting) || isInCurrentChannel;
+        });
+
+        if (anyTargetActive) {
+            await ghostDisableClean(targets.map(a => a.userId));
+            Toasts.show({ message: t("Ghost accounts disconnected"), type: Toasts.Type.SUCCESS, id: Toasts.genId() });
             return;
         }
 
-        const connectSingleAccount = async (acc: GhostAccount) => {
-            if (_cancelBatch || _leavingUsers.has(acc.userId)) return;
+        if (vs.isDM && ChannelStore?.getChannel?.(vs.channelId)?.type === 1) {
+            Toasts.show({
+                message: t("Ghost accounts cannot join private 1-on-1 DMs. Please join a server voice channel or group call."),
+                type: Toasts.Type.FAILURE,
+                id: Toasts.genId()
+            });
+            return;
+        }
 
-            if (vs.guildId) {
-                const known = _cachedGuildsMap.get(acc.userId);
-                if (known && !known.has(vs.guildId)) {
-                    const cur = ghostStates.get(acc.userId) ?? defaultState();
-                    ghostStates.set(acc.userId, {
-                        ...cur,
-                        active: false,
-                        connecting: false,
-                        error: t("Not in server")
-                    });
-                    notify();
-                    return;
-                }
-            }
+        // Sinon, connecter tous les comptes cibles dans mon salon vocal !
+        _cancelBatch = false;
+        _leavingUsers.clear();
+
+        Toasts.show({
+            message: `${t("Connecting")} ${targets.length} ghost account${targets.length > 1 ? "s" : ""}...`,
+            type: Toasts.Type.SUCCESS,
+            id: Toasts.genId()
+        });
+
+        const connectSingleAccount = async (acc: GhostAccount) => {
+            if (_cancelBatch) return;
+            _manuallyDisabledUsers.delete(acc.userId);
 
             let realToken = acc.token;
             try { realToken = await decryptToken(acc.token); } catch {}
-            if (_cancelBatch || _leavingUsers.has(acc.userId)) return;
+            if (_cancelBatch) return;
 
             const cur = ghostStates.get(acc.userId) ?? defaultState();
             ghostStates.set(acc.userId, { ...cur, connecting: true, error: null });
             notify();
             try {
-                const result = await Native.connectGhost(acc.userId, realToken, vs.guildId, vs.channelId, ghostMicLabel);
-                if (_cancelBatch || _leavingUsers.has(acc.userId)) {
+                const result = await Native.connectGhost(acc.userId, realToken, vs.guildId || "", vs.channelId, ghostMicLabel);
+                if (_cancelBatch) {
                     Native.leaveVoice(acc.userId, vs.guildId).catch(() => {});
+                    const updated = ghostStates.get(acc.userId) ?? defaultState();
+                    ghostStates.set(acc.userId, { ...updated, active: false, connecting: false });
+                    notify();
                     return;
                 }
                 const updated = ghostStates.get(acc.userId) ?? defaultState();
                 const notInServer = result?.notInServer || result?.error === "Not in server";
+                if (result?.ok) { boostLocalGhostVolume(acc.userId); }
                 ghostStates.set(acc.userId, {
                     ...updated,
                     active: Boolean(result?.ok),
@@ -1692,11 +2880,16 @@ const GhostUserAreaButton = ({ iconForeground, hideTooltips, nameplate }: any) =
                     error: result?.ok ? null : (notInServer ? t("Not in server") : (result?.error ?? t("Connection error")))
                 });
             } catch (e) {
-                if (_cancelBatch || _leavingUsers.has(acc.userId)) return;
+                if (_cancelBatch) return;
                 const updated = ghostStates.get(acc.userId) ?? defaultState();
                 ghostStates.set(acc.userId, { ...updated, active: false, connecting: false, error: String(e) });
+            } finally {
+                const fresh = ghostStates.get(acc.userId);
+                if (fresh?.connecting) {
+                    ghostStates.set(acc.userId, { ...fresh, connecting: false });
+                }
+                notify();
             }
-            notify();
         };
 
         isConnectingBatch = true;
@@ -1706,7 +2899,7 @@ const GhostUserAreaButton = ({ iconForeground, hideTooltips, nameplate }: any) =
             } else {
                 for (let i = 0; i < targets.length; i++) {
                     if (_cancelBatch) break;
-                    connectSingleAccount(targets[i]);
+                    await connectSingleAccount(targets[i]);
                     if (i < targets.length - 1 && ghostJoinDelay > 0) {
                         await new Promise(r => setTimeout(r, ghostJoinDelay));
                     }
@@ -1725,12 +2918,22 @@ const GhostUserAreaButton = ({ iconForeground, hideTooltips, nameplate }: any) =
 
     const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
         if (e.button !== 0) return;
+        if (showPopover) {
+            e.preventDefault();
+            e.stopPropagation();
+            setShowPopover(false);
+            return;
+        }
         handleLeftClick(e);
     };
 
     const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
+        if (showPopover) {
+            setShowPopover(false);
+            return;
+        }
         openPopover();
     };
 
@@ -1768,18 +2971,20 @@ export default definePlugin({
         const mic = await DataStore.get(DS_KEY_MIC_DEVICE);
         if (mic && mic !== "default") ghostMicLabel = mic;
         else {
-            Native.listAudioInputDevices().catch(() => []).then((devs: any[]) => {
-                const names = (devs as any[])?.map((d: any) => d.dshowName ?? d.name ?? d.label ?? "").filter(Boolean) ?? [];
-                const virtualMic = names.find((n: string) =>
-                    n.toLowerCase().includes("cable output") ||
-                    n.toLowerCase().includes("vb-audio virtual cable") ||
-                    n.toLowerCase().includes("cable")
-                );
-                if (virtualMic) {
-                    ghostMicLabel = virtualMic;
-                    DataStore.set(DS_KEY_MIC_DEVICE, virtualMic);
-                }
-            }).catch(() => {});
+            setTimeout(() => {
+                Native.listAudioInputDevices().catch(() => []).then((devs: any[]) => {
+                    const names = (devs as any[])?.map((d: any) => d.dshowName ?? d.name ?? d.label ?? "").filter(Boolean) ?? [];
+                    const virtualMic = names.find((n: string) =>
+                        n.toLowerCase().includes("cable output") ||
+                        n.toLowerCase().includes("vb-audio virtual cable") ||
+                        n.toLowerCase().includes("cable")
+                    );
+                    if (virtualMic) {
+                        ghostMicLabel = virtualMic;
+                        DataStore.set(DS_KEY_MIC_DEVICE, virtualMic);
+                    }
+                }).catch(() => {});
+            }, 8000);
         }
 
         const delay = await DataStore.get(DS_KEY_JOIN_DELAY);
@@ -1796,7 +3001,22 @@ export default definePlugin({
             Native.setVolume(vol, ghostVocalBoost).catch(() => {});
         }
 
-        const allAccs = await getAllSavedAccounts(true);
+        const eqB = await DataStore.get(DS_KEY_EQ_BASS);
+        if (eqB != null) ghostEqBass = Number(eqB);
+        const eqT = await DataStore.get(DS_KEY_EQ_TREBLE);
+        if (eqT != null) ghostEqTreble = Number(eqT);
+        const eqM = await DataStore.get(DS_KEY_EQ_MID);
+        if (eqM != null) ghostEqMid = Number(eqM);
+        const eqEn = await DataStore.get(DS_KEY_EQ_ENABLED);
+        if (eqEn != null) ghostEqEnabled = Boolean(eqEn);
+
+        const ampCfg = await DataStore.get(DS_KEY_AMP_CONFIG);
+        if (ampCfg != null) ghostAmpConfig = ampCfg;
+
+        Native.setEq(ghostEqBass, ghostEqTreble, ghostEqMid, ghostEqEnabled).catch(() => {});
+        Native.setAmpPanParams(ghostAmpConfig || defaultAmpConfig).catch(() => {});
+
+        const allAccs = await getAllSavedAccounts(false);
         if (allAccs.length > 0) savedAccounts = allAccs;
 
         setTimeout(() => {
@@ -1805,10 +3025,10 @@ export default definePlugin({
                 if (savedAccounts.length === 0) return;
                 for (const acc of savedAccounts) {
                     Native.preConnectGhost(acc.userId, acc.token, ghostMicLabel).catch(() => {});
-                    await new Promise(r => setTimeout(r, 800));
+                    await new Promise(r => setTimeout(r, 600));
                 }
             })();
-        }, 1500);
+        }, 8000);
 
         try {
             if (typeof (VencordNative as any)?.ipc?.on === "function") {
@@ -1821,12 +3041,25 @@ export default definePlugin({
 
         const onVoiceUpdate = (data: any) => {
             if (!data) return;
-            if (data.userId && ghostStates.has(data.userId)) {
+            const myId = getMyId();
+            if (myId && data.userId === myId) {
+                const myVs = getMyVoiceState();
+                if (!myVs || !myVs.channelId) {
+                    for (const [uid, st] of ghostStates.entries()) {
+                        if (st.active || st.connecting) {
+                            const cur = ghostStates.get(uid) ?? defaultState();
+                            ghostStates.set(uid, { ...cur, active: false, connecting: false });
+                        }
+                    }
+                }
+                notify();
+            }
+            if (data.userId && data.userId !== myId && ghostStates.has(data.userId)) {
                 syncGhostStateFromDiscord(data.userId);
             }
             if (Array.isArray(data.voiceStates)) {
                 for (const s of data.voiceStates) {
-                    if (s?.userId && ghostStates.has(s.userId)) {
+                    if (s?.userId && s.userId !== myId && ghostStates.has(s.userId)) {
                         syncGhostStateFromDiscord(s.userId);
                     }
                 }

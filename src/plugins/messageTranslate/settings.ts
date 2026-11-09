@@ -99,3 +99,4 @@ export function getIgnoredChannels(): Set<string> {
 export function getIgnoredUsers(): Set<string> {
     return parseList(settings.store.ignoredUsers);
 }
+

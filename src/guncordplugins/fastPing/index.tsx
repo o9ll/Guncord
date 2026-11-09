@@ -126,6 +126,7 @@ export default definePlugin({
     description: "Double-click a user ID you just typed in the chat box to instantly turn it into a <@mention>.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     settings,
+    enabledByDefault: true,
 
     start() {
         document.addEventListener("dblclick", onDblClick, true);

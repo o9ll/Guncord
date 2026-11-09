@@ -4,9 +4,28 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { NavContextMenuPatchCallback } from "@api/ContextMenu";
+/*
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import { ImageIcon } from "@components/Icons";
+import { copyMediaImage, isVideoUrl, normalizeDiscordMediaUrl, resolveDiscordMedia, saveMediaFile } from "@plugins/fileUpload/utils/getMediaUrl";
 import { copyToClipboard } from "@utils/clipboard";
 import { Devs } from "@utils/constants";
 import { openImageModal } from "@utils/discord";
@@ -55,6 +74,8 @@ const settings = definePluginSettings({
         options: ["128", "256", "512", "1024", "2048", "4096"].map(n => ({ label: n, value: n, default: n === "1024" }))
     }
 });
+
+const toIconAccessory = (Comp: any) => typeof Comp === "function" ? { type: "icon", icon: Comp } : undefined;
 
 const openAvatar = (url: string) => openImage(url, 512, 512);
 const openBanner = (url: string) => openImage(url, 1024, 410);
@@ -105,22 +126,171 @@ function openImage(url: string, width: number, height?: number) {
     }
 }
 
+import { iconsModule } from "@plugins/_core/concatenatedModules";
+
+const SaveFallbackIcon = () => (
+    <svg aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v10.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V3a1 1 0 0 1 1-1ZM3 20a1 1 0 1 0 0 2h18a1 1 0 1 0 0-2H3Z" />
+    </svg>
+);
+
+function hasMenuItem(node: any, ids: string[], labels: string[] = []): boolean {
+    if (!node) return false;
+    if (Array.isArray(node)) {
+        return node.some(item => hasMenuItem(item, ids, labels));
+    }
+    if (typeof node === "object") {
+        const id = node.props?.id ?? node.key;
+        if (typeof id === "string" && ids.some(targetId => id === targetId || id.includes(targetId))) {
+            return true;
+        }
+        const label = node.props?.label;
+        if (typeof label === "string" && labels.includes(label)) {
+            return true;
+        }
+        if (node.props?.children) {
+            return hasMenuItem(node.props.children, ids, labels);
+        }
+    }
+    return false;
+}
+
+const mediaDownloadContextMenuPatch: NavContextMenuPatchCallback = (children, props) => {
+    if (!props) return;
+    const media = resolveDiscordMedia(props);
+    if (!media?.url) return;
+
+    const alreadyHasSave = Boolean(
+        findGroupChildrenByChildId(["save-image", "fastpfp-save-image", "fastpfp-save-image-msg", "viewicons-save-media"], children, true) ||
+        hasMenuItem(
+            children,
+            ["save-image", "fastpfp-save-image", "fastpfp-save-image-msg", "viewicons-save-media"],
+            ["Save Image", t("Save Image"), "Save Video", t("Save Video")]
+        )
+    );
+    if (alreadyHasSave) return;
+
+    // For standard non-blob images in chat where Discord already provides native media link options,
+    // Discord already renders its own Copy Image / Save Image with icons.
+    const hasNativeImageGroup = Boolean(
+        findGroupChildrenByChildId(["copy-native-link", "open-native-link"], children, true)
+    );
+    if (!media.isVideo && hasNativeImageGroup && !media.url.startsWith("blob:") && !media.url.startsWith("data:")) {
+        return;
+    }
+
+    const alreadyHasCopy = Boolean(
+        findGroupChildrenByChildId(["copy-image", "fastpfp-copy-image", "fastpfp-copy-image-msg", "viewicons-copy-image"], children, true) ||
+        hasMenuItem(
+            children,
+            ["copy-image", "fastpfp-copy-image", "fastpfp-copy-image-msg", "viewicons-copy-image"],
+            ["Copy Image", t("Copy Image")]
+        )
+    );
+
+    const group = findGroupChildrenByChildId("copy-native-link", children)
+        ?? findGroupChildrenByChildId("open-native-link", children)
+        ?? findGroupChildrenByChildId("copy-link", children)
+        ?? findGroupChildrenByChildId("copy-image", children);
+
+    const SaveIconComp = (media.isVideo
+        ? (iconsModule?.DownloadIcon || iconsModule?.VideoIcon || iconsModule?.ImageIcon)
+        : (iconsModule?.ImageIcon || iconsModule?.DownloadIcon)) || ImageIcon || SaveFallbackIcon;
+    const CopyIconComp = iconsModule?.ImageIcon || ImageIcon || SaveFallbackIcon;
+
+    const items: React.ReactElement[] = [];
+    if (!media.isVideo && !alreadyHasCopy) {
+        items.push(
+            <Menu.MenuItem
+                key="viewicons-copy-image"
+                id="viewicons-copy-image"
+                label={t("Copy Image")}
+                icon={CopyIconComp}
+                iconLeft={CopyIconComp}
+                leadingAccessory={toIconAccessory(CopyIconComp)}
+                action={() => void copyMediaImage(media.url)}
+            />
+        );
+    }
+    items.push(
+        <Menu.MenuItem
+            key="viewicons-save-media"
+            id="viewicons-save-media"
+            label={t(media.isVideo ? "Save Video" : "Save Image")}
+            icon={SaveIconComp}
+            iconLeft={SaveIconComp}
+            leadingAccessory={toIconAccessory(SaveIconComp)}
+            action={() => void saveMediaFile(media.url, media.filename, media.isVideo)}
+        />
+    );
+
+    if (group) {
+        group.unshift(...items);
+    } else {
+        children.unshift(
+            <Menu.MenuGroup key="viewicons-media-group" id="viewicons-media-group">
+                {items}
+            </Menu.MenuGroup>
+        );
+    }
+};
+
 function ImageModalContextMenu({ src, target }: { src: string; target?: HTMLElement | null }) {
+    const cleanedUrl = normalizeDiscordMediaUrl(src);
+    const isVideo = isVideoUrl(cleanedUrl) || isVideoUrl(src);
+
+    const SaveIconComp = (isVideo
+        ? (iconsModule?.DownloadIcon || iconsModule?.VideoIcon || iconsModule?.ImageIcon)
+        : (iconsModule?.ImageIcon || iconsModule?.DownloadIcon)) || ImageIcon || SaveFallbackIcon;
+    const CopyIconComp = iconsModule?.ImageIcon || ImageIcon || SaveFallbackIcon;
+    const LinkIconComp = iconsModule?.LinkIcon || ImageIcon;
+    const OpenIconComp = iconsModule?.WindowLaunchIcon || iconsModule?.LaunchIcon || ImageIcon;
+
     return (
         <Menu.Menu
             navId="image-context"
             onClose={() => ContextMenuApi.closeContextMenu()}
             aria-label={t("Image Options")}
-            contextMenuAPIArguments={[{ src, target }]}
+            contextMenuAPIArguments={[{ src: cleanedUrl, target }]}
         >
             <Menu.MenuGroup id="copy-native-link">
+                {!isVideo && (
+                    <Menu.MenuItem
+                        id="copy-image"
+                        label={t("Copy Image")}
+                        icon={CopyIconComp}
+                        iconLeft={CopyIconComp}
+                        leadingAccessory={toIconAccessory(CopyIconComp)}
+                        action={() => void copyMediaImage(cleanedUrl)}
+                    />
+                )}
                 <Menu.MenuItem
-                    id="copy-image-link"
+                    id="save-image"
+                    label={t(isVideo ? "Save Video" : "Save Image")}
+                    icon={SaveIconComp}
+                    iconLeft={SaveIconComp}
+                    leadingAccessory={toIconAccessory(SaveIconComp)}
+                    action={() => void saveMediaFile(cleanedUrl, undefined, isVideo)}
+                />
+                <Menu.MenuSeparator />
+                <Menu.MenuItem
+                    id="copy-native-link"
                     label={t("Copy Link")}
+                    icon={LinkIconComp}
+                    iconLeft={LinkIconComp}
+                    leadingAccessory={toIconAccessory(LinkIconComp)}
                     action={() => {
-                        copyToClipboard(src);
-                        Toasts.show(Toasts.create("Copied image link!", Toasts.Type.SUCCESS));
+                        copyToClipboard(cleanedUrl);
+                        Toasts.show(Toasts.create(t("Link copied!"), Toasts.Type.SUCCESS));
                     }}
+                />
+                <Menu.MenuItem
+                    id="open-native-link"
+                    label={t("Open Link")}
+                    icon={OpenIconComp}
+                    iconLeft={OpenIconComp}
+                    leadingAccessory={toIconAccessory(OpenIconComp)}
+                    action={() => window.open(cleanedUrl, "_blank")}
                 />
             </Menu.MenuGroup>
         </Menu.Menu>
@@ -136,46 +306,51 @@ function setupModalContextMenuListener() {
         const target = e.target as HTMLElement | null;
         if (!target) return;
 
-        // Strict check: Ignore normal UI elements like user profiles, popouts, member lists, server bar, channels, chat messages
-        const isStandardUi = target.closest?.("[class*='userPopout'], [class*='userProfile'], [class*='member'], [class*='guild'], [class*='channel'], [class*='sidebar'], [class*='chatContent']");
-        const mediaViewerModal = target.closest?.("[class*='mediaViewer'], [class*='carouselModal'], [class*='imageWrapper']");
+        // Only ever activate inside an explicit fullscreen modal dialog
+        const fullscreenDialog = target.closest?.("[role='dialog'], [class*='carouselModal'], [class*='mediaViewerModal']") as HTMLElement | null;
+        if (!fullscreenDialog) return;
 
-        // If it's standard UI and NOT a fullscreen media viewer, do nothing (let native context menus open)
-        if (isStandardUi && !mediaViewerModal) return;
-
-        // Must be explicitly inside a fullscreen media/carousel viewer modal
-        if (!mediaViewerModal) {
-            const isFullscreenModal = target.closest?.("[role='dialog'][class*='modal']");
-            if (!isFullscreenModal) return;
-
-            const hasFullscreenImage = isFullscreenModal.querySelector?.("[class*='mediaViewer'], [class*='imageWrapper'], img[src*='cdn.discordapp.com'], img[src*='media.discordapp.net']");
-            if (!hasFullscreenImage) return;
+        // Never hijack user profiles, popouts, settings, or standard chat content
+        if (target.closest?.("[class*='chatContent'], [class*='messageListItem'], [class*='userPopout'], [class*='userProfile'], [class*='profileModal'], [class*='settings']")) {
+            return;
         }
 
-        let imgSrc: string | null = null;
+        const isMediaModal = fullscreenDialog.matches?.("[class*='carouselModal'], [class*='mediaViewerModal']")
+            || Boolean(fullscreenDialog.querySelector?.("[class*='mediaViewer'], [class*='carouselModal'], [class*='imageWrapper'] img, video"));
+        if (!isMediaModal) return;
 
-        if (target instanceof HTMLImageElement && target.src) {
-            imgSrc = target.src;
-        } else {
-            const imgTag = (target.querySelector?.("img") || target.closest?.("[class*='mediaViewer'], [class*='imageWrapper'], [role='dialog']")?.querySelector?.("img")) as HTMLImageElement | null;
-            if (imgTag?.src) imgSrc = imgTag.src;
-        }
+        const media = resolveDiscordMedia({ target });
+        let mediaSrc: string | null = media?.url ?? null;
 
-        if (!imgSrc) {
-            const bg = target.style?.backgroundImage || (window.getComputedStyle ? window.getComputedStyle(target).backgroundImage : "");
-            if (bg && bg.includes("url(")) {
-                const match = bg.match(/url\(["']?(.*?)["']?\)/);
-                if (match?.[1]) imgSrc = match[1];
+        if (!mediaSrc) {
+            if (target instanceof HTMLImageElement && target.src) {
+                mediaSrc = target.src;
+            } else if (target instanceof HTMLVideoElement && (target.currentSrc || target.src)) {
+                mediaSrc = target.currentSrc || target.src;
+            } else {
+                const mediaTag = (target.querySelector?.("video, img") ||
+                    fullscreenDialog.querySelector?.("video, img")) as HTMLImageElement | HTMLVideoElement | null;
+                if (mediaTag && "src" in mediaTag && mediaTag.src) {
+                    mediaSrc = mediaTag.src;
+                }
             }
         }
 
-        if (imgSrc) {
+        if (!mediaSrc) {
+            const bg = target.style?.backgroundImage || (window.getComputedStyle ? window.getComputedStyle(target).backgroundImage : "");
+            if (bg && bg.includes("url(")) {
+                const match = bg.match(/url\(["']?(.*?)["']?\)/);
+                if (match?.[1]) mediaSrc = match[1];
+            }
+        }
+
+        if (mediaSrc) {
             e.preventDefault();
             e.stopPropagation();
 
             ContextMenuApi.openContextMenu(e as any, () => (
                 <ImageModalContextMenu
-                    src={imgSrc!}
+                    src={mediaSrc!}
                     target={target}
                 />
             ));
@@ -194,13 +369,13 @@ function injectBannerCursorStyle() {
     const style = document.createElement("style");
     style.id = BANNER_STYLE_ID;
     style.textContent = `
-        [class*="userPopout"] [class*="banner"][style*="background-image"],
-        [class*="userProfile"] [class*="banner"][style*="background-image"],
-        [class*="profilePanel"] [class*="banner"][style*="background-image"],
-        [class*="bannerPremium"][style*="background-image"],
-        [class*="customBanner"][style*="background-image"],
-        [class*="profileBanner"][style*="background-image"],
-        [class*="popoutBanner"][style*="background-image"] {
+        [class*="userPopout"] [class*="banner"][style*="background-image"]:not([class*="tab"]):not([class*="item"]):not([role="tab"]),
+        [class*="userProfile"] [class*="banner"][style*="background-image"]:not([class*="tab"]):not([class*="item"]):not([role="tab"]),
+        [class*="profilePanel"] [class*="banner"][style*="background-image"]:not([class*="tab"]):not([class*="item"]):not([role="tab"]),
+        [class*="bannerPremium"][style*="background-image"]:not([class*="tab"]):not([class*="item"]):not([role="tab"]),
+        [class*="customBanner"][style*="background-image"]:not([class*="tab"]):not([class*="item"]):not([role="tab"]),
+        [class*="profileBanner"][style*="background-image"]:not([class*="tab"]):not([class*="item"]):not([role="tab"]),
+        [class*="popoutBanner"][style*="background-image"]:not([class*="tab"]):not([class*="item"]):not([role="tab"]) {
             cursor: pointer !important;
         }
     `;
@@ -217,8 +392,36 @@ function extractUrlFromBg(styleString: string | null | undefined): string | null
     return match ? match[1] : null;
 }
 
+const EXCLUDED_BANNER_TARGETS = [
+    "button",
+    "[role='button']",
+    "[role='tab']",
+    "[role='tablist']",
+    "a",
+    "input",
+    "textarea",
+    "select",
+    "[class*='avatar']",
+    "[class*='badge']",
+    "[class*='tabBar']",
+    "[class*='tab_']",
+    "[class*='tabItem']",
+    "[class*='mutual']",
+    "[class*='listRow']",
+    "[class*='scroller']",
+    "[class*='body']",
+    "[class*='content']",
+    "[role='listitem']",
+    "[class*='userInfo']"
+].join(", ");
+
+function isExcludedBannerTarget(target: HTMLElement | null): boolean {
+    if (!target) return true;
+    return !!target.closest(EXCLUDED_BANNER_TARGETS);
+}
+
 function getBannerUrlFromTarget(target: HTMLElement): string | null {
-    if (target.closest("button, [role='button'], a, input, [class*='avatar'], [class*='badge']")) {
+    if (isExcludedBannerTarget(target)) {
         return null;
     }
 
@@ -333,11 +536,7 @@ function setupBannerListeners() {
             if (e.button !== 0) return;
 
             const target = e.target as HTMLElement | null;
-            if (!target) return;
-
-            if (target.closest("button, [role='button'], a, input, [class*='avatar'], [class*='badge']")) {
-                return;
-            }
+            if (!target || isExcludedBannerTarget(target)) return;
 
             const bannerEl = target.closest?.(
                 "[class*='banner'], [class*='profileBanner'], [class*='bannerPremium'], [class*='customBanner'], [class*='popoutBanner'], [class*='bannerSVG']"
@@ -358,11 +557,7 @@ function setupBannerListeners() {
     if (!onBannerMouseOverListener) {
         onBannerMouseOverListener = (e: MouseEvent) => {
             const target = e.target as HTMLElement | null;
-            if (!target) return;
-
-            if (target.closest("button, [role='button'], a, input, [class*='avatar'], [class*='badge']")) {
-                return;
-            }
+            if (!target || isExcludedBannerTarget(target)) return;
 
             const bannerEl = target.closest?.(
                 "[class*='banner'], [class*='profileBanner'], [class*='bannerPremium'], [class*='customBanner'], [class*='popoutBanner'], [class*='bannerSVG']"
@@ -537,7 +732,9 @@ export default definePlugin({
 
     contextMenus: {
         "guild-context": GuildContext,
-        "gdm-context": GroupDMContext
+        "gdm-context": GroupDMContext,
+        "message": mediaDownloadContextMenuPatch,
+        "image-context": mediaDownloadContextMenuPatch
     },
 
     patches: [
@@ -545,7 +742,7 @@ export default definePlugin({
         {
             find: "return{avatarProps:{",
             replacement: {
-                match: /(?<=avatarProps:(\i),eventHandlers:(\i).{0,50}?)return null==/,
+                match: /(?<=avatarProps:(\i),eventHandlers:(\i).{0,200}?)return null==/,
                 replace: 'Object.assign($2,{style:{cursor:"pointer"},onClick:()=>$self.openAvatar($1.src)});$&',
             }
         },

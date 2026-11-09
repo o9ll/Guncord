@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import "./styles.css";
 
@@ -57,7 +45,8 @@ const settings = definePluginSettings({
     iconSize: {
         type: OptionType.NUMBER,
         description: "Icon size (px)",
-        default: 32
+        default: 32,
+        min: 1
     },
     iconSpacing: {
         type: OptionType.SELECT,
@@ -230,7 +219,7 @@ function CompactConnectionComponent({ connection, theme }: { connection: Connect
 
 export default definePlugin({
     name: "ShowConnections",
-    description: "Show connected accounts in user popouts",
+    description: "Show connected accounts in user popouts and the DM sidebar",
     tags: ["Friends", "Appearance"],
     authors: [Devs.TheKodeToad],
     settings,
@@ -258,6 +247,14 @@ export default definePlugin({
             replacement: {
                 match: /!\i&&\(\i\|\|\i\).{0,250}profileAppConnections\}\)\}\)/,
                 replace: "$self.profilePopoutComponent(arguments[0]),",
+            }
+        },
+        {
+            // Same as FakeNitro
+            find: '.getByName("fork_and_knife")',
+            replacement: {
+                match: /targetUserId:\i\.id.{0,60}?]}\)(?=])/,
+                replace: "$&,$self.profilePopoutComponent(arguments[0])"
             }
         }
     ],

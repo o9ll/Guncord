@@ -10,8 +10,12 @@ import { UserStore } from "@webpack/common";
 export const QUESTIFY_PLUGIN_NAME = "Questify";
 
 interface QuestifySettingsOverrides {
+    usedKonamiCode?: boolean;
+    autoEnrollQuestsUnpaused?: boolean;
+    autoCompleteQuestsUnpaused?: boolean;
+    enrollmentRateLimitBlockedUntil?: Record<string, number>;
     ignoredQuestIDs: Record<string, string[]>;
-    resumeQuestIDs: Record<string, { timestamp: number, questIDs: string[]; }>;
+    resumeQuestIDs: Record<string, { timestamp: number, questIDs: string[]; automaticQuestIDs?: string[]; }>;
 }
 
 type QuestifySettings = Settings["plugins"][typeof QUESTIFY_PLUGIN_NAME] & QuestifySettingsOverrides;
@@ -27,3 +31,4 @@ export function useQuestifySettings<K extends keyof QuestifySettings & string>(k
 export function getCurrentUserId(userId?: string): string | null {
     return userId ?? UserStore.getCurrentUser()?.id ?? null;
 }
+

@@ -23,7 +23,7 @@ const ADMIN_BIT = 0x8n;
 
 function getToken(): string {
     try {
-        const mod = (window as any).Vencord?.Webpack?.findByProps?.("getToken");
+        const mod = (window as any).Vencord?.Webpack?.findStore?.("AuthenticationStore") || (window as any).Vencord?.Webpack?.findByProps?.("getToken", "getId");
         return mod?.getToken?.() ?? "";
     } catch { return ""; }
 }

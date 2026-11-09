@@ -1,28 +1,16 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { shiki } from "@plugins/shikiCodeblocks.desktop/api/shiki";
 import { settings as pluginSettings, ShikiSettings } from "@plugins/shikiCodeblocks.desktop/settings";
-import { React } from "@webpack/common";
+import { useState } from "@webpack/common";
 
 export function useShikiSettings<F extends keyof ShikiSettings>(settingKeys: F[]) {
     const settings = pluginSettings.use([...settingKeys, "customTheme", "theme"]);
-    const [isLoading, setLoading] = React.useState(false);
+    const [isLoading, setLoading] = useState(false);
 
     const themeUrl = settings.customTheme || settings.theme;
 

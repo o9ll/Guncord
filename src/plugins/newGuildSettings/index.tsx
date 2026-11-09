@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import {
     findGroupChildrenByChildId,
@@ -104,6 +92,7 @@ const makeContextMenuPatch: (shouldAddIcon: boolean) => NavContextMenuPatchCallb
                 label="Apply NewGuildSettings"
                 id="vc-newguildsettings-apply"
                 icon={shouldAddIcon ? CogWheel : void 0}
+                leadingAccessory={shouldAddIcon ? { type: "icon", icon: CogWheel } : void 0}
                 action={() => applyDefaultSettings(guild.id)}
             />
         );
@@ -117,6 +106,7 @@ const makeContextMenuPatch: (shouldAddIcon: boolean) => NavContextMenuPatchCallb
                 label="Apply NewGuildSettings to Folder"
                 id="vc-newguildsettings-apply-folder"
                 icon={shouldAddIcon ? CogWheel : void 0}
+                leadingAccessory={shouldAddIcon ? { type: "icon", icon: CogWheel } : void 0}
                 action={async () => {
                     for (const guildId of folder.guildIds) {
                         applyDefaultSettings(guildId);
@@ -186,14 +176,14 @@ export default definePlugin({
         {
             find: ",acceptInvite(",
             replacement: {
-                match: /INVITE_ACCEPT_SUCCESS.+?,(\i)=\i\?\.guild_id.+?;/,
+                match: /INVITE_ACCEPT_SUCCESS.+?,(\i)=null!=.+?;/,
                 replace: (m, guildId) => `${m}$self.applyDefaultSettings(${guildId});`
             }
         },
         {
             find: "{joinGuild:",
             replacement: {
-                match: /guildId:(\i),lurker:(\i).{0,20}}\)\);/,
+                match: /guildId:(\i),lurker:(\i).{0,20}}\);/,
                 replace: (m, guildId, lurker) => `${m}if(!${lurker})$self.applyDefaultSettings(${guildId});`
             }
         }
@@ -207,3 +197,4 @@ export default definePlugin({
         }
     }
 });
+

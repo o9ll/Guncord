@@ -18,3 +18,4 @@ export function setSettingsModalOpen(open: boolean): void {
 export function getSettingsModalOpen(): boolean {
     return settingsModalOpen;
 }
+

@@ -17,6 +17,7 @@ import { AutoStartToggle } from "./AutoStartToggle";
 import { DeveloperOptionsButton } from "./DeveloperOptions";
 import { DiscordBranchPicker } from "./DiscordBranchPicker";
 import { ImportLegacySettingsButton } from "./ImportLegacySettings";
+import { GuncordPremiumSettingsControl } from "./GuncordPremiumSettingsControl";
 import { NotificationBadgeToggle } from "./NotificationBadgeToggle";
 import { OutdatedVesktopWarning } from "./OutdatedVesktopWarning";
 import { Updater } from "./Updater";
@@ -142,6 +143,7 @@ const SettingsOptions: Record<string, Array<BooleanSetting | SettingsComponent>>
             defaultValue: false
         }
     ],
+    "Guncord Premium": [GuncordPremiumSettingsControl],
     "Rich Presence": [ArRPCSettingsButton],
     Miscellaneous: [
         {

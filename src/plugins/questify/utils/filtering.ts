@@ -26,3 +26,4 @@ export function normalizeQuestName(quest: Quest): string {
     const normalized = quest.config.messages.questName.trim().toUpperCase();
     return normalized.endsWith("QUEST") ? normalized.slice(0, -5).trim() : normalized;
 }
+

@@ -12,11 +12,79 @@ import { ModalCloseButton,ModalContent, ModalHeader, ModalRoot, openModal } from
 import definePlugin, { OptionType } from "@utils/types";
 import { definePluginSettings } from "@api/Settings";
 import { findByProps, findByPropsLazy } from "@webpack";
-import { ChannelStore, ContextMenuApi, FluxDispatcher, Forms, GuildStore, IconUtils, Menu, MessageStore, NavigationRouter, React, Select, SelectedChannelStore, showToast, Toasts, useCallback, useEffect, useMemo, UserStore, useState } from "@webpack/common";
+import { ChannelStore, ContextMenuApi, FluxDispatcher, Forms, GuildStore, IconUtils, Menu, MessageStore, NavigationRouter, React, RestAPI, Select, SelectedChannelStore, showToast, Toasts, useCallback, useEffect, useMemo, UserStore, useState } from "@webpack/common";
+import { Switch } from "@components/Switch";
 
 import { t, useTranslation } from "../autoTranslateGuncord";
 
-// Alternative navigation strategy via Dispatcher
+const recentlyRemovedByMe = new Map<string, number>();
+let restoreRestDel: (() => void) | null = null;
+let restoreRelActions: (() => void) | null = null;
+
+function markSelfRemoved(userId: string) {
+    if (!userId) return;
+    recentlyRemovedByMe.set(String(userId), Date.now());
+    const now = Date.now();
+    for (const [id, time] of recentlyRemovedByMe.entries()) {
+        if (now - time > 120000) recentlyRemovedByMe.delete(id);
+    }
+}
+
+function hookRelationshipRemoval() {
+    try {
+        if (RestAPI && typeof RestAPI.del === "function" && !(RestAPI.del as any).__nc_hooked) {
+            const origDel = RestAPI.del;
+            const hookedDel = function (options: any, ...args: any[]) {
+                try {
+                    const url = typeof options === "string" ? options : options?.url;
+                    if (url && typeof url === "string") {
+                        const match = url.match(/\/users\/@me\/relationships\/(\d+)/);
+                        if (match && match[1]) {
+                            markSelfRemoved(match[1]);
+                        }
+                    }
+                } catch { }
+                return origDel.apply(this, [options, ...args]);
+            };
+            hookedDel.__nc_hooked = true;
+            RestAPI.del = hookedDel;
+            restoreRestDel = () => {
+                if (RestAPI.del === hookedDel) RestAPI.del = origDel;
+            };
+        }
+    } catch { }
+
+    try {
+        const relActions = findByProps("removeRelationship", "addRelationship")
+            || findByProps("removeFriend", "addRelationship");
+        if (relActions) {
+            const origRemRel = relActions.removeRelationship;
+            const origRemFriend = relActions.removeFriend;
+            if (typeof origRemRel === "function" && !(origRemRel as any).__nc_hooked) {
+                const hookedRemRel = function (userId: string, ...args: any[]) {
+                    if (userId) markSelfRemoved(String(userId));
+                    return origRemRel.apply(this, [userId, ...args]);
+                };
+                hookedRemRel.__nc_hooked = true;
+                relActions.removeRelationship = hookedRemRel;
+            }
+            if (typeof origRemFriend === "function" && !(origRemFriend as any).__nc_hooked) {
+                const hookedRemFriend = function (userId: string, ...args: any[]) {
+                    if (userId) markSelfRemoved(String(userId));
+                    return origRemFriend.apply(this, [userId, ...args]);
+                };
+                hookedRemFriend.__nc_hooked = true;
+                relActions.removeFriend = hookedRemFriend;
+            }
+            restoreRelActions = () => {
+                if (origRemRel) relActions.removeRelationship = origRemRel;
+                if (origRemFriend) relActions.removeFriend = origRemFriend;
+            };
+        }
+    } catch { }
+}
+
+// Stratégie de navigation alternative via Dispatcher
 const navigateTo = (path: string) => {
     try {
         if (NavigationRouter?.transitionTo) return NavigationRouter.transitionTo(path);
@@ -77,6 +145,12 @@ const MAX_LOGS = 10000;
 const PAGE_SIZE = 40;
 let logs: LogEntry[] = [];
 
+function getLogsLimit(): number {
+    const userLimit = settings.store.maxLogsLimit;
+    if (userLimit && userLimit > 0) return userLimit;
+    return MAX_LOGS;
+}
+
 // Track the user's current voice channel ID for "My Voice" filter
 let myVoiceChannelId: string | null = null;
 let logCount = 0;
@@ -101,13 +175,67 @@ export const settings = definePluginSettings({
     maxLogsLimit: {
         type: OptionType.NUMBER,
         default: 0,
-        description: "Max Logs Limit — Limit the maximum number of logs to retain (0 = Unlimited, no auto-deletion)",
+        description: "Max Logs Limit — Limit the maximum number of logs to retain (0 = Unlimited, up to buffer capacity)",
         restartNeeded: false,
     },
 });
 
 const DATA_STORE_KEY = "Guncord_EventLogs";
-const MAX_PERSISTENT_LOGS = 1000;
+const MAX_PERSISTENT_LOGS = 2000;
+const GUILD_CONFIG_STORE_KEY = "Guncord_EventLogs_GuildConfig";
+
+export interface GuildLogConfig {
+    enabled?: boolean;     // default true
+    messages?: boolean;    // default true
+    voice?: boolean;       // default true
+}
+
+export type GuildConfigMap = Record<string, GuildLogConfig>;
+
+let guildConfigs: GuildConfigMap = {};
+
+async function loadGuildConfigs() {
+    try {
+        const saved = await DataStore.get<GuildConfigMap>(GUILD_CONFIG_STORE_KEY);
+        if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+            guildConfigs = saved;
+        }
+    } catch (e) {
+        console.error("[EventLogs] Error loading guild configs:", e);
+    }
+}
+
+function saveGuildConfigs() {
+    try {
+        DataStore.set(GUILD_CONFIG_STORE_KEY, guildConfigs).catch(() => {});
+    } catch {}
+}
+
+function getGuildConfig(guildId: string): { enabled: boolean; messages: boolean; voice: boolean; } {
+    const cfg = guildConfigs[guildId];
+    return {
+        enabled: cfg?.enabled ?? true,
+        messages: cfg?.messages ?? true,
+        voice: cfg?.voice ?? true,
+    };
+}
+
+function isGuildLoggingEnabled(guildId?: string): boolean {
+    if (!guildId) return true;
+    return getGuildConfig(guildId).enabled;
+}
+
+function isGuildMessagesEnabled(guildId?: string): boolean {
+    if (!guildId) return true;
+    const cfg = getGuildConfig(guildId);
+    return cfg.enabled && cfg.messages;
+}
+
+function isGuildVoiceEnabled(guildId?: string): boolean {
+    if (!guildId) return true;
+    const cfg = getGuildConfig(guildId);
+    return cfg.enabled && cfg.voice;
+}
 
 function formatTimestamp(ts: number): string {
     const d = new Date(ts);
@@ -119,31 +247,33 @@ function formatTimestamp(ts: number): string {
 
 async function loadPersistLogs() {
     try {
-        // Clean up legacy settings.store.persistentLogs if present in settings.json
         const legacy = (settings.store as any).persistentLogs;
         if (legacy) {
             delete (settings.store as any).persistentLogs;
         }
 
-        let saved = await DataStore.get<any[]>(DATA_STORE_KEY);
-        if (!saved || !Array.isArray(saved) || saved.length === 0) {
-            // Check if there was any legacy array in settings
-            if (Array.isArray(legacy) && legacy.length > 0) {
-                saved = legacy.slice(0, MAX_PERSISTENT_LOGS);
-                DataStore.set(DATA_STORE_KEY, safeSanitizeLogs(saved)).catch(() => {});
-            }
-        }
-
+        const saved = await DataStore.get<any[]>(DATA_STORE_KEY);
         if (Array.isArray(saved) && saved.length > 0) {
             const capped = saved.slice(0, MAX_PERSISTENT_LOGS);
             const parsed: LogEntry[] = capped.map((l: any) => ({
-                ...l,
                 id: l.id || `${l.timestamp}_${logCount++}`,
-                timeStr: formatTimestamp(l.timestamp)
+                timestamp: Number(l.timestamp) || Date.now(),
+                timeStr: l.timeStr || formatTimestamp(l.timestamp),
+                type: l.type,
+                channelId: l.channelId,
+                channelName: l.channelName,
+                guildId: l.guildId,
+                guildName: l.guildName,
+                authorId: l.authorId,
+                authorName: l.authorName,
+                authorAvatar: l.authorAvatar,
+                content: l.content || "",
+                extra: l.extra || "",
+                realId: l.realId || ""
             }));
-            const seen = new Set(logs.map(l => `${l.timestamp}_${l.type}_${l.authorId || ""}_${l.content || ""}`));
-            const fresh = parsed.filter(l => !seen.has(`${l.timestamp}_${l.type}_${l.authorId || ""}_${l.content || ""}`));
-            logs = fresh.concat(logs).sort((a, b) => b.timestamp - a.timestamp);
+            const seen = new Set(logs.map(l => l.id));
+            const fresh = parsed.filter(l => !seen.has(l.id));
+            logs = fresh.concat(logs).slice(0, getLogsLimit());
             logCount = Math.max(logCount, logs.length);
             globalVersion++;
             for (const fn of updateListeners) {
@@ -153,31 +283,29 @@ async function loadPersistLogs() {
     } catch { }
 }
 
-function safeSanitizeLogs(arr: any[]): any[] {
-    try {
-        return JSON.parse(JSON.stringify(arr, (k, v) => {
-            if (typeof v === "function" || typeof v === "symbol") return undefined;
-            if (typeof v === "bigint") return v.toString();
-            if (v instanceof Error) return { message: v.message };
-            if (v instanceof Node) return undefined;
-            return v;
-        }));
-    } catch {
-        return [];
-    }
-}
-
 function savePersistLogs() {
     try {
         const limit = settings.store.maxLogsLimit && settings.store.maxLogsLimit > 0
-            ? Math.min(settings.store.maxLogsLimit, MAX_PERSISTENT_LOGS)
+            ? settings.store.maxLogsLimit
             : MAX_PERSISTENT_LOGS;
         const persistentFiltered = logs.filter(l => PERSISTENT_TYPES.has(l.type)).slice(0, limit);
-        const toSave = persistentFiltered.map(l => {
-            const { id, timeStr, ...rest } = l;
-            return rest;
-        });
-        DataStore.set(DATA_STORE_KEY, safeSanitizeLogs(toSave)).catch(() => {});
+        const toSave = persistentFiltered.map(l => ({
+            id: l.id,
+            timestamp: l.timestamp,
+            timeStr: l.timeStr,
+            type: l.type,
+            channelId: l.channelId || "",
+            channelName: l.channelName || "",
+            guildId: l.guildId || "",
+            guildName: l.guildName || "",
+            authorId: l.authorId || "",
+            authorName: l.authorName || "",
+            authorAvatar: l.authorAvatar || null,
+            content: typeof l.content === "string" ? l.content.slice(0, 1000) : "",
+            extra: typeof l.extra === "string" ? l.extra.slice(0, 1000) : "",
+            realId: l.realId || ""
+        }));
+        DataStore.set(DATA_STORE_KEY, toSave).catch(() => {});
     } catch { }
 }
 
@@ -196,7 +324,7 @@ function scheduleFlush() {
         for (const fn of updateListeners) {
             try { fn(); } catch { }
         }
-
+        
         // Debounce actual localStorage save to 5 seconds to avoid freezing
         if (saveTimer === null) {
             saveTimer = setTimeout(() => {
@@ -217,9 +345,9 @@ function fmtNow(): string {
 
 function pushLog(entry: Omit<LogEntry, "id" | "timestamp" | "timeStr">) {
     const now = Date.now();
-    const limit = settings.store.maxLogsLimit ?? 0;
-    if (limit > 0 && logs.length >= limit) {
-        logs.pop();
+    const limit = getLogsLimit();
+    if (logs.length >= limit) {
+        logs.length = limit - 1;
     }
     const newLog: LogEntry = { id: `${now}_${logCount++}`, timestamp: now, timeStr: fmtNow(), ...(entry as any) };
     logs.unshift(newLog);
@@ -261,8 +389,8 @@ function authorFrom(msg: any) {
     return { authorId: id, authorName: name, authorAvatar: av, isBot };
 }
 
-const MSG_CACHE_MAX = 50000;
-const MSG_CACHE_PURGE = 2000;
+const MSG_CACHE_MAX = 1000;
+const MSG_CACHE_PURGE = 200;
 
 interface CachedMsg {
     content: string;
@@ -291,16 +419,16 @@ function cacheMsg(msg: any) {
     if (!isLoadingMessages) pruneMsgCache();
     const a = authorFrom(msg);
     const rawAtts = msg.attachments || msg.attachments_cache || [];
-    const attachments: LogAttachment[] = Array.isArray(rawAtts) ? rawAtts.map((att: any) => ({
-        url: att.url || att.proxy_url || "",
-        proxy_url: att.proxy_url || att.url || "",
+    const attachments: LogAttachment[] = Array.isArray(rawAtts) ? rawAtts.slice(0, 4).map((att: any) => ({
+        url: typeof att.url === "string" ? att.url : (att.proxy_url || ""),
+        proxy_url: typeof att.proxy_url === "string" ? att.proxy_url : (att.url || ""),
         width: att.width,
         height: att.height,
         filename: att.filename || "file",
         content_type: att.content_type || att.contentType || ""
     })).filter(att => !!att.url) : [];
 
-    const content = msg.content ?? "";
+    const content = typeof msg.content === "string" ? msg.content.slice(0, 1000) : "";
 
     msgCache.set(msg.id, {
         content,
@@ -369,7 +497,14 @@ function isVideo(att: LogAttachment): boolean {
 }
 
 function LogRow({ e, onClose }: { e: LogEntry; onClose?: () => void; }) {
-    const cfg = CFG[e.type] ?? { label: e.type, color: "#747f8d" };
+    let cfg = CFG[e.type] ?? { label: e.type, color: "#747f8d" };
+    if (e.type === "friend_remove") {
+        if (e.extra === "them" || e.content === "Removed you as friend" || e.content === "Removed you") {
+            cfg = { label: "Removed you", color: "#ed4245" };
+        } else if (e.extra === "self" || e.content === "Removed by you") {
+            cfg = { label: "Friend -", color: "#ed4245" };
+        }
+    }
 
     const onDoubleClick = () => {
         if (!e.channelId) return;
@@ -572,7 +707,10 @@ function LogRow({ e, onClose }: { e: LogEntry; onClose?: () => void; }) {
                                             />
                                         ) : (
                                             <a href={att.url} target="_blank" rel="noreferrer" className="el-attachment-link" onClick={ev => ev.stopPropagation()}>
-                                                📁 {att.filename || "file"}
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: "inline-block", verticalAlign: "middle", marginRight: "4px" }}>
+                                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                                </svg>
+                                                {att.filename || "file"}
                                             </a>
                                         )}
                                     </div>
@@ -592,6 +730,7 @@ function LogRow({ e, onClose }: { e: LogEntry; onClose?: () => void; }) {
 const FILTERS = [
     { key: "all", label: "All" }, { key: "delete", label: "Deleted" }, { key: "edit", label: "Edited" },
     { key: "vocal", label: "Voice" }, { key: "myvoice", label: "My Voice" }, { key: "friends", label: "Friends" }, { key: "ping", label: "Ping" },
+    { key: "settings", label: "Setting" },
 ];
 
 function applyFilter(entries: LogEntry[], f: string, q: string, guildId: string): LogEntry[] {
@@ -623,6 +762,240 @@ function applyFilter(entries: LogEntry[], f: string, q: string, guildId: string)
     });
 }
 
+const MicIcon = () => (
+    <svg width={13} height={13} viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+    </svg>
+);
+
+const MsgIcon = () => (
+    <svg width={13} height={13} viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+        <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z" />
+    </svg>
+);
+
+const SearchIcon = () => (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="currentColor" style={{ opacity: 0.5, flexShrink: 0, marginLeft: 8 }}>
+        <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+    </svg>
+);
+
+function LogsSettingsView() {
+    const { t } = useTranslation();
+    const [search, setSearch] = useState("");
+    const [configVersion, setConfigVersion] = useState(0);
+
+    const guilds = useMemo(() => {
+        try {
+            const raw = GuildStore.getGuilds() || {};
+            const list = Object.values(raw) as any[];
+            return list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        } catch {
+            return [];
+        }
+    }, [configVersion]);
+
+    const filteredGuilds = useMemo(() => {
+        if (!search.trim()) return guilds;
+        const q = search.toLowerCase();
+        return guilds.filter(g => (g.name || "").toLowerCase().includes(q));
+    }, [guilds, search]);
+
+    const stats = useMemo(() => {
+        let enabled = 0;
+        for (const g of guilds) {
+            if (getGuildConfig(g.id).enabled) enabled++;
+        }
+        return { total: guilds.length, enabled };
+    }, [guilds, configVersion]);
+
+    const updateGuild = (id: string, partial: Partial<GuildLogConfig>) => {
+        const current = getGuildConfig(id);
+        guildConfigs[id] = { ...current, ...partial };
+        saveGuildConfigs();
+        setConfigVersion(v => v + 1);
+    };
+
+    const handleEnableAll = () => {
+        for (const g of guilds) {
+            guildConfigs[g.id] = { enabled: true, messages: true, voice: true };
+        }
+        saveGuildConfigs();
+        setConfigVersion(v => v + 1);
+    };
+
+    const handleDisableAll = () => {
+        for (const g of guilds) {
+            guildConfigs[g.id] = { enabled: false, messages: false, voice: false };
+        }
+        saveGuildConfigs();
+        setConfigVersion(v => v + 1);
+    };
+
+    const handleToggleAllVoice = () => {
+        const anyDisabled = guilds.some(g => getGuildConfig(g.id).enabled && !getGuildConfig(g.id).voice);
+        const target = anyDisabled;
+        for (const g of guilds) {
+            const cur = getGuildConfig(g.id);
+            guildConfigs[g.id] = { ...cur, voice: target };
+        }
+        saveGuildConfigs();
+        setConfigVersion(v => v + 1);
+    };
+
+    const handleToggleAllMessages = () => {
+        const anyDisabled = guilds.some(g => getGuildConfig(g.id).enabled && !getGuildConfig(g.id).messages);
+        const target = anyDisabled;
+        for (const g of guilds) {
+            const cur = getGuildConfig(g.id);
+            guildConfigs[g.id] = { ...cur, messages: target };
+        }
+        saveGuildConfigs();
+        setConfigVersion(v => v + 1);
+    };
+
+    return (
+        <div className="el-settings-view">
+            <div className="el-settings-toolbar">
+                <div className="el-settings-search-wrap">
+                    <SearchIcon />
+                    <input
+                        className="el-search-input el-settings-search-input"
+                        placeholder={t("Search servers...")}
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                    />
+                    {search && (
+                        <button className="el-clear" onClick={() => setSearch("")}>✕</button>
+                    )}
+                </div>
+
+                <div className="el-settings-actions">
+                    <button
+                        type="button"
+                        className="el-bulk-btn"
+                        onClick={handleEnableAll}
+                    >
+                        {t("Enable All")}
+                    </button>
+                    <button
+                        type="button"
+                        className="el-bulk-btn"
+                        onClick={handleDisableAll}
+                    >
+                        {t("Disable All")}
+                    </button>
+                    <button
+                        type="button"
+                        className="el-bulk-btn"
+                        onClick={handleToggleAllVoice}
+                    >
+                        {t("Voice (All)")}
+                    </button>
+                    <button
+                        type="button"
+                        className="el-bulk-btn"
+                        onClick={handleToggleAllMessages}
+                    >
+                        {t("Messages (All)")}
+                    </button>
+                </div>
+            </div>
+
+            <div className="el-settings-header-info">
+                <span className="el-settings-stats">
+                    {stats.enabled} / {stats.total} {t("servers enabled")}
+                </span>
+            </div>
+
+            <div className="el-servers-list">
+                {filteredGuilds.length === 0 ? (
+                    <div className="el-empty">{t("No servers found")}</div>
+                ) : (
+                    filteredGuilds.map(guild => {
+                        const cfg = getGuildConfig(guild.id);
+                        const iconUrl = guild.icon
+                            ? IconUtils?.getGuildIconURL?.({ id: guild.id, icon: guild.icon, size: 40 })
+                            : null;
+                        const acronym = (guild.name || "?")
+                            .split(/\s+/)
+                            .map((w: string) => w[0])
+                            .join("")
+                            .slice(0, 3)
+                            .toUpperCase();
+
+                        return (
+                            <div
+                                key={guild.id}
+                                className={`el-server-card ${!cfg.enabled ? "el-server-card--disabled" : ""}`}
+                            >
+                                <div className="el-server-left">
+                                    {iconUrl ? (
+                                        <img src={iconUrl} className="el-server-icon" alt="" />
+                                    ) : (
+                                        <div className="el-server-acronym">{acronym}</div>
+                                    )}
+                                    <div className="el-server-meta">
+                                        <span className="el-server-name" title={guild.name}>
+                                            {guild.name}
+                                        </span>
+                                        <span className="el-server-status">
+                                            {cfg.enabled
+                                                ? (
+                                                    (cfg.messages && cfg.voice)
+                                                        ? `${t("Messages")} · ${t("Voice")}`
+                                                        : cfg.messages
+                                                            ? t("Messages")
+                                                            : cfg.voice
+                                                                ? t("Voice")
+                                                                : t("No actions active")
+                                                )
+                                                : t("Disabled")}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="el-server-right">
+                                    <div className="el-action-chips">
+                                        <button
+                                            type="button"
+                                            className={`el-action-chip ${cfg.voice && cfg.enabled ? "el-action-chip--active" : ""}`}
+                                            disabled={!cfg.enabled}
+                                            onClick={() => updateGuild(guild.id, { voice: !cfg.voice })}
+                                            title={t("Log voice events for this server")}
+                                        >
+                                            <MicIcon />
+                                            <span>{t("Voice")}</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`el-action-chip ${cfg.messages && cfg.enabled ? "el-action-chip--active" : ""}`}
+                                            disabled={!cfg.enabled}
+                                            onClick={() => updateGuild(guild.id, { messages: !cfg.messages })}
+                                            title={t("Log message events for this server")}
+                                        >
+                                            <MsgIcon />
+                                            <span>{t("Messages")}</span>
+                                        </button>
+                                    </div>
+
+                                    <div className="el-server-switch-wrap">
+                                        <Switch
+                                            checked={cfg.enabled}
+                                            onChange={val => updateGuild(guild.id, { enabled: val })}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+        </div>
+    );
+}
+
 function LogsModal({ rootProps }: { rootProps: any; }) {
     const { t } = useTranslation();
     const [version, setVersion] = useState(globalVersion);
@@ -634,18 +1007,18 @@ function LogsModal({ rootProps }: { rootProps: any; }) {
 
     // Extraction des guildes uniques pour le select
     const guildOptions = useMemo(() => {
-        const map = new Map<string, { label: string, guild: any; }>();
+        const map = new Map<string, string>();
         for (const l of logs) {
             if (l.guildId && l.guildName) {
                 if (!map.has(l.guildId)) {
-                    map.set(l.guildId, { label: l.guildName, guild: getGuild(l.guildId) });
+                    map.set(l.guildId, l.guildName);
                 }
             }
         }
         const options = [{ value: "all", label: t("All Servers") }];
-        const sorted = Array.from(map.entries()).sort((a, b) => a[1].label.localeCompare(b[1].label));
-        for (const [id, data] of sorted) {
-            options.push({ value: id, label: data.label });
+        const sorted = Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+        for (const [id, label] of sorted) {
+            options.push({ value: id, label });
         }
         return options;
     }, [version, t]);
@@ -658,8 +1031,8 @@ function LogsModal({ rootProps }: { rootProps: any; }) {
 
     // Debounce search to 200ms
     useEffect(() => {
-        const t = setTimeout(() => { setDebouncedSearch(search); setPage(0); }, 200);
-        return () => clearTimeout(t);
+        const tm = setTimeout(() => { setDebouncedSearch(search); setPage(0); }, 200);
+        return () => clearTimeout(tm);
     }, [search]);
 
     useEffect(() => { setPage(0); }, [filter, selectedGuild]);
@@ -694,7 +1067,11 @@ function LogsModal({ rootProps }: { rootProps: any; }) {
     const saveAsTxt = useCallback(() => {
         try {
             const content = filtered.map(l => {
-                const type = CFG[l.type]?.label || l.type;
+                let type = CFG[l.type]?.label || l.type;
+                if (l.type === "friend_remove") {
+                    if (l.extra === "them" || l.content === "Removed you as friend" || l.content === "Removed you") type = "Removed you";
+                    else if (l.extra === "self" || l.content === "Removed by you") type = "Friend -";
+                }
                 const author = l.authorName || "Unknown";
                 const authorId = l.authorId ? ` (${l.authorId})` : "";
                 const channel = l.channelName ? `#${l.channelName}` : "";
@@ -741,7 +1118,7 @@ function LogsModal({ rootProps }: { rootProps: any; }) {
                                     className={`el-filter-btn ${filter === f.key ? "el-filter-btn--active" : ""}`}
                                     onClick={() => setFilter(f.key)}>
                                     {t(f.label)}
-                                    {tbUnread > 0 && (
+                                    {tbUnread > 0 && f.key !== "settings" && (
                                         <div style={{
                                             position: "absolute", top: -4, right: -4, background: "#ed4245", color: "white",
                                             fontSize: "9px", fontWeight: "bold", padding: "1px 4px", borderRadius: "8px", lineHeight: 1
@@ -751,42 +1128,50 @@ function LogsModal({ rootProps }: { rootProps: any; }) {
                             );
                         })}
                     </div>
-                    <div className="el-search-row">
-                        <div className="el-guild-select-wrap">
-                            <Select
-                                options={guildOptions}
-                                isSelected={(v: string) => selectedGuild === v}
-                                select={(v: string) => setSelectedGuild(v)}
-                                serialize={(v: string) => v}
-                                placeholder={t("All Servers")}
-                            />
+                    {filter !== "settings" && (
+                        <div className="el-search-row">
+                            <div className="el-guild-select-wrap">
+                                <Select
+                                    options={guildOptions}
+                                    isSelected={(v: string) => selectedGuild === v}
+                                    select={(v: string) => setSelectedGuild(v)}
+                                    serialize={(v: string) => v}
+                                    placeholder={t("All Servers")}
+                                />
+                            </div>
+                            <input className="el-search-input"
+                                placeholder={t("Filter...")} value={search} onChange={e => setSearch(e.target.value)} />
+                            {search && <button className="el-clear" onClick={() => setSearch("")}>✕</button>}
+                            <button className="el-clear-all" style={{ marginRight: 4 }} onClick={saveAsTxt} title={t("Save as .txt")}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
+                            </button>
+                            <button className="el-clear-all" onClick={clearLogs} title={t("Clear")}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z" /></svg>
+                            </button>
                         </div>
-                        <input className="el-search-input"
-                            placeholder={t("Filter...")} value={search} onChange={e => setSearch(e.target.value)} />
-                        {search && <button className="el-clear" onClick={() => setSearch("")}>✕</button>}
-                        <button className="el-clear-all" style={{ marginRight: 4 }} onClick={saveAsTxt} title={t("Save as .txt")}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
-                        </button>
-                        <button className="el-clear-all" onClick={clearLogs} title={t("Clear")}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z" /></svg>
-                        </button>
-                    </div>
+                    )}
                 </div>
 
-                <div className="el-list">
-                    {slice.length === 0
-                        ? <div className="el-empty">{t("No events")}</div>
-                        : slice.map(e => <LogRow key={e.id} e={e} onClose={rootProps?.onClose} />)}
-                </div>
+                {filter === "settings" ? (
+                    <LogsSettingsView />
+                ) : (
+                    <>
+                        <div className="el-list">
+                            {slice.length === 0
+                                ? <div className="el-empty">{t("Aucun événement")}</div>
+                                : slice.map(e => <LogRow key={e.id} e={e} onClose={rootProps?.onClose} />)}
+                        </div>
 
-                {totalPages > 1 && (
-                    <div className="el-pagination">
-                        <button disabled={page === 0} onClick={() => setPage(0)}>«</button>
-                        <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>‹</button>
-                        <span>{page + 1} / {totalPages}</span>
-                        <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>›</button>
-                        <button disabled={page >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>»</button>
-                    </div>
+                        {totalPages > 1 && (
+                            <div className="el-pagination">
+                                <button disabled={page === 0} onClick={() => setPage(0)}>«</button>
+                                <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>‹</button>
+                                <span>{page + 1} / {totalPages}</span>
+                                <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>›</button>
+                                <button disabled={page >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>»</button>
+                            </div>
+                        )}
+                    </>
                 )}
             </ModalContent>
         </ModalRoot>
@@ -855,6 +1240,8 @@ function subscribeToEvents() {
             cacheMsg(d.message);
             const meId = UserStore?.getCurrentUser?.()?.id;
             if (meId && d.message.mentions?.some((m: any) => m.id === meId)) {
+                const ch = chInfo(d.message.channel_id);
+                if (ch.guildId && !isGuildMessagesEnabled(ch.guildId)) return;
                 const a = authorFrom(d.message);
                 pushLog({
                     type: "ping",
@@ -863,15 +1250,13 @@ function subscribeToEvents() {
                     authorName: a.authorName,
                     authorAvatar: a.authorAvatar,
                     realId: d.message.id,
-                    ...chInfo(d.message.channel_id)
+                    ...ch
                 });
             }
         }
     });
     sub("LOAD_MESSAGES_SUCCESS", d => {
         if (!d) return;
-        // FIX CRASH DM SCROLL: isLoadingMessages blocks msgCache purge during
-        // batch processing — avoids synchronous spike on main thread.
         const msgs = [
             ...(Array.isArray(d.messages) ? d.messages : []),
             ...(Array.isArray(d.jump) ? d.jump : []),
@@ -879,22 +1264,9 @@ function subscribeToEvents() {
             ...(Array.isArray(d.before) ? d.before : [])
         ];
         if (msgs.length === 0) return;
-
-        // requestIdleCallback is ideal for background scanning without lag
-        if (typeof requestIdleCallback !== "undefined") {
-            requestIdleCallback(() => {
-                isLoadingMessages = true;
-                try { for (const m of msgs) cacheMsg(m); } finally { isLoadingMessages = false; }
-                // Deferred purge if cache exceeds limit
-                pruneMsgCache();
-            }, { timeout: 3000 });
-        } else {
-            setTimeout(() => {
-                isLoadingMessages = true;
-                try { for (const m of msgs) cacheMsg(m); } finally { isLoadingMessages = false; }
-                pruneMsgCache();
-            }, 100);
-        }
+        // Keep cache ultra-light: only cache the most recent messages from the batch
+        const recent = msgs.slice(-15);
+        for (const m of recent) cacheMsg(m);
     });
     sub("MESSAGE_UPDATE", d => {
         if (!d.message) return;
@@ -906,6 +1278,12 @@ function subscribeToEvents() {
         if (oldC === newC || !newC || !oldC) {
             if (cached) cached.content = newC || cached.content;
             else if (newC) cacheMsg(m);
+            return;
+        }
+
+        const ch = chInfo(m.channel_id);
+        if (ch.guildId && !isGuildMessagesEnabled(ch.guildId)) {
+            if (cached) cached.content = newC;
             return;
         }
 
@@ -923,13 +1301,15 @@ function subscribeToEvents() {
             authorId: a.authorId ?? cached?.authorId,
             authorName: a.authorName !== "?" ? a.authorName : (cached?.authorName ?? "?"),
             authorAvatar: a.authorAvatar ?? cached?.authorAvatar ?? null,
-            ...chInfo(m.channel_id)
+            ...ch
         });
         if (cached) cached.content = newC;
         else cacheMsg(m);
     });
     sub("MESSAGE_DELETE", d => {
         if (d.mlDeleted) return;
+        const ch = chInfo(d.channelId);
+        if (ch.guildId && !isGuildMessagesEnabled(ch.guildId)) return;
         const cached = msgCache.get(d.id);
         let content = "", authorId = "", authorName = "?", authorAvatar: string | null = null;
         let attachments: LogAttachment[] = [];
@@ -1042,25 +1422,28 @@ function subscribeToEvents() {
             }
 
             const u = getUser(userId); const ch = getChannel(channelId ?? oldChannelId); const g = getGuild(guildId ?? ch?.guild_id);
-            const b = {
-                authorId: userId, authorName: u?.globalName ?? u?.username ?? userId, authorAvatar: u?.avatar ?? null,
-                channelId: channelId ?? oldChannelId, channelName: ch?.name, guildId: g?.id, guildName: g?.name,
-                isMyVoice
-            };
-            if (!oldChannelId && channelId) pushLog({ type: "voice_join", content: t("Joined"), ...b });
-            else if (oldChannelId && !channelId) {
+            const voiceActive = isGuildVoiceEnabled(g?.id);
+            if (voiceActive) {
+                const b = {
+                    authorId: userId, authorName: u?.globalName ?? u?.username ?? userId, authorAvatar: u?.avatar ?? null,
+                    channelId: channelId ?? oldChannelId, channelName: ch?.name, guildId: g?.id, guildName: g?.name,
+                    isMyVoice
+                };
+                if (!oldChannelId && channelId) pushLog({ type: "voice_join", content: t("Joined"), ...b });
+                else if (oldChannelId && !channelId) {
+                    const p = prevVS.get(userId);
+                    const content = (s.selfStream === false && p?.selfStream === true) ? t("Stream stopped") : t("Left");
+                    pushLog({ type: "voice_leave", content, ...b, channelId: oldChannelId });
+                }
+                else if (oldChannelId && channelId && oldChannelId !== channelId) { const oc = getChannel(oldChannelId); pushLog({ type: "voice_move", content: `${oc?.name ?? "?"} → ${ch?.name ?? "?"}`, ...b }); }
                 const p = prevVS.get(userId);
-                const content = (s.selfStream === false && p?.selfStream === true) ? t("Stream stopped") : t("Left");
-                pushLog({ type: "voice_leave", content, ...b, channelId: oldChannelId });
-            }
-            else if (oldChannelId && channelId && oldChannelId !== channelId) { const oc = getChannel(oldChannelId); pushLog({ type: "voice_move", content: `${oc?.name ?? "?"} → ${ch?.name ?? "?"}`, ...b }); }
-            const p = prevVS.get(userId);
-            if (p) {
-                if (s.selfMute !== p.selfMute) pushLog({ type: "voice_mute", content: s.selfMute ? t("Mic muted") : t("Mic unmuted"), ...b });
-                if (s.selfDeaf !== p.selfDeaf) pushLog({ type: "voice_deaf", content: s.selfDeaf ? t("Headphones muted") : t("Headphones unmuted"), ...b });
-                if (s.mute && !p.mute) pushLog({ type: "voice_mute_mod", content: t("Muted by staff"), ...b });
-                if (!s.mute && p.mute) pushLog({ type: "voice_mute_mod", content: t("Unmuted by staff"), ...b });
-                if (s.selfStream !== p.selfStream) pushLog({ type: "voice_stream", content: s.selfStream ? t("Stream started") : t("Stream stopped"), ...b });
+                if (p) {
+                    if (s.selfMute !== p.selfMute) pushLog({ type: "voice_mute", content: s.selfMute ? t("Mic muted") : t("Mic unmuted"), ...b });
+                    if (s.selfDeaf !== p.selfDeaf) pushLog({ type: "voice_deaf", content: s.selfDeaf ? t("Headphones muted") : t("Headphones unmuted"), ...b });
+                    if (s.mute && !p.mute) pushLog({ type: "voice_mute_mod", content: t("Muted by staff"), ...b });
+                    if (!s.mute && p.mute) pushLog({ type: "voice_mute_mod", content: t("Unmuted by staff"), ...b });
+                    if (s.selfStream !== p.selfStream) pushLog({ type: "voice_stream", content: s.selfStream ? t("Stream started") : t("Stream stopped"), ...b });
+                }
             }
             if (!channelId) prevVS.delete(userId);
             else prevVS.set(userId, s);
@@ -1081,18 +1464,35 @@ function subscribeToEvents() {
     });
     sub("RELATIONSHIP_REMOVE", d => {
         const b = relUser(d); const t_type = relType(d);
-        const [type, content]: [LogType, string] = (t_type === 3 || t_type === 4) ? ["friend_request_cancel", t("Request cancelled")] : t_type === 2 ? ["unblock", t("Unblocked")] : ["friend_remove", t("Friend removed")];
-        pushLog({ type, content, ...b });
+        if (t_type === 3 || t_type === 4) {
+            pushLog({ type: "friend_request_cancel", content: t("Request cancelled"), ...b });
+        } else if (t_type === 2) {
+            pushLog({ type: "unblock", content: t("Unblocked"), ...b });
+        } else {
+            const userId = b.authorId;
+            const isSelf = Boolean(userId && recentlyRemovedByMe.has(userId) && (Date.now() - (recentlyRemovedByMe.get(userId) || 0) < 60000));
+            if (isSelf) {
+                recentlyRemovedByMe.delete(userId);
+                pushLog({ type: "friend_remove", content: t("Removed by you"), extra: "self", ...b });
+            } else {
+                pushLog({ type: "friend_remove", content: t("Removed you as friend"), extra: "them", ...b });
+            }
+        }
     });
-    sub("GUILD_MEMBER_ADD", d => { const b = uInfo(d.user?.id); const g = getGuild(d.guildId); pushLog({ type: "guild_member_add", content: t("Joined"), ...b, guildId: d.guildId, guildName: g?.name }); });
+    sub("GUILD_MEMBER_ADD", d => {
+        if (!isGuildLoggingEnabled(d.guildId)) return;
+        const b = uInfo(d.user?.id); const g = getGuild(d.guildId);
+        pushLog({ type: "guild_member_add", content: t("Joined"), ...b, guildId: d.guildId, guildName: g?.name });
+    });
     sub("GUILD_MEMBER_REMOVE", d => {
+        if (!isGuildLoggingEnabled(d.guildId)) return;
         const b = uInfo(d.user?.id); const g = getGuild(d.guildId);
         pushLog({ type: "guild_member_remove", content: t("Left/Kick"), ...b, guildId: d.guildId, guildName: g?.name });
     });
     // GUILD_MEMBER_LIST_UPDATE: dispatche a tous les membres quand la liste change
     // Les ops DELETE = quelquun a quitte le serveur (visible sans perms admin)
     sub("GUILD_MEMBER_LIST_UPDATE", d => {
-        if (!d?.ops || !d.guildId) return;
+        if (!d?.ops || !d.guildId || !isGuildLoggingEnabled(d.guildId)) return;
         const g = getGuild(d.guildId);
         const meId = UserStore?.getCurrentUser?.()?.id;
         for (const op of d.ops) {
@@ -1120,6 +1520,7 @@ function subscribeToEvents() {
         }
     });
     sub("GUILD_BAN_ADD", d => {
+        if (!isGuildLoggingEnabled(d.guildId)) return;
         const userId = d.user?.id;
         if (!userId) return;
         const recentDupe = logs.find((l: any) =>
@@ -1133,6 +1534,7 @@ function subscribeToEvents() {
         pushLog({ type: "guild_ban", content: t("Banned"), ...b, guildId: d.guildId, guildName: g?.name });
     });
     sub("GUILD_BAN_REMOVE", d => {
+        if (!isGuildLoggingEnabled(d.guildId)) return;
         const userId = d.user?.id;
         if (!userId) return;
         const recentDupe = logs.find((l: any) =>
@@ -1147,7 +1549,7 @@ function subscribeToEvents() {
     });
 
     sub("GUILD_MEMBER_UPDATE", d => {
-        if (!d.guildId || !d.user?.id) return;
+        if (!d.guildId || !d.user?.id || !isGuildLoggingEnabled(d.guildId)) return;
         const b = uInfo(d.user.id); const g = getGuild(d.guildId);
         if (d.communicationDisabledUntil) {
             pushLog({ type: "guild_timeout", content: t("Temporarily excluded (Timeout)"), ...b, guildId: d.guildId, guildName: g?.name });
@@ -1185,6 +1587,8 @@ export default definePlugin({
     },
 
     start() {
+        void loadGuildConfigs();
+        hookRelationshipRemoval();
         // Initialize current voice channel on start
         try {
             const vcId = (SelectedChannelStore as any)?.getVoiceChannelId?.();
@@ -1202,6 +1606,10 @@ export default definePlugin({
         window.addEventListener("beforeunload", savePersistLogs);
     },
     stop() {
+        if (restoreRestDel) { restoreRestDel(); restoreRestDel = null; }
+        if (restoreRelActions) { restoreRelActions(); restoreRelActions = null; }
+        recentlyRemovedByMe.clear();
+        saveGuildConfigs();
         window.removeEventListener("beforeunload", savePersistLogs);
         unsubs.forEach(fn => fn()); unsubs = [];
         // Save before clearing — cancel the debounce timers then immediately persist

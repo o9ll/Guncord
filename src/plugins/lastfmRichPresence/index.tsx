@@ -179,8 +179,8 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "LastFMRichPresence",
     description: "Little plugin for Last.fm rich presence",
-    authors: [Devs.RuiNtD, Devs.blahajZip, Devs.archeruwu],
     tags: ["Activity", "Media"],
+    authors: [Devs.dzshn, Devs.RuiNtD, Devs.blahajZip, Devs.archeruwu],
 
     settings,
 

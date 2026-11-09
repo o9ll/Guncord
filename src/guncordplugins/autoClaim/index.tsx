@@ -7,12 +7,12 @@
 import { definePluginSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByPropsLazy } from "@webpack";
+import { findStoreLazy } from "@webpack";
 import { ChannelStore, RestAPI, UserStore } from "@webpack/common";
 import { tPlugin as t } from "@api/pluginI18n";
 
-// Must be at module level — findByPropsLazy returns a lazy proxy that resolves on first access
-const AuthStore = findByPropsLazy("getToken", "getSessionId");
+// Must be at module level — findStoreLazy returns a lazy proxy that resolves on first access
+const AuthStore = findStoreLazy("AuthenticationStore");
 
 const logger = new Logger("AutoClaim");
 

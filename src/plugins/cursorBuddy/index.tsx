@@ -15,8 +15,8 @@ import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { ColorPicker } from "@webpack/common";
 
-import fathorse, { cleanupFathorse } from "./fathorse";
-import oneko, { cleanupOneko } from "./oneko";
+import fathorse from "./fathorse";
+import oneko from "./oneko";
 
 const ONEKO_IMAGE = "https://raw.githubusercontent.com/adryd325/oneko.js/5281d057c4ea9bd4f6f997ee96ba30491aed16c0/oneko.gif";
 const FATASS_HORSE_IMAGE = "https://raw.githubusercontent.com/nexpid/fatass-horse/08bc4042750d5f995c55327f7b6c6710158f5263/sheet.png";
@@ -196,9 +196,11 @@ const settings = definePluginSettings({
     }
 });
 
+let destroyBuddy: (() => void) | undefined;
+
 function unload() {
-    cleanupOneko();
-    cleanupFathorse();
+    destroyBuddy?.();
+    destroyBuddy = undefined;
     document.getElementById("oneko")?.remove();
     document.getElementById("fathorse")?.remove();
 }
@@ -209,7 +211,7 @@ function load() {
 
     switch (settings.store.buddy) {
         case "oneko": {
-            oneko({
+            destroyBuddy = oneko({
                 speed: settings.store.speed,
                 fps: settings.store.fps,
                 image: ONEKO_IMAGE,
@@ -220,7 +222,7 @@ function load() {
             break;
         }
         case "fathorse": {
-            fathorse({
+            destroyBuddy = fathorse({
                 speed: settings.store.speed,
                 fps: settings.store.fps,
                 size: settings.store.size,

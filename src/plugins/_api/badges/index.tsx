@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import "./fixDiscordBadgePadding.css";
 
@@ -86,20 +74,47 @@ let EquicordDonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge",
 let GuncordBadges = {} as Record<string, Array<{ icon: string; placeholder: string; uuid: string; }>>;
 
 async function loadBadges(url: string, noCache = false) {
-    const init = {} as RequestInit;
-    if (noCache) init.cache = "no-cache";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    try {
+        const init: RequestInit = { signal: controller.signal };
+        if (noCache) init.cache = "no-cache";
 
-    return await fetch(url, init).then(r => r.json());
+        const res = await fetch(url, init);
+        if (!res.ok) return {};
+        return await res.json();
+    } catch {
+        return {};
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+async function loadGuncordBadges(noCache = false): Promise<Record<string, any>> {
+    // Use main-process net.fetch to bypass CORS restrictions on the Guncord API.
+    // Only available in desktop (Electron) context.
+    if (IS_WEB || typeof VencordNative?.guncord?.netFetch !== "function") {
+        return loadBadges(`https://raw.githubusercontent.com/o9ll/Guncord/main/assets/badges.json`, noCache);
+    }
+    try {
+        const res = await VencordNative.guncord.netFetch(`https://raw.githubusercontent.com/o9ll/Guncord/main/assets/badges.json`, { noCache });
+        if (!res?.ok || !res.data || typeof res.data !== "object") return {};
+        return res.data as Record<string, any>;
+    } catch {
+        return {};
+    }
 }
 
 async function loadAllBadges(noCache = false) {
-    const vencordBadges = await loadBadges("https://badges.vencord.dev/badges.json", noCache).catch(() => ({}));
-    const equicordBadges = await loadBadges("https://badge.equicord.org/badges.json", noCache).catch(() => ({}));
-    const guncordBadges = await loadBadges(`https://raw.githubusercontent.com/o9ll/Guncord/main/assets/badges.json`, noCache).catch(() => ({}));
+    const [vencord, equicord, guncord] = await Promise.allSettled([
+        loadBadges("https://badges.vencord.dev/badges.json", noCache),
+        loadBadges("https://badge.equicord.org/badges.json", noCache),
+        loadGuncordBadges(noCache)
+    ]);
 
-    DonorBadges = vencordBadges;
-    EquicordDonorBadges = equicordBadges;
-    GuncordBadges = guncordBadges;
+    DonorBadges = (vencord.status === "fulfilled" && vencord.value) ? vencord.value : {};
+    EquicordDonorBadges = (equicord.status === "fulfilled" && equicord.value) ? equicord.value : {};
+    GuncordBadges = (guncord.status === "fulfilled" && guncord.value) ? guncord.value : {};
 }
 
 let intervalId: any;
@@ -194,8 +209,8 @@ export default definePlugin({
 
     userProfileBadges: [ContributorBadge, EquicordContributorBadge, UserPluginContributorBadge],
 
-    async start() {
-        await loadAllBadges();
+    start() {
+        loadAllBadges().catch(() => {});
 
         clearInterval(intervalId);
         intervalId = setInterval(loadAllBadges, 1000 * 60 * 30); // 30 minutes

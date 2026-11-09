@@ -275,3 +275,4 @@ export function QuestButtonSetting(): JSX.Element {
         </SettingsCard>
     );
 }
+

@@ -42,8 +42,8 @@ export const settings = definePluginSettings({
         type: OptionType.SELECT,
         description: "Which order should pinned DMs be displayed in?",
         options: [
-            { label: "Most recent message", value: PinOrder.LastMessage },
-            { label: "Custom (right click channels to reorder)", value: PinOrder.Custom, default: true }
+            { label: "Most recent message", value: PinOrder.LastMessage, default: true },
+            { label: "Custom (right click channels to reorder)", value: PinOrder.Custom }
         ]
     },
     canCollapseDmSection: {
@@ -79,8 +79,8 @@ export default definePlugin({
             replacement: [
                 {
                     // Filter out pinned channels from the private channel list
-                    match: /(?<=channels:\i,)privateChannelIds:(\i)(?=,listRef:)/,
-                    replace: "privateChannelIds:$1.filter(c=>!$self.isPinned(c))"
+                    match: /privateChannelIds:([^,]+)(?=,listRef:)/,
+                    replace: "privateChannelIds:($1).filter(c=>!$self.isPinned(c))"
                 },
                 {
                     // Insert the pinned channels to sections
@@ -180,6 +180,10 @@ export default definePlugin({
     makeProps(instance, { sections }: { sections: number[]; }) {
         this._instance = instance;
         this.sections = sections;
+
+        if (Array.isArray(instance?.props?.privateChannelIds)) {
+            instance.props.privateChannelIds = instance.props.privateChannelIds.filter((c: string) => !this.isPinned(c));
+        }
 
         this.sections.splice(1, 0, ...this.getSections());
 

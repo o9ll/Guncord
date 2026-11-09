@@ -104,6 +104,22 @@ function BackpackPopout({ chatBarProps, closePopout }: { chatBarProps: ChatBarPr
                                 // Disable auto-close to allow toggling multiple plugins
                                 // closePopout();
                             }}
+                            onContextMenu={e => {
+                                if (e.defaultPrevented) return;
+                                if (id.toLowerCase() === "translate" || id.toLowerCase() === "floodpanel") return;
+                                try {
+                                    const { openPluginModal } = require("@components/settings/tabs/plugins/PluginModal");
+                                    const pluginModule = require("~plugins");
+                                    const allPlugins = pluginModule.default ?? pluginModule;
+                                    const plugin = allPlugins[id] ?? allPlugins[id.toLowerCase()] ?? Object.values(allPlugins).find((p: any) => p?.name?.toLowerCase() === id.toLowerCase());
+                                    if (plugin) {
+                                        e.preventDefault();
+                                        openPluginModal(plugin);
+                                    }
+                                } catch (err) {
+                                    console.error("Failed to open plugin modal from backpack:", err);
+                                }
+                            }}
                         >
                             <ErrorBoundary noop>
                                 <data.render
@@ -271,7 +287,7 @@ async function isExistingUser(): Promise<boolean> {
 
 export default definePlugin({
     name: "Backpack",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Organize chat bar buttons into a backpack. Left-click to use packed buttons, right-click to pack/unpack buttons.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["ChatInputButtonAPI"],

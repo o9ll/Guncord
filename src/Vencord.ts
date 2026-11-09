@@ -30,6 +30,36 @@ export * as Webpack from "./webpack";
 export * as WebpackPatcher from "./webpack/patchWebpack";
 export { PlainSettings, Settings };
 
+import * as Api from "./api";
+import * as DataStore from "./api/DataStore";
+import * as Plugins from "./api/PluginManager";
+import * as Components from "./components";
+import * as Util from "./utils";
+import * as Updater from "./utils/updater";
+import * as Webpack from "./webpack";
+import * as WebpackPatcher from "./webpack/patchWebpack";
+
+// Expose global namespaces immediately before any plugins, patches or Webpack modules execute
+const g: any = typeof window !== "undefined" ? window : globalThis;
+const VencordInstance = {
+    Api,
+    DataStore,
+    Plugins,
+    Components,
+    Util,
+    Updater,
+    Webpack,
+    WebpackPatcher,
+    PlainSettings,
+    Settings,
+};
+g.Vencord = VencordInstance;
+g.Equicord = VencordInstance;
+g.Guncord = VencordInstance;
+g.VencordNative ??= g.EquicordNative ?? g.GuncordNative;
+g.EquicordNative ??= g.VencordNative;
+g.GuncordNative ??= g.VencordNative;
+
 import { coreStyleRootNode, initStyles } from "@api/Styles";
 import { openSettingsTabModal, UpdaterTab } from "@components/settings";
 import { addHeaderBarButton, HeaderBarButton } from "@api/HeaderBar";
@@ -215,9 +245,13 @@ function initTrayIpc() {
 }
 
 import { ReactDOM } from "@webpack/common";
+import { initCustomization, registerCustomizationPatches } from "customization";
+import { initGlobalFont } from "customization/globalFonts/globalFontManager";
 
 async function init() {
     await onceReady;
+
+    void initCustomization();
 
     startAllPlugins(StartAt.WebpackReady);
     initUserPluginsEngine();
@@ -280,6 +314,7 @@ if ((window as any).__GUNCORD_INITIALIZED__) {
 
     try {
         const g: any = typeof window !== "undefined" ? window : globalThis;
+        g.Vencord ??= VencordInstance;
         g.Equicord = g.Vencord;
         g.Guncord = g.Vencord;
         g.VencordNative ??= g.EquicordNative ?? g.GuncordNative;
@@ -287,8 +322,10 @@ if ((window as any).__GUNCORD_INITIALIZED__) {
         g.GuncordNative ??= g.VencordNative;
     } catch {}
 
+    registerCustomizationPatches();
     initPluginManager();
     initStyles();
+    initGlobalFont();
     startAllPlugins(StartAt.Init);
     init();
 

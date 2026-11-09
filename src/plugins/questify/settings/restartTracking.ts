@@ -91,3 +91,4 @@ export function promptToRestartIfDirty({ onDecline }: RestartPromptOptions = {})
 
     return true;
 }
+

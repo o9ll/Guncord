@@ -318,3 +318,4 @@ function addPeriods(textInput: string) {
 
     return processedLines.join("\n");
 }
+

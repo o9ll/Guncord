@@ -12,7 +12,7 @@
 
 import "./checkNodeVersion.js";
 
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { recoverOriginalAsar } from "./recoverAsar.mjs";
@@ -139,7 +139,17 @@ function inject(resourcesDir) {
         }
     }
 
-    // Step 1: Ensure the presence of the original _app.asar (> 1MB)
+    const appAsarPath = join(resourcesDir, "app.asar");
+    if (existsSync(appAsarPath)) {
+        try {
+            const stat = statSync(appAsarPath);
+            if (stat.isDirectory()) {
+                rmSync(appAsarPath, { recursive: true, force: true });
+            }
+        } catch {}
+    }
+
+    // Étape 1 : Garantir la présence de _app.asar original (> 1MB)
     const hasOriginal = recoverOriginalAsar(resourcesDir);
     if (!hasOriginal) {
         console.error(`\x1b[31m[Guncord] Unable to locate or extract the original Discord archive for ${resourcesDir} !\x1b[0m`);

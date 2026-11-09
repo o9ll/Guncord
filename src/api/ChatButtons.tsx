@@ -12,11 +12,38 @@ import { classes } from "@utils/misc";
 import { IconComponent } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { findCssClassesLazy } from "@webpack";
-import { Clickable, Tooltip, useEffect, useState, Popout, useRef } from "@webpack/common";
-import { HTMLProps, JSX, MouseEventHandler, ReactNode } from "react";
+import { Clickable, Tooltip, useEffect, useState, Popout, useRef, React } from "@webpack/common";
+import type { HTMLProps, JSX, MouseEventHandler, ReactNode } from "react";
 
 import { addCompactListener, addStealthListener, isCompactModeEnabled, isStealthModeEnabled, removeCompactListener, removeStealthListener, toggleCompactMode } from "./HeaderBar";
 import { useSettings } from "./Settings";
+
+let _ChatPluginContext: React.Context<string | null> | null = null;
+export function getChatPluginContext() {
+    if (!_ChatPluginContext && React?.createContext) {
+        _ChatPluginContext = React.createContext<string | null>(null);
+    }
+    return _ChatPluginContext;
+}
+
+function openPluginSettingsModal(id?: string | null) {
+    if (!id) return;
+    try {
+        const { openPluginModal } = require("@components/settings/tabs/plugins/PluginModal");
+        const pluginModule = require("~plugins");
+        const allPlugins = pluginModule.default ?? pluginModule;
+        const plugin =
+            allPlugins[id] ??
+            allPlugins[id.toLowerCase()] ??
+            allPlugins[id.charAt(0).toUpperCase() + id.slice(1)] ??
+            Object.values(allPlugins).find((p: any) => p?.name?.toLowerCase() === id.toLowerCase());
+        if (plugin) {
+            openPluginModal(plugin);
+        }
+    } catch (e) {
+        console.error("Failed to open plugin settings modal:", e);
+    }
+}
 
 const ButtonWrapperClasses = findCssClassesLazy("button", "buttonWrapper", "notificationDot");
 const ChannelTextAreaClasses = findCssClassesLazy("buttonContainer", "channelTextArea", "button");
@@ -134,16 +161,36 @@ function VencordChatBarButtons(props: ChatBarProps) {
     }
 
     const { analyticsName } = props.type;
+    const ChatPluginContext = getChatPluginContext();
     return (
         <div className="vc-chat-bar-btns" style={{ display: "contents" }}>
             {Array.from(ChatBarButtonMap)
                 .filter(([key]) => chatBarButtons[key]?.enabled !== false && !BackpackedButtons.has(key))
                 .sort(([a], [b]) => (a === "Backpack" ? -1 : b === "Backpack" ? 1 : 0))
-                .map(([key, { render: Button }]) => (
-                    <ErrorBoundary noop key={key} onError={e => logger.error(`Failed to render ${key}`, e.error)}>
-                        <Button {...props} isMainChat={analyticsName === "normal"} isAnyChat={["normal", "sidebar"].includes(analyticsName)} />
-                    </ErrorBoundary>
-                ))}
+                .map(([key, { render: Button }]) => {
+                    const content = (
+                        <div
+                            style={{ display: "contents" }}
+                            onContextMenu={e => {
+                                if (e.defaultPrevented) return;
+                                if (key.toLowerCase() === "translate" || key.toLowerCase() === "floodpanel") return;
+                                e.preventDefault();
+                                openPluginSettingsModal(key);
+                            }}
+                        >
+                            <ErrorBoundary noop onError={e => logger.error(`Failed to render ${key}`, e.error)}>
+                                <Button {...props} isMainChat={analyticsName === "normal"} isAnyChat={["normal", "sidebar"].includes(analyticsName)} />
+                            </ErrorBoundary>
+                        </div>
+                    );
+                    return ChatPluginContext ? (
+                        <ChatPluginContext.Provider value={key} key={key}>
+                            {content}
+                        </ChatPluginContext.Provider>
+                    ) : (
+                        <React.Fragment key={key}>{content}</React.Fragment>
+                    );
+                })}
         </div>
     );
 }
@@ -173,6 +220,25 @@ export interface ChatBarButtonProps {
 }
 
 export const ChatBarButton = ErrorBoundary.wrap((props: ChatBarButtonProps) => {
+    const ChatPluginContext = getChatPluginContext();
+    const pluginKey = ChatPluginContext ? React.useContext(ChatPluginContext) : null;
+
+    const handleContextMenu = (e: React.MouseEvent) => {
+        if (props.onContextMenu) {
+            props.onContextMenu(e);
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        if (pluginKey?.toLowerCase() === "translate" || pluginKey?.toLowerCase() === "floodpanel") {
+            return;
+        }
+        if (!e.defaultPrevented && pluginKey) {
+            e.preventDefault();
+            openPluginSettingsModal(pluginKey);
+        }
+    };
+
     return (
         <Tooltip text={props.tooltip}>
             {({ onMouseEnter, onMouseLeave }) => (
@@ -183,7 +249,7 @@ export const ChatBarButton = ErrorBoundary.wrap((props: ChatBarButtonProps) => {
                         onMouseLeave={onMouseLeave}
                         className={classes(ButtonWrapperClasses.button, ChannelTextAreaClasses?.button)}
                         onClick={props.onClick}
-                        onContextMenu={props.onContextMenu}
+                        onContextMenu={handleContextMenu}
                         onAuxClick={props.onAuxClick}
                         {...props.buttonProps}
                     >
@@ -229,19 +295,37 @@ export function _wrapButtons(buttons: ReactNode) {
 function CompactChatPopout({ chatBarProps, closePopout }: any) {
     const { chatBarButtons } = useSettings(["uiElements.chatBarButtons.*"]).uiElements;
     const { analyticsName } = chatBarProps.type;
+    const ChatPluginContext = getChatPluginContext();
     return (
         <div className="compact-popout-container">
             <div className="compact-popout-grid">
                 {Array.from(ChatBarButtonMap)
-                    .filter(([key]) => chatBarButtons[key]?.enabled !== false)
-                    .sort(([a], [b]) => (a === "Backpack" ? -1 : b === "Backpack" ? 1 : 0))
-                    .map(([key, { render: Button }]) => (
-                        <div key={key} style={{ display: "contents" }} onClick={closePopout}>
-                            <ErrorBoundary noop>
-                                <Button {...chatBarProps} isMainChat={analyticsName === "normal"} isAnyChat={["normal", "sidebar"].includes(analyticsName)} />
-                            </ErrorBoundary>
-                        </div>
-                    ))}
+                    .filter(([key]) => key !== "Backpack" && chatBarButtons[key]?.enabled !== false)
+                    .map(([key, { render: Button }]) => {
+                        const content = (
+                            <div
+                                style={{ display: "contents" }}
+                                onClick={closePopout}
+                                onContextMenu={e => {
+                                    if (e.defaultPrevented) return;
+                                    if (key.toLowerCase() === "translate") return;
+                                    e.preventDefault();
+                                    openPluginSettingsModal(key);
+                                }}
+                            >
+                                <ErrorBoundary noop>
+                                    <Button {...chatBarProps} isMainChat={analyticsName === "normal"} isAnyChat={["normal", "sidebar"].includes(analyticsName)} />
+                                </ErrorBoundary>
+                            </div>
+                        );
+                        return ChatPluginContext ? (
+                            <ChatPluginContext.Provider value={key} key={key}>
+                                {content}
+                            </ChatPluginContext.Provider>
+                        ) : (
+                            <React.Fragment key={key}>{content}</React.Fragment>
+                        );
+                    })}
             </div>
             <div className="compact-popout-divider" />
             <div className="compact-popout-disable" onClick={() => { toggleCompactMode(); closePopout(); }}>

@@ -27,3 +27,4 @@ export function rerenderQuests(): void {
 export function useQuestRerender(): number {
     return React.useSyncExternalStore(subscribe, getSnapshot);
 }
+

@@ -47,10 +47,77 @@ import { t } from "@api/i18n";
 import Plugins, { ExcludedPlugins, PluginMeta } from "~plugins";
 
 import { PluginCard } from "./PluginCard";
-import { openPluginModal, openResetDefaultsModal, openWarningModal } from "./PluginModal";
+import { openPluginModal, openResetDefaultsModal, openApplyBasicConfigModal, openWarningModal } from "./PluginModal";
 import { StockPluginsCard } from "./PluginStatCards";
 import { TUTORIAL_PLUGIN_NAMES } from "./tutorialList";
 import { UIElementsButton } from "./UIElements";
+
+export const BASIC_CONFIG_PLUGINS: Set<string> = new Set([
+    "CrashHandler",
+    "NoUnblockToJump",
+    "ShowHiddenThings",
+    "SpotifyCrack",
+    "UnlimitedAccounts",
+    "UncompressedImages",
+    "ValidSearch",
+    "VolumeBooster",
+    "AntiMoveDeco",
+    "AutoResponder",
+    "AutoReply",
+    "Backpack",
+    "BulkFriendRemove",
+    "BigFileUpload",
+    "CancelFriendRequest",
+    "CallTimer",
+    "CloseGroup",
+    "CopyProfileId",
+    "CompactMode",
+    "DisableCallIdle",
+    "DoubleEmoji",
+    "CustomProfile",
+    "ExportDM",
+    "EventLogs",
+    "FakeDM",
+    "FakeVoice",
+    "FastPFP",
+    "FloodPanel",
+    "FollowUser",
+    "GifConvertor",
+    "GhostInstaller",
+    "IconViewer",
+    "ImageZoom",
+    "LiveWallpaper",
+    "MassDM",
+    "LockGroup",
+    "MemberCount",
+    "MessageCleaner",
+    "MessageLoggerEnhanced",
+    "MessageLogger",
+    "GuncordUpdater",
+    "GuncordAI",
+    "MultiInstance",
+    "PinDMs",
+    "GuncordOfficialDM",
+    "QuickDM",
+    "PrevNames",
+    "ReverseImageSearch",
+    "SelfDestruct",
+    "SharePerms",
+    "StealthMode",
+    "SoundCordPlayer",
+    "StreamProof",
+    "TokenImporter",
+    "Translate",
+    "ValidUser",
+    "VoiceChannelSearch",
+    "UserVoiceShow",
+    "ViewIcons",
+    "VoiceDictation",
+    "VoiceDownload",
+    "WhosWatching",
+    "VoiceMessages",
+    "AutoTranslateGuncord"
+]);
 
 const GUNCORD_TAB_ICON = "data:image/png;base64,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";
 const VENCORD_EQUICORD_TAB_ICON = "data:image/png;base64,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";
@@ -68,9 +135,18 @@ function UserPluginsTabIcon() {
     return <img src={UserPlugins_TAB_ICON} alt="Plugins" style={{ width: 18, height: 18, borderRadius: 4 }} />;
 }
 
+function EnabledPluginsTabIcon() {
+    return (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill="var(--status-positive, #23a55a)" fillRule="evenodd" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm4.53 8.28a.75.75 0 0 0-1.06-1.06L10.5 14.19l-1.97-1.97a.75.75 0 0 0-1.06 1.06l2.5 2.5a.75.75 0 0 0 1.06 0l5.5-5.5Z" clipRule="evenodd" />
+        </svg>
+    );
+}
+
 const makeCategoryOptions = (othersCount?: number) => [
     { label: "Vencord & Equicord", value: SearchStatus.OTHERS },
     { label: "Guncord", value: SearchStatus.GUNCORD },
+    { label: t("Enabled Plugins"), value: SearchStatus.ENABLED },
     { label: t("User Plugins"), value: SearchStatus.USER_PLUGINS },
     { label: t("Community Plugins"), value: "community", disabled: true }
 ];
@@ -93,12 +169,12 @@ function ReloadRequiredCard({ required, enabledPlugins, openWarningModal, resetC
         <Card className={classes(cl("info-card"), required && "vc-warning-card")}>
             {required ? (
                 <>
-                    <HeadingTertiary>{t("Restart required!")}</HeadingTertiary>
+                    <HeadingTertiary>{t("Quick Reload Required")}</HeadingTertiary>
                     <Paragraph className={cl("dep-text")}>
-                        {t("Restart now to apply new plugins and their settings")}
+                        {t("Reload now to apply new plugins and their settings in 1 second")}
                     </Paragraph>
                     <Button variant="primary" className={cl("restart-button")} onClick={() => relaunch()}>
-                        {t("Restart")}
+                        {t("Quick Reload")}
                     </Button>
                 </>
             ) : (
@@ -245,7 +321,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
             const remainingCount = pluginNames.length - displayed.length;
 
             Alerts.show({
-                title: "Restart required",
+                title: t("Quick Reload Required"),
                 body: (
                     <div>
                         {displayed.map((s, i) => (
@@ -257,8 +333,8 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                         {remainingCount > 0 && <span> and {remainingCount} more</span>}
                     </div>
                 ),
-                confirmText: "Restart now",
-                cancelText: "Later!",
+                confirmText: t("Quick Reload Now"),
+                cancelText: t("Later"),
                 onConfirm: () => relaunch()
             });
         };
@@ -362,7 +438,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                 if (!newPluginsSet?.has(plugin.name)) return false;
                 break;
             case SearchStatus.USER_PLUGINS:
-                if (!pluginMeta?.userPlugin) return false;
+                if (!pluginMeta?.userPlugin && !(plugin as any)?.isUserPlugin) return false;
                 break;
             case SearchStatus.API_PLUGINS:
                 if (!plugin.name.endsWith("API")) return false;
@@ -389,7 +465,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
 
         return (
             plugin.name.toLowerCase().includes(search.replace(/\s+/g, "")) ||
-            plugin.description.toLowerCase().includes(search) ||
+            (plugin.description ?? "").toLowerCase().includes(search) ||
             plugin.tags?.some(t => t.toLowerCase().includes(search))
         );
     }, [searchValue, search]);
@@ -426,10 +502,14 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
 
             if (!pluginFilter(p, newPluginsSet)) continue;
 
-            const isRequired = p.required || p.isDependency || depMap[p.name]?.some(d => isPluginEnabled(d));
+            const isRequired = searchValue.status === SearchStatus.ENABLED
+                ? p.required
+                : (p.required || p.isDependency || depMap[p.name]?.some(d => isPluginEnabled(d)));
 
             if (isRequired) {
                 requiredData.push(p);
+            } else if (searchValue.status === SearchStatus.ENABLED) {
+                guncordData.push(p);
             } else {
                 const folderName = PluginMeta[p.name]?.folderName ?? "";
                 if (folderName.startsWith("src/guncordplugins/")) {
@@ -440,7 +520,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
             }
         }
         return { guncordData, othersData, requiredData };
-    }, [sortedPlugins, searchValue, newPluginsSet, depMap, pluginFilter]);
+    }, [sortedPlugins, searchValue, newPluginsSet, depMap, pluginFilter, settings.plugins]);
 
     const allDataLength = guncordData.length + othersData.length;
     const hasMore = visibleCount < allDataLength;
@@ -478,15 +558,15 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
 
         if (restartNeeded) {
             Alerts.show({
-                title: "Restart Required",
+                title: t("Quick Reload Required"),
                 body: (
                     <>
-                        <p style={{ textAlign: "center" }}>Some plugins require a restart to fully disable.</p>
-                        <p style={{ textAlign: "center" }}>Would you like to restart now?</p>
+                        <p style={{ textAlign: "center" }}>{t("Some plugins require a quick reload to fully disable.")}</p>
+                        <p style={{ textAlign: "center" }}>{t("Would you like to reload now?")}</p>
                     </>
                 ),
-                confirmText: "Restart Now",
-                cancelText: "Later",
+                confirmText: t("Quick Reload Now"),
+                cancelText: t("Later"),
                 onConfirm: () => relaunch()
             });
         }
@@ -541,15 +621,15 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
 
             if (restartNeeded) {
                 Alerts.show({
-                    title: "Restart Required",
+                    title: t("Quick Reload Required"),
                     body: (
                         <>
-                            <p style={{ textAlign: "center" }}>Some plugins require a restart to apply their default configuration.</p>
-                            <p style={{ textAlign: "center" }}>Would you like to restart now?</p>
+                            <p style={{ textAlign: "center" }}>{t("Some plugins require a quick reload to apply their default configuration.")}</p>
+                            <p style={{ textAlign: "center" }}>{t("Would you like to reload now?")}</p>
                         </>
                     ),
-                    confirmText: "Restart Now",
-                    cancelText: "Later",
+                    confirmText: t("Quick Reload Now"),
+                    cancelText: t("Later"),
                     onConfirm: () => relaunch()
                 });
             } else {
@@ -571,17 +651,97 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
         }
     }
 
+    function applyBasicConfigCheckAndDo() {
+        try {
+            let restartNeeded = false;
+            let modifiedCount = 0;
+
+            for (const pluginName in Plugins) {
+                const plugin = Plugins[pluginName];
+
+                // Les plugins APIs ne peuvent pas être configurés directement
+                if (pluginName.endsWith("API")) continue;
+
+                const shouldBeEnabled = Boolean(plugin.required) || BASIC_CONFIG_PLUGINS.has(pluginName);
+                const currentlyEnabled = isPluginEnabled(pluginName);
+
+                if (currentlyEnabled !== shouldBeEnabled) {
+                    const pluginSettings = settings.plugins[pluginName];
+
+                    if (plugin.patches?.length) {
+                        pluginSettings.enabled = shouldBeEnabled;
+                        changes.handleChange(pluginName);
+                        restartNeeded = true;
+                        modifiedCount++;
+                        continue;
+                    }
+
+                    if (shouldBeEnabled) {
+                        const result = startPlugin(plugin);
+                        if (!result) {
+                            logger.error(`Error while starting plugin ${pluginName}`);
+                            showErrorToast(`Error while starting plugin ${pluginName}`);
+                        } else {
+                            pluginSettings.enabled = true;
+                            modifiedCount++;
+                        }
+                    } else {
+                        const result = stopPlugin(plugin);
+                        if (!result) {
+                            logger.error(`Error while stopping plugin ${pluginName}`);
+                            showErrorToast(`Error while stopping plugin ${pluginName}`);
+                        } else {
+                            pluginSettings.enabled = false;
+                            modifiedCount++;
+                        }
+                    }
+                }
+            }
+
+            if (restartNeeded) {
+                Alerts.show({
+                    title: t("Quick Reload Required"),
+                    body: (
+                        <>
+                            <p style={{ textAlign: "center" }}>{t("Some plugins require a quick reload to apply the basic configuration.")}</p>
+                            <p style={{ textAlign: "center" }}>{t("Would you like to reload now?")}</p>
+                        </>
+                    ),
+                    confirmText: t("Quick Reload Now"),
+                    cancelText: t("Later"),
+                    onConfirm: () => relaunch()
+                });
+            } else {
+                Toasts.show({
+                    message: `Basic config applied. ${modifiedCount} plugin(s) modified.`,
+                    type: Toasts.Type.SUCCESS,
+                    id: Toasts.genId(),
+                    options: { position: Toasts.Position.BOTTOM }
+                });
+            }
+        } catch (err: any) {
+            Toasts.show({
+                message: `Failed: ${err?.message ?? err}`,
+                type: Toasts.Type.FAILURE,
+                id: Toasts.genId(),
+                options: { position: Toasts.Position.BOTTOM }
+            });
+            logger.error("Apply Basic Config crashed:", err);
+        }
+    }
+
+
     // Code directly taken from supportHelper.tsx
     const { totalStockPlugins, totalUserPlugins, enabledStockPlugins, enabledUserPlugins, enabledPlugins } = useMemo(() => {
-        const isApiPlugin = (plugin: string) => plugin.endsWith("API") || Plugins[plugin].required;
+        const isApiPlugin = (plugin: string) => plugin.endsWith("API") || Plugins[plugin]?.required;
 
         const totalPlugins = Object.keys(Plugins).filter(p => !isApiPlugin(p));
         const enabledPlugins = Object.keys(Plugins).filter(p => isPluginEnabled(p) && !isApiPlugin(p));
 
-        const totalStockPlugins = totalPlugins.filter(p => !PluginMeta[p].userPlugin && !Plugins[p].hidden).length;
-        const totalUserPlugins = totalPlugins.filter(p => PluginMeta[p].userPlugin).length;
-        const enabledStockPlugins = enabledPlugins.filter(p => !PluginMeta[p].userPlugin).length;
-        const enabledUserPlugins = enabledPlugins.filter(p => PluginMeta[p].userPlugin).length;
+        const totalStockPlugins = totalPlugins.filter(p => !PluginMeta[p]?.userPlugin && !(Plugins[p] as any)?.isUserPlugin && !Plugins[p]?.hidden).length;
+        const totalUserPlugins = totalPlugins.filter(p => PluginMeta[p]?.userPlugin || (Plugins[p] as any)?.isUserPlugin).length;
+        const enabledStockPlugins = enabledPlugins.filter(p => !PluginMeta[p]?.userPlugin && !(Plugins[p] as any)?.isUserPlugin).length;
+        const enabledUserPlugins = enabledPlugins.filter(p => PluginMeta[p]?.userPlugin || (Plugins[p] as any)?.isUserPlugin).length;
         return { totalStockPlugins, totalUserPlugins, enabledStockPlugins, enabledUserPlugins, enabledPlugins };
     }, [settings.plugins]);
 
@@ -590,7 +750,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
     const othersVisibleData = othersData.slice(0, Math.max(0, visibleCount - guncordData.length));
 
     const makeCard = (p: typeof sortedPlugins[number]) => (
-        <ErrorBoundary fallback={<div style={{ color: "red", padding: 8 }}>Failed to render {p.name}.</div>} key={p.name}>
+        <ErrorBoundary fallback={<div style={{ color: "red", padding: 8 }}>Failed to render {p.name}.</div>} key={`${p.name}_${(p as any)?.isUserPlugin ? "user" : "stock"}`}>
             <PluginCard
                 onRestartNeeded={handleRestartNeeded}
                 disabled={false}
@@ -606,7 +766,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
             ? "This plugin is required for Guncord to function."
             : <PluginDependencyList deps={depMap[p.name]?.filter(d => isPluginEnabled(d))} />;
         return (
-            <ErrorBoundary fallback={<div style={{ color: "red", padding: 8 }}>Failed to render {p.name}.</div>} key={p.name}>
+            <ErrorBoundary fallback={<div style={{ color: "red", padding: 8 }}>Failed to render {p.name}.</div>} key={`${p.name}_${(p as any)?.isUserPlugin ? "user" : "stock"}`}>
                 <Tooltip text={tooltipText}>
                     {({ onMouseLeave, onMouseEnter }) => (
                         <PluginCard
@@ -640,16 +800,16 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
     // Category-aware stats for the "ENABLED PLUGINS" card: reflects whichever tab
     // (GUNCORD / OTHERS / all) is currently selected, instead of always being global.
     const categoryStats = useMemo(() => {
-        const isApiPlugin = (plugin: string) => plugin.endsWith("API") || Plugins[plugin].required;
-        const isGuncordPlugin = (p: string) => PluginMeta[p]?.folderName?.startsWith("src/guncordplugins/");
-        const isUserPlugin = (p: string) => PluginMeta[p]?.userPlugin === true;
+        const isApiPlugin = (plugin: string) => plugin.endsWith("API") || Plugins[plugin]?.required;
+        const isGuncordPlugin = (p: string) => PluginMeta[p]?.folderName?.startsWith("src/guncordplugins/") && !PluginMeta[p]?.userPlugin && !(Plugins[p] as any)?.isUserPlugin;
+        const isUserPlugin = (p: string) => PluginMeta[p]?.userPlugin === true || (Plugins[p] as any)?.isUserPlugin;
 
-        let plugins = Object.keys(Plugins).filter(p => !isApiPlugin(p) && !Plugins[p].hidden);
+        let plugins = Object.keys(Plugins).filter(p => !isApiPlugin(p) && !Plugins[p]?.hidden);
 
         if (searchValue.status === SearchStatus.GUNCORD) {
             plugins = plugins.filter(isGuncordPlugin);
         } else if (searchValue.status === SearchStatus.OTHERS) {
-            plugins = plugins.filter(p => !isGuncordPlugin(p));
+            plugins = plugins.filter(p => !isGuncordPlugin(p) && !isUserPlugin(p));
         } else if (searchValue.status === SearchStatus.USER_PLUGINS) {
             plugins = plugins.filter(isUserPlugin);
         }
@@ -670,19 +830,27 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                         <div className={cl("ecosystem-banner-text")}>
                             <HeadingTertiary>{t("Plugin Management")}</HeadingTertiary>
                             <Paragraph>{t("Manage your Guncord and community plugins here. Enable, disable, and configure them to your liking.")}</Paragraph>
+                            <button
+                                type="button"
+                                className={cl("reset-btn")}
+                                onClick={() => openWarningModal(null, undefined, false, enabledPlugins.length, resetCheckAndDo)}
+                            >
+                                {t("RESET")}
+                            </button>
                         </div>
+
                         <div className={cl("ecosystem-banner-buttons")}>
                             <Button
                                 variant="secondary"
                                 size="small"
-                                onClick={() => openWarningModal(null, undefined, false, enabledPlugins.length, resetCheckAndDo)}
+                                onClick={() => openResetDefaultsModal(applyDefaultConfigCheckAndDo)}
                             >
                                 {t("Disable All")}
                             </Button>
                             <Button
                                 variant="secondary"
                                 size="small"
-                                onClick={() => openResetDefaultsModal(applyDefaultConfigCheckAndDo)}
+                                onClick={() => openApplyBasicConfigModal(applyBasicConfigCheckAndDo)}
                             >
                                 {t("Default Config")}
                             </Button>
@@ -696,7 +864,12 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                             <div className={cl("stat-title")}>{t("TOTAL PLUGINS")}</div>
                             <div className={cl("stat-value")}>{totalStockPlugins + totalUserPlugins}</div>
                         </div>
-                        <div className={cl("stat-item")}>
+                        <div 
+                            className={cl("stat-item")}
+                            style={{ cursor: "pointer", transition: "0.2s" }}
+                            onClick={() => onStatusChange(SearchStatus.ENABLED)}
+                            title={t("Click to view enabled plugins")}
+                        >
                             <div className={cl("stat-title")}>{t("ENABLED PLUGINS")}</div>
                             <div className={cl("stat-value")}>
                                 {categoryStats.enabled} <span className={cl("stat-percent")}>({percent}%)</span>
@@ -720,11 +893,13 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                             <div className={cl("stat-title")}>
                                 {searchValue.status === SearchStatus.USER_PLUGINS ? t("USER PLUGINS") :
                                  searchValue.status === SearchStatus.OTHERS ? t("VENCORD & EQUICORD PLUGINS") :
+                                 searchValue.status === SearchStatus.ENABLED ? t("ALL ENABLED PLUGINS") :
                                  t("GUNCORD PLUGINS")}
                             </div>
                             <div className={cl("stat-value")}>
                                 {searchValue.status === SearchStatus.USER_PLUGINS ? totalUserPlugins :
                                  searchValue.status === SearchStatus.OTHERS ? totalOtherPlugins :
+                                 searchValue.status === SearchStatus.ENABLED ? categoryStats.enabled :
                                  totalGuncordPlugins}
                             </div>
                         </div>
@@ -747,6 +922,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                             renderOptionPrefix={(o: any) => {
                                 if (o?.value === SearchStatus.GUNCORD) return <GuncordTabIcon />;
                                 if (o?.value === SearchStatus.OTHERS) return <VencordEquicordTabIcon />;
+                                if (o?.value === SearchStatus.ENABLED) return <EnabledPluginsTabIcon />;
                                 if (o?.value === SearchStatus.USER_PLUGINS) return <UserPluginsTabIcon />;
                                 return null;
                             }}

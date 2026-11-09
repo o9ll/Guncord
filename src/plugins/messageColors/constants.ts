@@ -93,3 +93,4 @@ export const regex = [
     { reg: /rgba\(\v\c\v\c\v(\c|\/?)\s*\f\)/g, type: ColorType.RGBA },
     { reg: /hsl\(\v°?\c\s*?\d+%?\s*?\c\s*?\d+%?\s*?\)/g, type: ColorType.HSL },
 ].map(v => { v.reg = replaceRegexp(v.reg.source); return v; });
+

@@ -1,38 +1,53 @@
 { lib
 , stdenv
-, nodejs_20
-, pnpm ? null
+, fetchPnpmDeps
+, nodejs
+, pnpm_10
+, pnpmConfigHook
+, git
+, src ? lib.cleanSource ./.
+, gitHash ? null
 }:
 
-stdenv.mkDerivation rec {
+let
+  packageJson = builtins.fromJSON (builtins.readFile "${src}/package.json");
+in
+stdenv.mkDerivation (finalAttrs: {
   pname = "guncord";
-  version = "1.27.8";
+  version = packageJson.version;
 
-  src = lib.cleanSource ./.;
+  inherit src;
+
+  pnpmDeps = fetchPnpmDeps {
+    inherit (finalAttrs) pname version src;
+    pnpm = pnpm_10;
+    fetcherVersion = 4;
+    hash = "sha256-Ta84vdQEcxDm7tKiiT25+GPyGijATFP5uoSjNDodLZs=";
+  };
 
   nativeBuildInputs = [
-    nodejs_20
-  ] ++ lib.optional (pnpm != null) pnpm.configHook;
+    nodejs
+    pnpm_10
+    pnpmConfigHook
+    git
+  ];
+
+  env = {
+    GUNCORD_REMOTE = "guncord/guncord";
+    GUNCORD_HASH = if gitHash != null then gitHash else (src.rev or "unknown");
+    SOURCE_DATE_EPOCH = builtins.toString (src.lastModified or 0);
+  };
 
   buildPhase = ''
     runHook preBuild
-    if [ -d "dist/desktop" ] && [ -f "dist/desktop/patcher.js" ]; then
-      echo "Guncord: Using pre-compiled dist/desktop build."
-    else
-      echo "Guncord: Building dist files..."
-      node --require=./scripts/suppressExperimentalWarnings.js scripts/build/build.mjs || true
-    fi
+    pnpm run build -- --standalone --disable-updater
     runHook postBuild
   '';
 
   installPhase = ''
     runHook preInstall
     mkdir -p $out/share/guncord
-    if [ -d "dist/desktop" ]; then
-      cp -r dist/desktop/* $out/share/guncord/
-    elif [ -d "dist" ]; then
-      cp -r dist/* $out/share/guncord/
-    fi
+    cp -r dist/desktop/* $out/share/guncord/
     runHook postInstall
   '';
 
@@ -40,7 +55,7 @@ stdenv.mkDerivation rec {
     description = "Everything Discord doesn't build, we create (Guncord)";
     homepage = "https://github.com/o9ll/Guncord";
     license = licenses.gpl3Plus;
-    platforms = platforms.all;
+    platforms = platforms.linux;
   };
-}
+})
 

@@ -148,16 +148,6 @@ require(path.join(__dirname, "dist", "desktop", "patcher.js"));
         if (existsSync(localBin)) cpSync(localBin, join(outDir, bin));
     }
 
-    // macOS cursors (used by the CursorMacOS plugin) -> resourcesPath/mac/mac/...
-    // native.ts looks via process.resourcesPath, which points to outDir/resources (asar: false)
-    const macCursorsSrc = join(__dirname, "mac");
-    if (existsSync(macCursorsSrc)) {
-        console.log("[guncord] Copying macOS cursors...");
-        cpSync(macCursorsSrc, join(outRes, "mac"), { recursive: true });
-    } else {
-        console.warn("[guncord] WARNING: 'mac' folder not found at root, CursorMacOS plugin will not work in the packaged build.");
-    }
-
     const discordExe = join(outDir, "Discord.exe");
     const injectScript = join(__dirname, "inject-discord.ps1");
     if (existsSync(injectScript)) cpSync(injectScript, join(outDir, "inject-discord.ps1"));

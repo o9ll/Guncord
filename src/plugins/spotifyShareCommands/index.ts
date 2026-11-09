@@ -1,69 +1,24 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { ApplicationCommandInputType, findOption, OptionalMessageOption, sendBotMessage } from "@api/Commands";
 import { Devs } from "@utils/constants";
 import { sendMessage } from "@utils/discord";
 import definePlugin from "@utils/types";
-import { Command } from "@vencord/discord-types";
-import { findByPropsLazy } from "@webpack";
-import { FluxDispatcher, MessageActions, PendingReplyStore } from "@webpack/common";
+import { Command, SpotifyTrack } from "@vencord/discord-types";
+import { FluxDispatcher, MessageActions, PendingReplyStore, SpotifyStore } from "@webpack/common";
 
-interface Album {
-    id: string;
-    image: {
-        height: number;
-        width: number;
-        url: string;
-    };
-    name: string;
-}
-
-interface Artist {
-    external_urls: {
-        spotify: string;
-    };
-    href: string;
-    id: string;
-    name: string;
-    type: "artist" | string;
-    uri: string;
-}
-
-interface Track {
-    id: string | null;
-    album: Album;
-    artists: Artist[];
-    duration: number;
-    isLocal: boolean;
-    name: string;
-}
-
-const Spotify = findByPropsLazy("getPlayerState");
-
-function makeCommand(name: string, formatUrl: (track: Track) => string): Command {
+function makeCommand(name: string, formatUrl: (track: SpotifyTrack) => string): Command {
     return {
         name,
         description: `Share your current Spotify ${name} in chat`,
         inputType: ApplicationCommandInputType.BUILT_IN,
         options: [OptionalMessageOption],
         execute(options, { channel }) {
-            const track: Track | null = Spotify.getTrack();
+            const track = SpotifyStore.getTrack();
             if (!track) {
                 return sendBotMessage(channel.id, {
                     content: "You're not listening to any music."

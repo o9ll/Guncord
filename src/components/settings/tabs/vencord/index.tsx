@@ -12,16 +12,18 @@ import { plugins } from "@api/PluginManager";
 import { useSettings } from "@api/Settings";
 import { t } from "@api/i18n";
 
-import { Button } from "@components/Button";
+import { Button, LinkButton } from "@components/Button";
 import { Card } from "@components/Card";
 import { Divider } from "@components/Divider";
 import { Flex } from "@components/Flex";
 import { FormSwitch } from "@components/FormSwitch";
 import { Heading } from "@components/Heading";
-import { HeartIcon, GithubIcon, LogIcon, OwnerCrownIcon, PaintbrushIcon, DiscordIcon, RestartIcon } from "@components/Icons";
+import { HeartIcon, GithubIcon, LogIcon, OwnerCrownIcon, PaintbrushIcon, DiscordIcon, RestartIcon, WebsiteIcon, EyeIcon, EyeSlashIcon } from "@components/Icons";
+
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
-import { openPluginModal, SettingsTab, wrapTab } from "@components/settings";
+import { SettingsTab, wrapTab } from "../BaseTab";
+import { openPluginModal } from "../plugins/PluginModal";
 import { QuickAction, QuickActionCard } from "@components/settings/QuickAction";
 import { IS_MAC, IS_WINDOWS } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
@@ -29,7 +31,10 @@ import { Margins } from "@utils/margins";
 import { identity } from "@utils/misc";
 import { openModal } from "@utils/modal";
 import { relaunch } from "@utils/native";
-import { Avatar, OAuth2AuthorizeModal, React, Select, UserStore, showToast, Toasts } from "@webpack/common";
+import { Avatar, OAuth2AuthorizeModal, React, Select, UserStore, showToast, Toasts, TextInput } from "@webpack/common";
+import { Settings } from "@api/Settings";
+import { getGroqKey, setGroqKey } from "@guncordplugins/guncordAI/groqManager";
+
 
 import { ContributeModal } from "../../../../guncord/renderer/components/ContributeModal";
 import { copyToClipboard } from "@utils/clipboard";
@@ -215,6 +220,82 @@ function StealthModeButton() {
     );
 }
 
+function GroqApiKeySection() {
+    const [key, setKey] = React.useState("");
+    const [keyRevealed, setKeyRevealed] = React.useState(false);
+
+    React.useEffect(() => {
+        getGroqKey().then(stored => {
+            if (stored) setKey(stored);
+        });
+    }, []);
+
+    const handleChange = (val: string) => {
+        setKey(val);
+        setGroqKey(val);
+        try {
+            if (Settings.plugins.GuncordAI) {
+                Settings.plugins.GuncordAI.apiKey = val.trim();
+            }
+            if (Settings.plugins.AutoCorrect) {
+                Settings.plugins.AutoCorrect.apiKey = val.trim();
+            }
+        } catch {}
+    };
+
+    return (
+        <div style={{ marginTop: 20 }}>
+            <Card style={{ padding: "16px 20px", borderRadius: "8px", border: "1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))" }}>
+                <Heading tag="h5" style={{ marginBottom: 8, color: "var(--header-primary)" }}>{t("How to get a Groq API key")}</Heading>
+                <Paragraph style={{ color: "var(--text-muted)", fontSize: 14, lineHeight: 1.4 }}>
+                    {t("Create a free account on console.groq.com, then go to API Keys and click Create API Key. Copy the key and paste it in the Api Key field above.")}
+                </Paragraph>
+                <Paragraph style={{ marginTop: 8, color: "var(--text-muted)", fontSize: 14, lineHeight: 1.4 }}>
+                    {t("The Groq API is free and gives access to fast LLMs (Llama, Mixtral…).")}
+                </Paragraph>
+                <div style={{ marginTop: 14 }}>
+                    <LinkButton
+                        size="small"
+                        variant="secondary"
+                        href="https://console.groq.com/keys"
+                        style={{ display: "inline-flex", width: "fit-content", padding: "6px 16px" }}
+                    >
+                        {t("Create API Key")}
+                    </LinkButton>
+                </div>
+            </Card>
+
+            <div style={{ marginTop: 16 }}>
+                <Heading tag="h5" style={{ marginBottom: 4, color: "var(--header-primary)" }}>{t("Api Key")}</Heading>
+                <Paragraph className={Margins.bottom8} style={{ color: "var(--text-muted)", fontSize: 14 }}>
+                    {t("Groq API Key (console.groq.com/keys) — shared with AutoCorrect and VoiceDictation")}
+                </Paragraph>
+                <div className="nc-api-key-container">
+                    <div className={`nc-api-key-input-wrapper ${!keyRevealed ? "nc-blurred-api-key" : ""}`}>
+                        <TextInput
+                            value={key}
+                            placeholder="gsk_••••••••••••••••••••••••••••••••••"
+                            type="text"
+                            onChange={handleChange}
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        className="nc-api-key-toggle-btn"
+                        style={{ color: "#ffffff" }}
+                        title={keyRevealed ? t("Hide API key") : t("Reveal API key")}
+                        aria-label={keyRevealed ? t("Hide API key") : t("Reveal API key")}
+                        onClick={() => setKeyRevealed(!keyRevealed)}
+                    >
+                        {keyRevealed ? <EyeSlashIcon width={18} height={18} fill="#ffffff" /> : <EyeIcon width={18} height={18} fill="#ffffff" />}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+
 function EquicordSettings() {
     const settings = useSettings();
     const stealthActive = useStealthActive();
@@ -392,6 +473,8 @@ function EquicordSettings() {
                     ),
                 )}
 
+                <GroqApiKeySection />
+
                 {needsVibrancySettings && (
                     <>
                         <Divider className={Margins.top20} />
@@ -495,7 +578,6 @@ function EquicordSettings() {
             >
                 {compactActive ? t("✓ Compact Mode Enabled — Click to disable") : t("Enable Compact Mode")}
             </Button>
-
             <Divider className={Margins.top20} />
 
             <Heading className={Margins.top20}>{t("Stealth Mode")}</Heading>

@@ -30,7 +30,6 @@ const FORCE_DISABLED_DEFAULT_PLUGIN_KEYS = new Set([
     "activityspoofer",
     "audiolimiter",
     "antigroup",
-    "cursormacos",
     "fakeperm",
     "translucence",
     "rolecoloreverywhere",
@@ -88,7 +87,7 @@ export interface Settings {
     seeAllCustomProfile: boolean;
     syncOwnCustomProfile: boolean;
     syncDiscordLanguage: boolean;
-    language: "en" | "fr" | "ar" | "es" | "ru" | "zh";
+    language: "auto" | "en" | "fr" | "ar" | "es" | "ru" | "zh";
     plugins: {
         [plugin: string]: {
             enabled: boolean;
@@ -138,6 +137,7 @@ const DefaultSettings: Settings = {
     enableOnlineThemes: true,
     pinnedThemes: [],
     themeNames: {},
+    mellowtelOnboardingSeen: false,
     enableReactDevtools: false,
     mainWindowFrameless: false,
     frameless: false,
@@ -152,7 +152,7 @@ const DefaultSettings: Settings = {
     seeAllCustomProfile: true,
     syncOwnCustomProfile: false,
     syncDiscordLanguage: false,
-    language: "en",
+    language: "auto",
     plugins: {},
 
     uiElements: {
@@ -180,6 +180,9 @@ const DefaultSettings: Settings = {
 
 const settings = !IS_REPORTER ? VencordNative.settings.get() : {} as Settings;
 mergeDefaults(settings, DefaultSettings);
+if (typeof settings.transparent !== "boolean") {
+    settings.transparent = false;
+}
 if ((settings.plugins as any)?.EventLogs?.persistentLogs) {
     delete (settings.plugins as any).EventLogs.persistentLogs;
 }

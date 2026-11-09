@@ -5,11 +5,12 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
-import { BackupRestoreIcon, CloudIcon, LogIcon, MagnifyingGlassIcon,MainSettingsIcon, PaintbrushIcon, PatchHelperIcon, PluginsIcon, UpdaterIcon } from "@components/Icons";
+import { BackupRestoreIcon, CloudIcon, LogIcon, MagnifyingGlassIcon, MainSettingsIcon, PaintbrushIcon, PatchHelperIcon, PluginsIcon, TrashIcon, UpdaterIcon } from "@components/Icons";
 import { LangIcon } from "@components/LangIcon";
 import {
     BackupAndRestoreTab,
     ChangelogTab,
+    FontsTab,
     LanguageTab,
     PatchHelperTab,
     PluginsTab,
@@ -21,6 +22,17 @@ import {
 } from "@components/settings";
 import { CreateThemeTab } from "@components/settings/tabs/createTheme/CreateThemeTab";
 import { PencilSparkleIcon } from "@components/settings/tabs/createTheme/PencilSparkleIcon";
+import { CustomizationIcon, CustomizationTab } from "customization";
+
+function FontIcon(props: IconProps) {
+    return (
+        <svg {...props} width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="4 7 4 4 20 4 20 7" />
+            <line x1="9" y1="20" x2="15" y2="20" />
+            <line x1="12" y1="4" x2="12" y2="20" />
+        </svg>
+    );
+}
 
 function StatusPulseIcon(props: IconProps) {
     return (
@@ -40,6 +52,7 @@ function CodeIcon(props: IconProps) {
     );
 }
 import IconsTab from "@guncordplugins/iconViewer/components/IconsTab";
+import DmPurgerTab from "@guncordplugins/dmPurger/components/DmPurgerTab";
 import { gitHashShort } from "@shared/vencordUserAgent";
 import { Devs } from "@utils/constants";
 import { isTruthy } from "@utils/guards";
@@ -155,6 +168,8 @@ const settingsSectionMap: [string, string][] = [
     ["EquicordCloud", "equicord_cloud_panel"],
     ["EquicordBackupAndRestore", "equicord_backup_restore_panel"],
     ["EquicordPatchHelper", "equicord_patch_helper_panel"],
+    ["GuncordFonts", "guncord_fonts_panel"],
+    ["GuncordDmPurger", "guncord_dm_purger_panel"],
     ["EquibopSettings", "equicord_equibop_settings_panel"],
 ];
 
@@ -183,6 +198,7 @@ export default definePlugin({
                     }
                 },
                 {
+                    noWarn: true,
                     match: /"text-xs\/normal".{0,300}?\[\(0,\i\.jsxs?\)\((.{1,10}),(\{[^{}}]+\{.{0,20}className:\i.\i,.+?\})\)," "/,
                     replace: (m, component, props) => {
                         props = props.replace(/children:\[.+\]/, "");
@@ -214,6 +230,15 @@ export default definePlugin({
     buildEntry(options: EntryOptions): SettingsLayoutNode {
         const { key, title, panelTitle = title, Component, Icon } = options;
 
+        const SafeComponent = (props: any) => {
+            const Comp: any = typeof Component === "function"
+                ? Component
+                : (Component as any)?.default && typeof (Component as any).default === "function"
+                    ? (Component as any).default
+                    : null;
+            return Comp ? <Comp {...props} /> : null;
+        };
+
         const panel: SettingsLayoutNode = {
             key: key + "_panel",
             type: LayoutTypes.PANEL,
@@ -224,7 +249,7 @@ export default definePlugin({
                 buildLayout: () => [{
                     type: LayoutTypes.CUSTOM,
                     key: key + "_custom",
-                    Component: Component,
+                    Component: SafeComponent,
                     useSearchTerms: () => [t(title)]
                 }]
             }]
@@ -274,10 +299,23 @@ export default definePlugin({
                 Component: ThemesTab,
                 Icon: PaintbrushIcon
             }),
+            buildEntry({
+                key: "guncord_customization",
+                title: "Customization",
+                Component: CustomizationTab,
+                Icon: CustomizationIcon
+            }),
+            buildEntry({
+                key: "guncord_fonts",
+                title: "Fonts",
+                panelTitle: "Fonts",
+                Component: FontsTab,
+                Icon: FontIcon
+            }),
             settings.store.showStatus && buildEntry({
                 key: "guncord_status",
                 title: "Status",
-                panelTitle: "Guncord Status",
+                panelTitle: "Status",
                 Component: StatusTab,
                 Icon: StatusPulseIcon
             }),
@@ -313,6 +351,13 @@ export default definePlugin({
                 panelTitle: "Sync",
                 Component: SyncTab,
                 Icon: CloudIcon
+            }),
+            buildEntry({
+                key: "guncord_dm_purger",
+                title: "DM",
+                panelTitle: "DM",
+                Component: DmPurgerTab,
+                Icon: TrashIcon
             }),
             buildEntry({
                 key: "guncord_language",

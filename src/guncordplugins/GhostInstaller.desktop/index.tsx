@@ -143,7 +143,7 @@ function GhostWarning() {
         <div className="vc-ghost-installer-warning">
             <Heading tag="h3">{t("GhostInstaller Warning")}</Heading>
             <Paragraph>
-                {t("This installer downloads and injects GhostClient and its companion server into Guncord. It enables multi-account voice join, screen streaming, and custom audio input.")}
+                {t("This installer downloads and injects GhostClient and its companion ghost-server into Guncord. It enables multi-account voice join, screen streaming, and custom audio input.")}
             </Paragraph>
             <Paragraph>
                 {t("GhostClient remains permanently installed across Discord updates until you click Delete. Clicking Delete cleanly terminates the local server and removes all injected files.")}
@@ -168,7 +168,7 @@ function InstallationStatus({ info }: { info: InstallInfo | ActionInfo; }) {
                 <GhostInstallerSidebarIcon width={36} height={36} />
                 <div>
                     <Heading tag="h3">{t("GhostClient is installed")}</Heading>
-                    <Paragraph>{t("GhostClient is active and server is ready for")} {info.clientLabel}.</Paragraph>
+                    <Paragraph>{t("GhostClient is active and ghost-server is ready for")} {info.clientLabel}.</Paragraph>
                 </div>
             </div>
         );
@@ -367,7 +367,7 @@ function GhostClientInstallerPanel() {
             confirmColor: "brand",
             body: (
                 <div style={{ color: "var(--text-normal, #dbdee1)", fontSize: "14px", lineHeight: "1.4" }}>
-                    {t("This will download GhostClient and server from the release source, inject them into Guncord, and launch the background service. Do you want to proceed?")}
+                    {t("This will download GhostClient and ghost-server from the release source, inject them into Guncord, and launch the background service. Do you want to proceed?")}
                 </div>
             ),
             onConfirm: () => void runPatch()
@@ -539,7 +539,7 @@ export default definePlugin({
     description: "Downloads, patches, and manages GhostClient and its background companion server from GitHub.",
     tags: ["Utility"],
     authors: [{ name: ".zp", id: 1020801845490356245n }],
-    enabledByDefault: true,
+    enabledByDefault: false,
     reporterTestable: ReporterTestable.None,
     settings,
     settingsAboutComponent: ErrorBoundary.wrap(GhostWarning, { noop: true }),

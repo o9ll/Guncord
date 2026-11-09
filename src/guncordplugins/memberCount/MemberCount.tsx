@@ -1,9 +1,3 @@
-/*
- * Guncord, a Discord client mod
- * Copyright (c) 2026 o9
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import { getCurrentChannel } from "@utils/discord";
 import { isObjectEmpty } from "@utils/misc";
 import { ChannelStore, GuildMemberCountStore, GuildStore, PermissionsBits, PermissionStore, SelectedChannelStore, Tooltip, useEffect, useStateFromStores, VoiceStateStore } from "@webpack/common";

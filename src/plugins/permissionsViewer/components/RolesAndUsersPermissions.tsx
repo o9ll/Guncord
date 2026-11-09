@@ -1,34 +1,23 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { CopyIdIcon, InfoIcon, OwnerCrownIcon } from "@components/Icons";
+import { Paragraph } from "@components/Paragraph";
 import { buildExtraRoleContextMenuItems } from "@plugins/betterRoleContext";
+import { settings } from "@plugins/permissionsViewer";
 import { cl, getGuildPermissionSpecMap, loadGetGuildPermissionSpecMap } from "@plugins/permissionsViewer/utils";
 import { copyToClipboard } from "@utils/clipboard";
 import { getIntlMessage, getUniqueUsername } from "@utils/discord";
 import { Guild, RenderModalProps, Role, RoleOrUserPermission, UnicodeEmoji, User } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findByCodeLazy } from "@webpack";
-import { ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, i18n, Menu, Modal, openModalLazy, PermissionsBits, ScrollerThin, Text, Tooltip, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, i18n, Menu, Modal, openModalLazy, PermissionsBits, ScrollerThin, Tooltip, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 
-import { settings } from "..";
 import { PermissionAllowedIcon, PermissionDeniedIcon } from "./icons";
 
 type GetRoleIconData = (role: Role, size: number) => { customIconSrc?: string; unicodeEmoji?: UnicodeEmoji; };
@@ -81,7 +70,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
         >
             {!selectedItem && (
                 <div className={cl("modal-no-perms")}>
-                    <Text variant="heading-lg/normal">No permissions to display!</Text>
+                    <Paragraph size="lg">No permissions to display!</Paragraph>
                 </div>
             )}
 
@@ -139,7 +128,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                                                 src={user.getAvatarURL(void 0, void 0, false)}
                                             />
                                         )}
-                                        <Text variant="text-md/normal" className={cl("modal-list-item-text")}>
+                                        <Paragraph size="md" className={cl("modal-list-item-text")}>
                                             {
                                                 permission.type === PermissionOverwriteType.ROLE
                                                     ? role?.name ?? "Unknown Role"
@@ -152,7 +141,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                                                             </Flex>
                                                         )
                                             }
-                                        </Text>
+                                        </Paragraph>
                                     </div>
                                 </div>
                             );
@@ -185,7 +174,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                                         {overrideType === "allowed" && <PermissionAllowedIcon />}
                                         {overrideType === "denied" && <PermissionDeniedIcon />}
                                     </div>
-                                    <Text variant="text-md/normal">{guildPermissionSpecMap[String(bit)].title}</Text>
+                                    <Paragraph size="md">{guildPermissionSpecMap[String(bit)].title}</Paragraph>
 
                                     <Tooltip text={
                                         (() => {
@@ -230,6 +219,7 @@ function RoleContextMenu({ guild, roleId, onClose }: { guild: Guild; roleId: str
                 id={cl("copy-role-id")}
                 label={getIntlMessage("COPY_ID_ROLE")}
                 icon={CopyIdIcon}
+                leadingAccessory={{ type: "icon", icon: CopyIdIcon }}
                 action={() => copyToClipboard(roleId)}
             />
 
@@ -240,6 +230,7 @@ function RoleContextMenu({ guild, roleId, onClose }: { guild: Guild; roleId: str
                     id={cl("view-as-role")}
                     label={getIntlMessage("VIEW_AS_ROLE")}
                     icon={ViewAsRoleIcon}
+                    leadingAccessory={{ type: "icon", icon: ViewAsRoleIcon }}
                     action={() => {
                         onClose();
                         FluxDispatcher.dispatch({
@@ -269,6 +260,7 @@ function UserContextMenu({ userId }: { userId: string; }) {
             <Menu.MenuItem
                 id={cl("copy-user-id")}
                 label={getIntlMessage("COPY_ID_USER")}
+                leadingAccessory={{ type: "icon", icon: CopyIdIcon }}
                 action={() => {
                     copyToClipboard(userId);
                 }}
@@ -293,3 +285,4 @@ export default function openRolesAndUsersPermissionsModal(permissions: Array<Rol
         );
     });
 }
+

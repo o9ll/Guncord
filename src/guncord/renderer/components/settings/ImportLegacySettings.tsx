@@ -5,7 +5,7 @@
  */
 
 import { BaseText } from "@Guncord/types/components";
-import { React, useRef,useState } from "react";
+import { useRef, useState } from "@Guncord/types/webpack/common";
 
 import { cl } from "./Settings";
 

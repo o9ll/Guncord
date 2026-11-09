@@ -195,6 +195,7 @@ function messageCreateHandler(payload: MessageCreatePayload) {
 }
 
 async function processMessageFetch(response: FetchMessagesResponse) {
+    if (!settings.store.enabled) return;
     try {
         if (!response.ok) {
             Flogger.error("Failed to fetch messages", response);
@@ -222,17 +223,23 @@ async function processMessageFetch(response: FetchMessagesResponse) {
             m.status === idb.DBMessageStatus.GHOST_PINGED
         );
 
+        const recordsByMsgId = new Map<string, any>();
+        for (let i = 0; i < messages.length; i++) {
+            if (messages[i]?.message_id) recordsByMsgId.set(messages[i].message_id, messages[i]);
+        }
+
         for (const recivedMessage of response.body) {
-            const record = messages.find(m => m.message_id === recivedMessage.id);
-
-            if (record == null) continue;
-
-            if (record.message.editHistory && record.message.editHistory.length > 0) {
+            const record = recordsByMsgId.get(recivedMessage.id);
+            if (record?.message?.editHistory?.length) {
                 recivedMessage.editHistory = record.message.editHistory;
             }
         }
 
-        const fetchUser = (id: string) => UserStore.getUser(id) || response.body.find(e => e.author.id === id);
+        const responseAuthors = new Map<string, any>();
+        for (const msg of response.body) {
+            if (msg.author?.id) responseAuthors.set(msg.author.id, msg.author);
+        }
+        const fetchUser = (id: string) => UserStore.getUser(id) || responseAuthors.get(id);
 
         for (let i = 0, len = messages.length; i < len; i++) {
             const record = messages[i];
@@ -261,7 +268,15 @@ async function processMessageFetch(response: FetchMessagesResponse) {
             }
         }
 
-        response.body.extra = deletedMessages.map(m => m.message);
+        deletedMessages.forEach(m => {
+            m.message.deleted = true;
+            if (Array.isArray(m.message.attachments)) { m.message.attachments.forEach(a => { a.deleted = true; }); }
+        });
+        response.body.extra = deletedMessages.map(m => {
+            m.message.deleted = true;
+            if (Array.isArray(m.message.attachments)) { m.message.attachments.forEach(a => { a.deleted = true; }); }
+            return m.message;
+        });
 
     } catch (e) {
         Flogger.error("Failed to fetch messages", e);
@@ -278,12 +293,12 @@ function isMessageObject(m: unknown): m is LoggedMessageJSON {
 
 export default definePlugin({
     name: "MessageLoggerEnhanced",
-    enabledByDefault: true,
+    enabledByDefault: false,
     required: false,
     authors: [Devs.Aria, EquicordDevs.keircn],
     description: "Improves MessageLogger with edited message history, ghost ping detection and more",
     tags: ["Chat", "Servers"],
-    dependencies: ["MessageLogger", "HeaderBarAPI"],
+    dependencies: ["HeaderBarAPI"],
 
     patches: [
         {
@@ -291,7 +306,7 @@ export default definePlugin({
             replacement: [
                 {
                     match: /(?<=\.get\({url.+?then\()(\i)=>\(/,
-                    replace: "async $1=>(await $self.processMessageFetch($1),"
+                    replace: "async $1=>($self.isEnabled()&&await $self.processMessageFetch($1),"
                 },
                 {
                     match: /(?<=type:"LOAD_MESSAGES_SUCCESS",.{1,100})messages:(\i)/,
@@ -338,6 +353,7 @@ export default definePlugin({
         // only check for expired attachments if the message is not deleted
         {
             find: "\"/ephemeral-attachments/\"",
+            noWarn: true,
             replacement: {
                 match: /\i\.attachments\.some\(\i\)\|\|\i\.embeds\.some/,
                 replace: "!arguments[0].deleted && $&"
@@ -356,18 +372,33 @@ export default definePlugin({
     idb,
 
     coolReAddDeletedMessages: (messages: LoggedMessageJSON[] & { extra: LoggedMessageJSON[]; }, payload: LoadMessagePayload) => {
+        if (!settings.store.enabled) return messages;
         try {
-            if (messages.extra && messages.length > 0) {
-                const isAtBottom = !payload.hasMoreAfter && !payload.isBefore;
-                const oldestId = messages[messages.length - 1].id;
-                const newestId = messages[0].id;
-
-                const validExtra = messages.extra.filter(msg => {
-                    if (isAtBottom) return BigInt(msg.id) >= BigInt(oldestId);
-                    return BigInt(msg.id) >= BigInt(oldestId) && BigInt(msg.id) <= BigInt(newestId);
+            if (messages.extra && messages.extra.length > 0) {
+                messages.extra.forEach(m => {
+                    m.deleted = true;
+                    if (Array.isArray(m.attachments)) { m.attachments.forEach(a => { a.deleted = true; }); }
                 });
+                const isAtBottom = !payload?.hasMoreAfter && !payload?.isBefore;
+                const oldestMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+                const newestMsg = messages.length > 0 ? messages[0] : null;
+                const oldestId = oldestMsg?.id ? BigInt(oldestMsg.id) : null;
+                const newestId = newestMsg?.id ? BigInt(newestMsg.id) : null;
 
-                reAddDeletedMessages(messages, validExtra, isAtBottom, !payload.hasMoreBefore && !payload.isAfter);
+                const validExtra = messages.length === 0
+                    ? messages.extra
+                    : messages.extra.filter(msg => {
+                        if (!msg?.id) return false;
+                        const msgId = BigInt(msg.id);
+                        if (isAtBottom) {
+                            return oldestId ? msgId >= oldestId : true;
+                        }
+                        if (oldestId && msgId < oldestId) return false;
+                        if (newestId && msgId > newestId) return false;
+                        return true;
+                    });
+
+                reAddDeletedMessages(messages, validExtra, isAtBottom, !payload?.hasMoreBefore && !payload?.isAfter);
             }
         }
         catch (e) {
@@ -415,40 +446,52 @@ export default definePlugin({
     async start() {
         this.oldGetMessage = oldGetMessage = MessageStore.getMessage;
 
-        // Cache to avoid recreating message classes on every call (very frequent on scroll)
+        // Cache pour éviter de recréer les classes de messages à chaque appel (très fréquent au scroll)
         const combinedMessageCache = new Map<string, any>();
 
         MessageStore.getMessage = (channelId: string, messageId: string) => {
-            const MLMessage = idb.cachedMessages.get(messageId);
-            if (!MLMessage)
-                return this.oldGetMessage(channelId, messageId);
+            try {
+                const MLMessage = idb.cachedMessages.get(messageId);
+                if (!MLMessage)
+                    return this.oldGetMessage(channelId, messageId);
 
-            if (combinedMessageCache.has(messageId)) {
-                return combinedMessageCache.get(messageId);
-            }
-
-            if (MLMessage.deleted) {
-                const combined = messageJsonToMessageClass({ message: MLMessage });
-                combinedMessageCache.set(messageId, combined);
-                return combined;
-            }
-
-            const latestMessage = this.oldGetMessage(channelId, messageId);
-            const combined = messageJsonToMessageClass({
-                message: {
-                    ...MLMessage,
-                    ...(latestMessage ?? {}),
+                if (combinedMessageCache.has(messageId)) {
+                    return combinedMessageCache.get(messageId);
                 }
-            });
 
-            combinedMessageCache.set(messageId, combined);
+                if (MLMessage.deleted) {
+                    const combined = messageJsonToMessageClass({ message: MLMessage });
+                    if (combined) {
+                        combined.deleted = true;
+                        if (Array.isArray(combined.attachments)) { combined.attachments.forEach(a => { a.deleted = true; }); }
+                        combinedMessageCache.set(messageId, combined);
+                        return combined;
+                    }
+                }
 
-            if (combinedMessageCache.size > 1000) {
-                const firstKey = combinedMessageCache.keys().next().value;
-                combinedMessageCache.delete(firstKey);
+                const latestMessage = this.oldGetMessage(channelId, messageId);
+                const combined = messageJsonToMessageClass({
+                    message: {
+                        ...MLMessage,
+                        ...(latestMessage ?? {}),
+                    }
+                });
+
+                if (combined) {
+                    combinedMessageCache.set(messageId, combined);
+
+                    if (combinedMessageCache.size > 1000) {
+                        const firstKey = combinedMessageCache.keys().next().value;
+                        combinedMessageCache.delete(firstKey);
+                    }
+
+                    return combined;
+                }
+            } catch {
+                // Safe fallback to native message to avoid crashing Discord's React tree
             }
 
-            return combined;
+            return this.oldGetMessage(channelId, messageId);
         };
 
         Native.init();

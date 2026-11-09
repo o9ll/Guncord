@@ -29,3 +29,4 @@ export interface TagSetting {
 export type TagSettings = {
     [k in typeof tags[number]["name"]]: TagSetting;
 };
+

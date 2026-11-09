@@ -1,25 +1,13 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType, PluginNative, SettingsDefinition } from "@utils/types";
-import { showToast, Toasts } from "@webpack/common";
+import { showToast } from "@webpack/common";
 import type { MouseEvent } from "react";
 
 interface URLReplacementRule {
@@ -87,7 +75,9 @@ const pluginSettings = definePluginSettings(
     }, {} as SettingsDefinition)
 );
 
-const Native = VencordNative.pluginHelpers.OpenInApp as PluginNative<typeof import("./native")>;
+const getNative = () => (typeof VencordNative !== "undefined" && VencordNative?.pluginHelpers?.OpenInApp)
+    ? (VencordNative.pluginHelpers.OpenInApp as PluginNative<typeof import("./native")>)
+    : undefined;
 
 export default definePlugin({
     name: "OpenInApp",
@@ -114,7 +104,7 @@ export default definePlugin({
                     replace: "true"
                 },
                 {
-                    match: /\(0,\i\.isDesktop\)\(\)/,
+                    match: /\(0,\i\.\i\)\(\)(?=\|\|\(\i=window\.open)/,
                     replace: "true"
                 }
             ]
@@ -141,11 +131,12 @@ export default definePlugin({
 
             if (rule.shortlinkMatch?.test(url)) {
                 event?.preventDefault();
-                url = await Native.resolveRedirect(url);
+                const native = getNative();
+                if (native) url = await native.resolveRedirect(url);
             }
 
             if (rule.match.test(url)) {
-                showToast("Opened link in native app", Toasts.Type.SUCCESS);
+                showToast({ text: "Opened link in native app", variant: "success" });
 
                 const newUrl = url.replace(rule.match, rule.replace);
                 VencordNative.native.openExternal(newUrl);
@@ -173,3 +164,4 @@ export default definePlugin({
         }
     }
 });
+

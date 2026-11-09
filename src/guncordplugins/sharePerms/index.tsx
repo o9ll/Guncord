@@ -1327,7 +1327,7 @@ function resolveId(arg: string): string {
 
 export default definePlugin({
     name: "SharePerms",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Multi-user permission sharing with interactive UI.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     settings,

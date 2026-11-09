@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { Paragraph } from "@components/Paragraph";
 import { Auth, authorize } from "@plugins/reviewDB/auth";
@@ -125,7 +113,7 @@ function ReviewList({ refetch, reviews, hideOwnReview, profileId, type }: { refe
 }
 
 export function ReviewsInputComponent(
-    { discordId, isAuthor, refetch, name, modalKey, repliesTo }: { discordId: string, name: string; isAuthor: boolean; refetch(): void; modalKey?: string; repliesTo?: number; }
+    { discordId, isAuthor, refetch, name, modalKey }: { discordId: string, name: string; isAuthor: boolean; refetch(): void; modalKey?: string; }
 ) {
     const { token } = Auth;
     const editorRef = useRef<any>(null);
@@ -138,7 +126,7 @@ export function ReviewsInputComponent(
         <>
             <div onClick={() => {
                 if (!token) {
-                    showToast("Opening authorization window...");
+                    showToast({ text: "Opening authorization window..." });
                     authorize();
                 }
             }}>
@@ -148,10 +136,9 @@ export function ReviewsInputComponent(
                     placeholder={
                         !token
                             ? "You need to authorize to review users!"
-                            : repliesTo ? `Reply to @${name}`
-                                : isAuthor
-                                    ? `Update review for @${name}`
-                                    : `Review @${name}`
+                            : isAuthor
+                                ? `Update review for @${name}`
+                                : `Review @${name}`
                     }
                     type={inputType}
                     disableThemedBackground={true}
@@ -160,12 +147,9 @@ export function ReviewsInputComponent(
                     textValue=""
                     onSubmit={
                         async res => {
-                            // I know this naming is deranged, but for compatibility it has to stay this way
-
                             const response = await addReview({
                                 userid: discordId,
                                 comment: res.value,
-                                repliesto: repliesTo,
                             });
 
                             if (response) {

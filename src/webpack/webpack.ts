@@ -233,7 +233,7 @@ export const find = traceFunction("find", function find(filter: FilterFn, { isIn
 
     for (const key in cache) {
         const mod = cache[key];
-        if (!mod?.loaded || mod.exports == null) continue;
+        if (mod?.loaded === false || mod?.exports == null) continue;
 
         if (filter(mod.exports)) {
             return isWaitFor ? [mod.exports, key] : mod.exports;
@@ -244,8 +244,14 @@ export const find = traceFunction("find", function find(filter: FilterFn, { isIn
         for (const nestedMod in mod.exports) {
             try {
                 const nested = mod.exports[nestedMod];
-                if (nested && filter(nested)) {
+                if (nested) {
+                    if (nested[Symbol.toStringTag] === "IntlMessagesProxy") {
+                        makePropertyNonEnumerable(mod.exports, nestedMod);
+                        continue;
+                    }
+                    if (filter(nested)) {
                     return isWaitFor ? [nested, key] : nested;
+                    }
                 }
             } catch { }
         }
@@ -265,7 +271,7 @@ export function findAll(filter: FilterFn, { topLevelOnly = false }: { topLevelOn
     const ret = [] as any[];
     for (const key in cache) {
         const mod = cache[key];
-        if (!mod?.loaded || mod.exports == null) continue;
+        if (mod?.loaded === false || mod?.exports == null) continue;
 
         if (filter(mod.exports))
             ret.push(mod.exports);
@@ -276,7 +282,7 @@ export function findAll(filter: FilterFn, { topLevelOnly = false }: { topLevelOn
         for (const nestedMod in mod.exports) {
             try {
                 const nested = mod.exports[nestedMod];
-                if (nested && filter(nested)) ret.push(nested);
+                if (nested && nested[Symbol.toStringTag] !== "IntlMessagesProxy" && filter(nested)) ret.push(nested);
             } catch { }
         }
     }
@@ -316,7 +322,7 @@ export const findBulk = traceFunction("findBulk", function findBulk(...filterFns
     outer:
     for (const key in cache) {
         const mod = cache[key];
-        if (!mod?.loaded || mod.exports == null) continue;
+        if (mod?.loaded === false || mod?.exports == null) continue;
 
         for (let j = 0; j < length; j++) {
             const filter = filters[j];
@@ -335,7 +341,7 @@ export const findBulk = traceFunction("findBulk", function findBulk(...filterFns
 
             for (const nestedMod in mod.exports) {
                 const nested = mod.exports[nestedMod];
-                if (nested && filter(nested)) {
+                if (nested && nested[Symbol.toStringTag] !== "IntlMessagesProxy" && filter(nested)) {
                     results[j] = nested;
                     filters[j] = undefined;
                     if (++found === length) break outer;

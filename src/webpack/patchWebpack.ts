@@ -203,15 +203,30 @@ define(Function.prototype, "m", {
             define(this, "m", { value: proxiedModuleFactories });
 
             // Overwrite Webpack's defineExports function to define the export descriptors configurable.
-            // This is needed so we can later blacklist specific exports from Webpack search by making them non-enumerable
-            this.d = function (exports, definition) {
-                for (const key in definition) {
-                    if (Object.hasOwn(definition, key) && !Object.hasOwn(exports, key)) {
-                        Object.defineProperty(exports, key, {
-                            enumerable: true,
-                            configurable: true,
-                            get: definition[key],
-                        });
+            // This is needed so we can later blacklist specific exports from Webpack search by making them non-enumerable.
+            // Also supports Rspack's 3-argument signature: (exports, getters, values).
+            this.d = function (exports: Record<PropertyKey, any>, getters?: Record<PropertyKey, any>, values?: Record<PropertyKey, any>) {
+                if (getters) {
+                    for (const key in getters) {
+                        if (Object.hasOwn(getters, key) && !Object.hasOwn(exports, key)) {
+                            Object.defineProperty(exports, key, {
+                                enumerable: true,
+                                configurable: true,
+                                get: getters[key],
+                            });
+                        }
+                    }
+                }
+                if (values) {
+                    for (const key in values) {
+                        if (Object.hasOwn(values, key) && !Object.hasOwn(exports, key)) {
+                            Object.defineProperty(exports, key, {
+                                enumerable: true,
+                                configurable: true,
+                                writable: true,
+                                value: values[key],
+                            });
+                        }
                     }
                 }
             };
@@ -424,11 +439,13 @@ function runFactoryWithWrap(patchedFactory: PatchedModuleFactory, thisArg: unkno
             throw err;
         }
 
-        logger.error("Error in patched module factory:\n", err);
+        logger.error(`Error in patched module factory (Module ${String(module?.id)}):\n`, err);
+        argArray[1] = module.exports = {};
         return originalFactory.apply(thisArg, argArray);
     }
 
     exports = module.exports;
+    module.loaded = true;
 
     if (typeof require === "function" && require.c) {
         if (_blacklistBadModules(require.c, exports, module.id)) {
@@ -529,9 +546,11 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
             continue;
         }
 
-        const moduleMatches = typeof patch.find === "string"
-            ? code.includes(patch.find)
-            : (patch.find.global && (patch.find.lastIndex = 0), patch.find.test(code));
+        const moduleMatches = Array.isArray(patch.find)
+            ? patch.find.every(f => typeof f === "string" ? code.includes(f) : (f.global && (f.lastIndex = 0), f.test(code)))
+            : typeof patch.find === "string"
+                ? code.includes(patch.find)
+                : (patch.find.global && (patch.find.lastIndex = 0), patch.find.test(code));
 
         if (!moduleMatches) {
             continue;
@@ -560,7 +579,7 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
             }
 
             const lastCode = code;
-            const lastFactory = originalFactory;
+            const lastFactory = patchedFactory;
 
             try {
                 const [newCode, totalTime] = executePatch(replacement.match, replacement.replace as string);

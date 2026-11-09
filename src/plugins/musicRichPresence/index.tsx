@@ -1,28 +1,18 @@
 /*
- * Guncord, a modification for Discord's desktop app
- * Copyright (c) 2022 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { definePluginSettings, migratePluginSetting, migratePluginSettings } from "@api/Settings";
-import { LinkButton } from "@components/Button";
+import { Button, LinkButton } from "@components/Button";
 import { Card } from "@components/Card";
 import { Heading } from "@components/Heading";
 import { Margins } from "@components/margins";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
+import { promptToRestart } from "@utils/promptToRestart";
+import { useAwaiter, useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { Activity, ActivityAssets, ActivityButton } from "@vencord/discord-types";
 import { ActivityFlags, ActivityStatusDisplayType, ActivityType } from "@vencord/discord-types/enums";
@@ -232,6 +222,52 @@ export const settings = definePluginSettings({
     instanceAPIBaseUrl: { hidden() { return this.store.scrobblerBackend !== "listenbrainz-compatible"; } },
 });
 
+const hasInvalidCustomInstance = () => settings.store.scrobblerBackend === "listenbrainz-compatible" && (!settings.store.instanceAPIBaseUrl || !settings.store.instanceBaseURL);
+
+function CustomInstanceAboutComponent() {
+    const { instanceAPIBaseUrl, instanceBaseURL } = settings.store;
+
+    const [signal, forceUpdate] = useForceUpdater(true);
+
+    const [cspAllowed] = useAwaiter(async () => {
+        if (!instanceAPIBaseUrl || !instanceBaseURL) return true;
+        return await VencordNative.csp.isDomainAllowed(instanceAPIBaseUrl, ["connect-src"]) && await VencordNative.csp.isDomainAllowed(instanceBaseURL, ["connect-src"]);
+    }, { fallbackValue: true, deps: [instanceAPIBaseUrl, instanceBaseURL, signal] });
+
+    if (!instanceAPIBaseUrl || !instanceBaseURL)
+        return (
+            <Card variant="danger">
+                <Heading className={Margins.bottom8}>Invalid ListenBrainz compatible instance</Heading>
+                <Paragraph>Provide both the <b>API Base URL</b> and the <b>Instance Base URL</b> for your custom ListenBrainz instance or switch back to ListenBrainz/Last.FM</Paragraph>
+            </Card>
+        );
+
+    if (!cspAllowed)
+        return (
+            <Card variant="warning">
+                <Heading className={Margins.bottom8}>Allow Vencord to connect to ListenBrainz instance</Heading>
+                <Paragraph>To use your custom ListenBrainz instance, you must first allow Vencord to connect to it.</Paragraph>
+                <Button
+                    size="small"
+                    className={Margins.top8}
+                    variant="secondary"
+                    onClick={async () => {
+                        for (const host of [instanceAPIBaseUrl, instanceBaseURL]) {
+                            const res = await VencordNative.csp.requestAddOverride(host, ["connect-src"], "MusicRichPresence");
+                            if (!res) return;
+                        }
+                        forceUpdate();
+                        promptToRestart("relaunch");
+                    }}
+                >
+                    Allow Instance
+                </Button>
+            </Card>
+        );
+
+    return null;
+}
+
 migratePluginSettings("MusicRichPresence", "LastFMRichPresence");
 migratePluginSetting("MusicRichPresence", "showLastFmLogo", "showLogo");
 export default definePlugin({
@@ -244,17 +280,20 @@ export default definePlugin({
     settings,
 
     settingsAboutComponent() {
-        if (settings.store.scrobblerBackend !== "lastfm")
-            return null;
+        if (settings.store.scrobblerBackend === "lastfm")
+            return (
+                <Card>
+                    <Heading tag="h4" className={Margins.bottom20}>Last.FM</Heading>
+                    <Heading className={Margins.bottom8}>How to create an API key</Heading>
+                    <Paragraph>Set <strong>Application name</strong> and <strong>Application description</strong> to anything and leave the rest blank.</Paragraph>
+                    <LinkButton size="small" href="https://www.last.fm/api/account/create" className={Margins.top8}>Create API Key</LinkButton>
+                </Card>
+            );
 
-        return (
-            <Card>
-                <Heading tag="h2">Last.FM</Heading>
-                <Heading tag="h5">How to create an API key</Heading>
-                <Paragraph>Set <strong>Application name</strong> and <strong>Application description</strong> to anything and leave the rest blank.</Paragraph>
-                <LinkButton size="small" href="https://www.last.fm/api/account/create" className={Margins.top8}>Create API Key</LinkButton>
-            </Card>
-        );
+        if (settings.store.scrobblerBackend === "listenbrainz-compatible")
+            return <CustomInstanceAboutComponent />;
+
+        return null;
     },
 
     start() {
@@ -267,10 +306,10 @@ export default definePlugin({
     },
 
     async updatePresence() {
-        const { username, scrobblerBackend, instanceAPIBaseUrl, instanceBaseURL } = settings.store;
+        const { username } = settings.store;
 
         if (!username) return;
-        if (scrobblerBackend === "listenbrainz-compatible" && (!instanceAPIBaseUrl || !instanceBaseURL)) return;
+        if (hasInvalidCustomInstance()) return;
 
         setActivity(await this.getActivity());
     },
@@ -389,3 +428,4 @@ export default definePlugin({
         return activity;
     }
 });
+

@@ -4,6 +4,24 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+/*
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 import { User } from "@vencord/discord-types";
 import { MessageStore } from "@webpack/common";
 
@@ -30,9 +48,12 @@ export function cleanupMessage(message: any, removeDetails: boolean = true): Log
     ret.ghostPinged = ret.mentioned ?? isGhostPinged(message);
     ret.guildId = ret.guild_id ?? getGuildIdByChannel(ret.channel_id);
     ret.embeds = (ret.embeds ?? []).map(cleanupEmbed);
-    ret.deleted = ret.deleted ?? false;
-    ret.deletedTimestamp = ret.deleted ? (new Date()).toISOString() : undefined;
-    ret.editHistory = ret.editHistory ?? [];
+    ret.deleted = message.deleted ?? ret.deleted ?? false;
+    if (ret.deleted && Array.isArray(ret.attachments)) {
+        ret.attachments.forEach((a: any) => { a.deleted = true; });
+    }
+    ret.deletedTimestamp = ret.deleted ? (message.deletedTimestamp ?? (new Date()).toISOString()) : undefined;
+    ret.editHistory = message.editHistory ?? ret.editHistory ?? [];
     if (ret.type === 19) {
         ret.message_reference = message.message_reference || message.messageReference;
         if (ret.message_reference) {

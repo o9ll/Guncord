@@ -4,6 +4,24 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+/*
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 import { PluginNative } from "@utils/types";
 import { findByCodeLazy, findLazy } from "@webpack";
 import { ChannelStore, moment, UserStore } from "@webpack/common";
@@ -86,6 +104,13 @@ export const messageJsonToMessageClass = memoize((log: { message: LoggedMessageJ
     if (!log?.message) return null;
 
     const message: any = new MessageClass(log.message);
+    if (log.message.deleted) {
+        message.deleted = true;
+        if (Array.isArray(message.attachments)) {
+            message.attachments.forEach(a => { a.deleted = true; });
+        }
+    }
+    if (log.message.editHistory) message.editHistory = log.message.editHistory;
     message.timestamp = getTimestamp(message.timestamp);
 
     const editHistory = message.editHistory?.map(mapTimestamp);

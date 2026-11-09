@@ -48,6 +48,21 @@ function startGlobalTick() {
     }, 1000);
 }
 
+
+function onVisibilityChange() {
+    if (document.hidden) {
+        if (globalTickInterval !== null) {
+            clearInterval(globalTickInterval);
+            globalTickInterval = null;
+        }
+    } else if (tickListeners.size > 0) {
+        startGlobalTick();
+        for (const fn of tickListeners) {
+            try { fn(); } catch { }
+        }
+    }
+}
+
 function stopGlobalTick() {
     if (tickListeners.size > 0) return;
     if (globalTickInterval !== null) {
@@ -130,7 +145,12 @@ export default definePlugin({
         return renderTooltipText(date);
     },
 
+    start() {
+        document.addEventListener("visibilitychange", onVisibilityChange);
+    },
+
     stop() {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
         tickListeners.clear();
         if (globalTickInterval !== null) {
             clearInterval(globalTickInterval);

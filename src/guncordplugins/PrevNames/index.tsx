@@ -14,11 +14,11 @@ import { openInviteModal } from "@utils/discord";
 import { closeModal, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin from "@utils/types";
 import { FluxDispatcher, IconUtils, Menu, React, RestAPI, Text, useEffect, useState, UserStore } from "@webpack/common";
-import { findByPropsLazy } from "@webpack";
+import { findByPropsLazy, findStoreLazy } from "@webpack";
 import { t } from "../autoTranslateGuncord";
 
 const PresenceStore = findByPropsLazy("getStatus", "isMobileOnline");
-const AuthStore = findByPropsLazy("getToken", "getSessionId");
+const AuthStore = findStoreLazy("AuthenticationStore");
 const GuildStore = findByPropsLazy("getGuild", "getGuilds");
 const ChannelStore = findByPropsLazy("getChannel");
 const ApplicationCommandIndexStore = findByPropsLazy("getApplicationState", "query");
@@ -1117,7 +1117,7 @@ const userCtxPatch: NavContextMenuPatchCallback = (children, props) => {
 
 export default definePlugin({
     name: "PrevNames",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Shows the username history of a user. Right-click → PrevNames.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["ContextMenuAPI"],

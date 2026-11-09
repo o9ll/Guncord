@@ -242,10 +242,10 @@ async function getInstallInfo(customRoot?: string): Promise<InstallInfo> {
         ? path.join(guncordRoot, "src", "guncordplugins", "ghostClient")
         : "Built-in (Guncord Core)";
 
-    const persistentServerPath = path.join(app.getPath("userData"), "server");
+    const persistentServerPath = path.join(app.getPath("userData"), "ghost-server");
     const ghostServerPath = fs.existsSync(persistentServerPath)
         ? persistentServerPath
-        : (guncordRoot && fs.existsSync(path.join(guncordRoot, "server")) ? path.join(guncordRoot, "server") : persistentServerPath);
+        : (guncordRoot && fs.existsSync(path.join(guncordRoot, "ghost-server")) ? path.join(guncordRoot, "ghost-server") : persistentServerPath);
 
     // ghostClient plugin is built into Guncord core!
     const isPluginPresent = guncordRoot ? fs.existsSync(path.join(ghostPluginPath, "index.tsx")) : true;
@@ -268,7 +268,7 @@ async function getInstallInfo(customRoot?: string): Promise<InstallInfo> {
         installStatus = "installed";
     } else if (savedState.installed && !isServerPresent) {
         installStatus = "needsReinstall";
-        repatchWarning = "server companion files are missing or incomplete. Click Patch to reinstall.";
+        repatchWarning = "ghost-server companion files are missing or incomplete. Click Patch to reinstall.";
     }
 
     const ghostServerStatus = (savedState.installed === false)
@@ -752,7 +752,7 @@ async function killRunningServer(): Promise<void> {
 
         try {
             await new Promise<void>(res => {
-                const child = spawn("taskkill", ["/F", "/IM", "node.exe", "/FI", "WINDOWTITLE eq server"], { windowsHide: true, stdio: "ignore" });
+                const child = spawn("taskkill", ["/F", "/IM", "node.exe", "/FI", "WINDOWTITLE eq ghost-server"], { windowsHide: true, stdio: "ignore" });
                 child.on("error", () => res());
                 child.on("close", () => res());
             });
@@ -788,7 +788,7 @@ export async function patchGhostClient(options: { githubUrl?: string; discordRoo
 
     try {
         const guncordRoot = findGuncordRoot();
-        const localServerDir = guncordRoot ? path.join(guncordRoot, "server") : null;
+        const localServerDir = guncordRoot ? path.join(guncordRoot, "ghost-server") : null;
         let serverSource: string | null = null;
         let pluginSource: string | null = null;
         let downloadUrl = "";
@@ -857,9 +857,9 @@ export async function patchGhostClient(options: { githubUrl?: string; discordRoo
             }
 
             const candidateServerDirs = [
+                path.join(extractPath, "ghost-server"),
                 path.join(extractPath, "server"),
-                path.join(extractPath, "server"),
-                path.join(extractPath, "resources", "server"),
+                path.join(extractPath, "resources", "ghost-server"),
                 extractPath
             ];
 
@@ -874,18 +874,18 @@ export async function patchGhostClient(options: { githubUrl?: string; discordRoo
             }
 
             if (!serverSource) {
-                throw new Error("Could not find server files (server.js) in downloaded bundle.");
+                throw new Error("Could not find ghost-server files (server.js) in downloaded bundle.");
             }
         }
 
         if (pluginSource) {
             log(`OK: Found plugin files at: ${pluginSource}`);
         }
-        log(`OK: Found server files at: ${serverSource}`);
+        log(`OK: Found ghost-server files at: ${serverSource}`);
 
         // Target locations
-        const persistentServerDest = path.join(app.getPath("userData"), "server");
-        log(`INFO: Copying server to persistent storage: ${persistentServerDest}`);
+        const persistentServerDest = path.join(app.getPath("userData"), "ghost-server");
+        log(`INFO: Copying ghost-server to persistent storage: ${persistentServerDest}`);
         setProgress(70, "Installing Files", "Copying companion server files...");
         await copyDir(serverSource, persistentServerDest, (copied, total, name) => {
             if (total > 0) {
@@ -909,7 +909,7 @@ export async function patchGhostClient(options: { githubUrl?: string; discordRoo
                 }
             }
 
-            const repoServerDest = path.join(guncordRoot, "server");
+            const repoServerDest = path.join(guncordRoot, "ghost-server");
             if (serverSource && path.resolve(serverSource) !== path.resolve(repoServerDest)) {
                 try {
                     await copyDir(serverSource, repoServerDest);
@@ -942,7 +942,7 @@ export async function patchGhostClient(options: { githubUrl?: string; discordRoo
 
         // Test server startup
         setProgress(90, "Starting Service", "Terminating stale instances...");
-        log("INFO: Verifying server responsiveness...");
+        log("INFO: Verifying ghost-server responsiveness...");
         await killRunningServer();
 
         const nodeExecutable = fs.existsSync(path.join(persistentServerDest, "node.exe"))
@@ -971,9 +971,9 @@ export async function patchGhostClient(options: { githubUrl?: string; discordRoo
             }
 
             if (ready) {
-                log("OK: server started and responding on port 47821.");
+                log("OK: ghost-server started and responding on port 47821.");
             } else {
-                log("WARN: server launched, will auto-connect when needed.");
+                log("WARN: ghost-server launched, will auto-connect when needed.");
             }
         } catch (e: any) {
             log(`WARN: Background start note: ${e.message}`);
@@ -1034,23 +1034,23 @@ export async function revertGhostClient(options: { discordRoot?: string; } = {})
     }
 
     log("WARN: Initiating GhostClient companion removal sequence...");
-    setProgress(15, "Stopping Service", "Terminating server...");
+    setProgress(15, "Stopping Service", "Terminating ghost-server...");
 
     try {
-        log("INFO: Terminating server...");
+        log("INFO: Terminating ghost-server...");
         await killRunningServer();
 
-        setProgress(45, "Removing Files", "Deleting persistent server files...");
-        const persistentServerDest = path.join(app.getPath("userData"), "server");
+        setProgress(45, "Removing Files", "Deleting persistent ghost-server files...");
+        const persistentServerDest = path.join(app.getPath("userData"), "ghost-server");
         if (fs.existsSync(persistentServerDest)) {
-            log(`INFO: Deleting persistent server: ${persistentServerDest}`);
+            log(`INFO: Deleting persistent ghost-server: ${persistentServerDest}`);
             await fsp.rm(persistentServerDest, { recursive: true, force: true });
             log("OK: Persistent server files removed.");
         }
 
         const guncordRoot = findGuncordRoot();
         if (guncordRoot) {
-            const repoServerDest = path.join(guncordRoot, "server");
+            const repoServerDest = path.join(guncordRoot, "ghost-server");
             if (fs.existsSync(repoServerDest)) {
                 try { await fsp.rm(repoServerDest, { recursive: true, force: true }); } catch {}
             }

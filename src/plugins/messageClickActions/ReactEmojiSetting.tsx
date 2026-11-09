@@ -248,3 +248,4 @@ export function AdditionalReactEmojisSetting({ setValue }: PluginSettingComponen
         </div>
     );
 }
+

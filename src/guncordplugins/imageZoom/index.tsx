@@ -4,6 +4,24 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+/*
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import { debounce } from "@shared/debounce";
@@ -72,6 +90,7 @@ const imageContextMenuPatch: NavContextMenuPatchCallback = (children, props) => 
     if ("href" in props) return;
     // emojis in user statuses
     if (props.target?.classList?.contains("emoji")) return;
+    if (!Menu.MenuGroup || !Menu.MenuCheckboxItem || !Menu.MenuControlItem) return;
 
     const { square, nearestNeighbour } = settings.use(["square", "nearestNeighbour"]);
 
@@ -93,49 +112,61 @@ const imageContextMenuPatch: NavContextMenuPatchCallback = (children, props) => 
                     settings.store.nearestNeighbour = !nearestNeighbour;
                 }}
             />
-            <Menu.MenuControlItem
-                id="vc-zoom"
-                label="Zoom"
-                control={(props, ref) => (
-                    <Menu.MenuSliderControl
-                        ref={ref}
-                        {...props}
-                        minValue={1}
-                        maxValue={50}
-                        value={settings.store.zoom}
-                        onChange={debounce((value: number) => settings.store.zoom = value, 100)}
-                    />
-                )}
-            />
-            <Menu.MenuControlItem
-                id="vc-size"
-                label="Lens Size"
-                control={(props, ref) => (
-                    <Menu.MenuSliderControl
-                        ref={ref}
-                        {...props}
-                        minValue={50}
-                        maxValue={1000}
-                        value={settings.store.size}
-                        onChange={debounce((value: number) => settings.store.size = value, 100)}
-                    />
-                )}
-            />
-            <Menu.MenuControlItem
-                id="vc-zoom-speed"
-                label="Zoom Speed"
-                control={(props, ref) => (
-                    <Menu.MenuSliderControl
-                        ref={ref}
-                        {...props}
-                        minValue={0.1}
-                        maxValue={5}
-                        value={settings.store.zoomSpeed}
-                        onChange={debounce((value: number) => settings.store.zoomSpeed = value, 100)}
-                        renderValue={(value: number) => `${value.toFixed(3)}x`}
-                    />
-                )}
-            />
+            {Menu.MenuSliderControl && (
+                <Menu.MenuControlItem
+                    id="vc-zoom"
+                    label="Zoom"
+                    control={(props, ref) => (
+                        Menu.MenuSliderControl ? (
+                            <Menu.MenuSliderControl
+                                ref={ref}
+                                {...props}
+                                minValue={1}
+                                maxValue={50}
+                                value={settings.store.zoom}
+                                onChange={debounce((value: number) => settings.store.zoom = value, 100)}
+                            />
+                        ) : null
+                    )}
+                />
+            )}
+            {Menu.MenuSliderControl && (
+                <Menu.MenuControlItem
+                    id="vc-size"
+                    label="Lens Size"
+                    control={(props, ref) => (
+                        Menu.MenuSliderControl ? (
+                            <Menu.MenuSliderControl
+                                ref={ref}
+                                {...props}
+                                minValue={50}
+                                maxValue={1000}
+                                value={settings.store.size}
+                                onChange={debounce((value: number) => settings.store.size = value, 100)}
+                            />
+                        ) : null
+                    )}
+                />
+            )}
+            {Menu.MenuSliderControl && (
+                <Menu.MenuControlItem
+                    id="vc-zoom-speed"
+                    label="Zoom Speed"
+                    control={(props, ref) => (
+                        Menu.MenuSliderControl ? (
+                            <Menu.MenuSliderControl
+                                ref={ref}
+                                {...props}
+                                minValue={0.1}
+                                maxValue={5}
+                                value={settings.store.zoomSpeed}
+                                onChange={debounce((value: number) => settings.store.zoomSpeed = value, 100)}
+                                renderValue={(value: number) => `${value.toFixed(3)}x`}
+                            />
+                        ) : null
+                    )}
+                />
+            )}
         </Menu.MenuGroup>
     );
 };
@@ -159,7 +190,7 @@ export default definePlugin({
                     replace: `id:"${ELEMENT_ID}",$&`
                 },
                 {
-                    match: /(?<=null!=(\i)\?.{0,20})\i\.\i,{children:\1/,
+                    match: /(?<=null!=(\i)\?.{0,20})(?:\i\.)?\i,{children:\1/,
                     replace: "'div',{onClick:e=>e.stopPropagation(),children:$1"
                 }
             ]

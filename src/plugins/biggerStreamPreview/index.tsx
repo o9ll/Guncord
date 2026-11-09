@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { ScreenshareIcon } from "@components/Icons";
@@ -70,6 +58,7 @@ export const addViewStreamContext: NavContextMenuPatchCallback = (children, { us
             label="View Stream Preview"
             id="view-stream-preview"
             icon={ScreenshareIcon}
+            leadingAccessory={{ type: "icon", icon: ScreenshareIcon }}
             action={() => stream && handleViewPreview(stream)}
             disabled={!stream}
         />
@@ -88,7 +77,6 @@ export const userContextPatch: NavContextMenuPatchCallback = (children, { user }
 
 export default definePlugin({
     name: "BiggerStreamPreview",
-    enabledByDefault: true,
     description: "This plugin allows you to enlarge stream previews",
     tags: ["Media", "Appearance"],
     authors: [Devs.phil],

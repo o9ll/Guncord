@@ -70,6 +70,10 @@ async function cacheRecord(record?: DBMessageRecord | null) {
     if (!record) return record;
 
     stripTransientRenderState(record.message);
+    if (record.status === DBMessageStatus.DELETED || record.status === DBMessageStatus.GHOST_PINGED) {
+        record.message.deleted = true;
+        if (Array.isArray(record.message.attachments)) { record.message.attachments.forEach(a => { a.deleted = true; }); }
+    }
     setCachedMessage(record.message_id, record.message);
     return record;
 }
@@ -102,6 +106,10 @@ export async function initIDB(): Promise<void> {
                     }
                 }
             });
+
+            if (db && db.objectStoreNames.contains("messages")) {
+                return;
+            }
         } catch (err) {
             console.warn("[MessageLoggerEnhanced] Failed to initialize IDB:", err);
             db = null;
@@ -112,7 +120,6 @@ export async function initIDB(): Promise<void> {
 
     return initPromise;
 }
-initIDB();
 
 async function ensureDbReady(): Promise<boolean> {
     if (!db || !db.objectStoreNames?.contains("messages")) {
@@ -333,6 +340,9 @@ export async function getMessagesByChannelBetweenTimestampsIDB(channel_id: strin
 
 export async function addMessageIDB(message: LoggedMessageJSON, status: DBMessageStatus) {
     stripTransientRenderState(message);
+    if (status === DBMessageStatus.DELETED || status === DBMessageStatus.GHOST_PINGED) {
+        message.deleted = true;
+    }
 
     if (!(await ensureDbReady())) {
         setCachedMessage(message.id, message);
@@ -355,6 +365,9 @@ export async function addMessageIDB(message: LoggedMessageJSON, status: DBMessag
 
 export async function addMessagesBulkIDB(messages: LoggedMessageJSON[], status?: DBMessageStatus) {
     messages.forEach(stripTransientRenderState);
+    if (status === DBMessageStatus.DELETED || status === DBMessageStatus.GHOST_PINGED) {
+        messages.forEach(m => (m.deleted = true));
+    }
 
     if (!(await ensureDbReady())) {
         messages.forEach(message => setCachedMessage(message.id, message));

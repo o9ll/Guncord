@@ -9,7 +9,7 @@ import { ChannelTabsProps, closeTab, ensureUnreadFallbackCountsLoaded, getNotifi
 import { ActivityIcon, CircleQuestionIcon, DiscoveryIcon, EnvelopeIcon, FriendsIcon, ICYMIIcon, NitroIcon, QuestIcon, ShopIcon } from "@equicordplugins/channelTabs/util/icons";
 import { getActiveAutoCompletes } from "@equicordplugins/questify/utils/completion";
 import { classNameFactory } from "@utils/css";
-import { getGuildAcronym, getIntlMessage, getUniqueUsername } from "@utils/discord";
+import { getGuildAcronym, getIntlMessage } from "@utils/discord";
 import { classes } from "@utils/misc";
 import { Channel, Guild, User } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
@@ -64,7 +64,7 @@ const ChannelIcon = ({ channel }: { channel: Channel; }) =>
     <img
         src={channel?.icon
             ? `https://${window.GLOBAL_ENV.CDN_HOST}/channel-icons/${channel?.id}/${channel?.icon}.png`
-            : "https://discord.com/assets/c6851bd0b03f1cca5a8c1e720ea6ea17.png" // Default Group Icon
+            : "/assets/c6851bd0b03f1cca5a8c1e720ea6ea17.png" // Default Group Icon
         }
         className={cl("icon")}
     />;
@@ -170,13 +170,12 @@ function ChannelTabContent(props: ChannelTabsProps & {
     guild?: Guild,
     channel?: Channel;
 }) {
-    const { guild, guildId, channel, channelId, compact } = props;
+    const { guild, guildId, channel, channelId } = props;
     const userId = UserStore.getCurrentUser()?.id;
     const recipients = channel?.recipients;
     const {
-        noPomeloNames,
         showStatusIndicators
-    } = settings.use(["noPomeloNames", "showStatusIndicators"]);
+    } = settings.use(["showStatusIndicators"]);
 
     const [isTyping, status, isMobile] = useStateFromStores(
         [TypingStore, PresenceStore],
@@ -233,9 +232,7 @@ function ChannelTabContent(props: ChannelTabsProps & {
     if (channel && recipients?.length) {
         if (recipients.length === 1) {
             const user = UserStore.getUser(recipients[0]) as User & { globalName: string; };
-            const username = noPomeloNames
-                ? user.globalName || user.username
-                : getUniqueUsername(user);
+            const username = user.globalName || user.username;
 
             return (
                 <>

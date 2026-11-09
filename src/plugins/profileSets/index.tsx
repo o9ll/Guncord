@@ -54,3 +54,4 @@ export default definePlugin({
         removeFromArray(SettingsPlugin.customEntries, e => e.key === "equicord_profile_sets");
     },
 });
+

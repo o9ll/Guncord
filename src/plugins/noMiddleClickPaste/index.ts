@@ -28,3 +28,4 @@ export default definePlugin({
         window.removeEventListener("mouseup", preventMiddleClick);
     },
 });
+

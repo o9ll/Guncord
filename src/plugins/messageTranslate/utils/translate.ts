@@ -80,3 +80,4 @@ export async function translate(messageId: string, text: string): Promise<Cached
         inProgress.delete(messageId);
     }
 }
+

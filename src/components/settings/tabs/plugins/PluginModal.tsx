@@ -120,8 +120,8 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
         );
     }
 
-    const pluginMeta = PluginMeta[plugin.name];
-    const isEquicordPlugin = pluginMeta.folderName.startsWith("src/equicordplugins/") ?? false;
+    const pluginMeta = PluginMeta[plugin.name] ?? { folderName: "", userPlugin: (plugin as any).isUserPlugin ?? false };
+    const isEquicordPlugin = pluginMeta.folderName?.startsWith("src/equicordplugins/") ?? false;
 
     const modalSize = plugin.settingsAboutComponent ? ModalSize.LARGE : ModalSize.MEDIUM;
 
@@ -130,7 +130,7 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
             <ModalHeader separator={false} className={cl("header")}>
                 <div className={cl("header-content")}>
                     <BaseText size="lg" weight="semibold" className={cl("title")}>{removeEmojis(tPlugin(plugin.name))}</BaseText>
-                    <BaseText size="sm" className={cl("description")}>{removeEmojis(tPlugin(plugin.description))}</BaseText>
+                    <BaseText size="sm" className={cl("description")}>{removeEmojis(tPlugin(plugin.description ?? ""))}</BaseText>
                     {!!plugin.settingsAboutComponent && (
                         <div className={Margins.top8}>
                             <ErrorBoundary message="An error occurred while rendering this plugin's custom Info Component">
@@ -285,3 +285,27 @@ export function openResetDefaultsModal(reset: () => void) {
         </ConfirmModal>
     ));
 }
+
+export function openApplyBasicConfigModal(apply: () => void) {
+    openModal(props => (
+        <ConfirmModal
+            {...props}
+            className={cl("confirm")}
+            header={t("Apply Basic Config")}
+            confirmText={t("Apply")}
+            cancelText={t("Cancel")}
+            onConfirm={apply}
+            onCancel={props.onClose}
+        >
+            <Paragraph>
+                {t("This will disable all plugins and enable only the basic configuration.")} 
+            </Paragraph>
+            <div className={classes(Margins.top16, cl("warning"))}>
+                <WarningIcon color="var(--text-feedback-critical)" />
+                <span>{t("All your current plugin toggles will be replaced.")}</span>
+            </div>
+        </ConfirmModal>
+    ));
+}
+
+

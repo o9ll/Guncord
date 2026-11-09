@@ -293,7 +293,7 @@ function VCSHeaderButton() {
 
 export default definePlugin({
     name: "VoiceChannelSearch",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "Search and join any voice channel across all your servers.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["HeaderBarAPI"],

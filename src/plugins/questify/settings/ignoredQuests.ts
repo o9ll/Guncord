@@ -85,3 +85,4 @@ export function ignoreAllQuests(): void {
     setIgnoredQuestIDs(Array.from(ignoredQuests));
     validateIgnoredQuests();
 }
+

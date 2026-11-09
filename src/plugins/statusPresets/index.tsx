@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import "./style.css";
 
@@ -26,7 +14,7 @@ import { proxyLazy } from "@utils/lazy";
 import { useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType, StartAt } from "@utils/types";
 import { extractAndLoadChunksLazy, findComponentByCodeLazy, findModuleId, wreq } from "@webpack";
-import { Menu, openModalLazy,OverridePremiumTypeStore, Toasts } from "@webpack/common";
+import { Menu, openModalLazy, OverridePremiumTypeStore, showToast } from "@webpack/common";
 
 interface Emoji {
     animated: boolean;
@@ -91,6 +79,10 @@ const StatusSubMenuComponent = () => {
                             ? () => <EmojiComponent emoji={status.emojiInfo} animate={false} hideTooltip={false} />
                             : undefined
                         }
+                        leadingAccessory={status.emojiInfo != null
+                            ? { type: "icon", icon: () => <EmojiComponent emoji={status.emojiInfo} animate={false} hideTooltip={false} /> }
+                            : undefined
+                        }
                         disabled={status.emojiInfo?.id != null && premiumType === 0}
                     >
                         <Menu.MenuItem
@@ -137,8 +129,8 @@ export default definePlugin({
         {
             find: "#{intl::STATUS_MENU_LABEL}",
             replacement: {
-                match: /(,\{onClose:\i,popoutContainerRef:\i\}\))\]/,
-                replace: "$1,$self.render()]"
+                match: /(popoutContainerRef:\i,scrollerRef:\i.{0,50}\}\))(?=\])/,
+                replace: "$1,$self.render()"
             }
         },
         {
@@ -185,11 +177,7 @@ export default definePlugin({
             style: { marginLeft: "20px" },
             onClick: () => {
                 settings.store.StatusPresets[status.text] = status;
-                Toasts.show({
-                    message: "Successfully Saved Status",
-                    type: Toasts.Type.SUCCESS,
-                    id: Toasts.genId()
-                });
+                showToast({ text: "Successfully Saved Status", variant: "success" });
             }
         };
     },

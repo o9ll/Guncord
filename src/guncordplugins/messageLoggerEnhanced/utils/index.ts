@@ -4,6 +4,24 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+/*
+ * Guncord, a modification for Discord's desktop app
+ * Copyright (c) 2026 o9
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 import { Settings } from "@api/Settings";
 import { findStoreLazy } from "@webpack";
 import { ChannelStore, SelectedChannelStore, UserStore } from "@webpack/common";
@@ -28,7 +46,7 @@ function isMessageObject(m: unknown): m is LoggedMessageJSON {
 }
 
 export function reAddDeletedMessages(messages: LoggedMessageJSON[], deletedMessages: LoggedMessageJSON[], channelStart: boolean, channelEnd: boolean) {
-    if (!messages.length || !deletedMessages?.length) return;
+    if (!deletedMessages?.length) return;
 
     // Separate valid Message objects from raw snowflakes/primitives that Discord might inject
     const validMessages = messages.filter(isMessageObject);
@@ -39,6 +57,10 @@ export function reAddDeletedMessages(messages: LoggedMessageJSON[], deletedMessa
 
     for (const record of deletedMessages) {
         if (record && isMessageObject(record) && !existingIds.has(record.id)) {
+            record.deleted = true;
+            if (Array.isArray(record.attachments)) {
+                record.attachments.forEach((a: any) => { a.deleted = true; });
+            }
             allMessages.push({
                 id: record.id,
                 time: (parseInt(record.id) / 4194304) + DISCORD_EPOCH,
@@ -172,7 +194,6 @@ export function addToX(list: ListType, id: string) {
         settings.store[list] = items.join(",");
     }
 }
-
 export function removeFromX(list: ListType, id: string) {
     const items = settings.store[list] ? settings.store[list].split(",") : [];
     const index = items.indexOf(id);

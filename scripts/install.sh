@@ -1,4 +1,3 @@
-# install.sh
 #!/usr/bin/env bash
 #
 # Guncord Universal Interactive Installer for Linux & macOS
@@ -57,7 +56,13 @@ download_guncord_bundle() {
     log_info "Downloading latest Guncord bundle..."
     mkdir -p "$TMP_DIR/extracted"
     
-    # 1. Try downloading guncord-dist.zip
+    TAG="$(curl -sSL "$GITEA_API/releases/latest" 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4 || echo "latest")"
+    if [ -z "$TAG" ]; then TAG="latest"; fi
+    log_info "Detected latest version: ${WHITE}$TAG${RESET}"
+
+    DOWNLOAD_URL="https://source.guncord.st/guncord/guncord/releases/download/$TAG"
+
+    # 1. Try downloading guncord-dist.zip from the release
     if curl -sSL "$DOWNLOAD_URL/guncord-dist.zip" -o "$TMP_DIR/guncord-dist.zip" 2>/dev/null && [ -s "$TMP_DIR/guncord-dist.zip" ]; then
         unzip -q -o "$TMP_DIR/guncord-dist.zip" -d "$TMP_DIR/extracted"
         log_success "Downloaded & extracted Guncord bundle."

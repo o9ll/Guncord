@@ -242,6 +242,11 @@ function injectAutofillBanner(input: HTMLInputElement, accounts: TotpAccount[]) 
         const selectEl = card.querySelector<HTMLSelectElement>(".guncord-2fa-acc-select");
 
         async function updateCode() {
+            if (!card.isConnected) {
+                clearInterval(timer);
+                activeCardTimers.delete(timer);
+                return;
+            }
             try {
                 const res = await generateTOTP(selectedAccount.secret, {
                     digits: selectedAccount.digits || 6,
@@ -284,6 +289,12 @@ function injectAutofillBanner(input: HTMLInputElement, accounts: TotpAccount[]) 
 // ─── Scan for 2FA / MFA Code Inputs ───────────────────────────────────────────
 
 function scanForMfaCodeInputs() {
+    // Fast path: MFA code inputs and QR setup prompts only exist inside modals or dialog layers
+    const hasModalOrLayer = document.querySelector(
+        '[role="dialog"], [class*="modal_"], [class*="layer_"], [data-mana-component="modal"]'
+    );
+    if (!hasModalOrLayer) return;
+
     // Clean up any improperly placed cards in setup modals
     document.querySelectorAll('[data-mana-component="modal"], [class*="modal__"], [class*="container__8a031"], [role="dialog"]').forEach(modal => {
         if (isInside2FASetupModal(modal as HTMLElement)) {

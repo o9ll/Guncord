@@ -6,15 +6,15 @@
 
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType, IPluginOptionComponentProps } from "@utils/types";
-import { ChannelStore, FluxDispatcher, SelectedChannelStore, React, Avatar, IconUtils, UserStore, RelationshipStore, Toasts } from "@webpack/common";
+import { ChannelStore, FluxDispatcher, SelectedChannelStore, React, IconUtils, UserStore, RelationshipStore, Toasts } from "@webpack/common";
 import { Button, TextInput } from "@webpack/common/components";
-import { findByPropsLazy, findStoreLazy } from "@webpack";
+import { findStoreLazy } from "@webpack";
 import { SafeSearchableSelect } from "@components/SafeSearchableSelect";
 import { startRecording, stopRecording, isCurrentlyRecording, getRecordingDurationMs } from "./recorder";
 import { t } from "../autoTranslateGuncord";
 import "./style.css";
 
-const VoiceStateStore = findStoreLazy("VoiceStateStore") ?? findByPropsLazy("getVoiceState");
+const VoiceStateStore = findStoreLazy("VoiceStateStore");
 
 const BlacklistSelector = (props: IPluginOptionComponentProps) => {
     const friends = RelationshipStore?.getFriendIDs?.()?.map((id: string) => UserStore?.getUser?.(id))?.filter(Boolean) || [];
@@ -38,18 +38,20 @@ const BlacklistSelector = (props: IPluginOptionComponentProps) => {
                 {...{
                     renderOption: (opt: any) => {
                         const u = UserStore?.getUser?.(opt.value);
+                        const avatarUrl = IconUtils?.getUserAvatarURL?.(u) || "";
                         return (
                             <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 16px 10px 14px" }}>
-                                <Avatar src={IconUtils?.getUserAvatarURL?.(u) || ""} size={"SIZE_32" as any} style={{ marginLeft: 8 }} />
+                                {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: 32, height: 32, borderRadius: "50%", marginLeft: 8, objectFit: "cover" }} /> : null}
                                 <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-normal)" }}>{opt.label}</span>
                             </div>
                         );
                     },
                     renderOptionLabel: (opt: any) => {
                         const u = UserStore?.getUser?.(opt.value);
+                        const avatarUrl = IconUtils?.getUserAvatarURL?.(u) || "";
                         return (
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <Avatar src={IconUtils?.getUserAvatarURL?.(u) || ""} size={"SIZE_20" as any} />
+                                {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover" }} /> : null}
                                 <span style={{ color: "var(--text-normal)" }}>{opt.label}</span>
                             </div>
                         );

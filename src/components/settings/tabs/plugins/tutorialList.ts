@@ -2,6 +2,9 @@
  * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * AUTO-GENERATED — do not edit by hand.
+ * Update by running: node scripts/updateTutorialList.mjs
  */
 
 /**
@@ -30,7 +33,6 @@ export const TUTORIAL_VIDEOS: ReadonlyMap<string, string> = new Map([
     ["CloseGroup", "CloseGroup"],
     ["CrashHandler", "CrashHandler"],
     ["CreateTheme", "CreateTheme"],
-    ["CursorMacOS", "CursorMacOS"],
     ["CustomProfile", "CustomProfile"],
     ["DMBomb", "DMBomb"],
     ["DoubleCall", "DoubleCall"],

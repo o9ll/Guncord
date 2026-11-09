@@ -4,6 +4,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+/*
+ * guncord, a Discord client mod
+ * Plugin: FastDiscord
+ * Disabled by default. Once enabled, maximizes performance:
+ * animations, media, cache, background FPS, and network
+ * (presence/typing) are all optimized. Disabling restores everything to normal.
+ */
+
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";

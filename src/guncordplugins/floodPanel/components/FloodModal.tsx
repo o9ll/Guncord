@@ -42,9 +42,11 @@ const DELAY_OPTIONS = [
     { label: "100ms", value: "100" },
     { label: "250ms", value: "250" },
     { label: "500ms", value: "500" },
-    { label: "1s", value: "1000" },
-    { label: "2s", value: "2000" },
-    { label: "5s", value: "5000" },
+    { label: "750ms", value: "750" },
+    { label: "1s (1000ms)", value: "1000" },
+    { label: "2s (2000ms)", value: "2000" },
+    { label: "3s (3000ms)", value: "3000" },
+    { label: "5s (5000ms)", value: "5000" },
 ];
 
 interface Props {
@@ -71,11 +73,28 @@ export function FloodModal({ channel, rootProps, onRunningChange }: Props) {
     const [running, setRunning] = useState(false);
     const [status, setStatus] = useState("");
 
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const indexRef = useRef(0);
     const runningRef = useRef(false);
 
     const delayOptions = useMemo(() => DELAY_OPTIONS, []);
+
+    function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            const text = (ev.target?.result as string) || "";
+            const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+            if (lines.length > 0) {
+                setMessages(lines);
+                setFileName(`${file.name} (${lines.length} ${t("phrases")})`);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = "";
+    }
 
     useEffect(() => { onRunningChange(running); }, [running]);
     useEffect(() => {
@@ -171,6 +190,16 @@ export function FloodModal({ channel, rootProps, onRunningChange }: Props) {
                             {fileName ?? t("Default") + ` (${messages.length} ` + t("phrases)")}
                         </div>
                         <div className={`vc-flood-file-row ${Margins.bottom16}`}>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                style={{ display: "none" }}
+                                accept=".txt,text/plain"
+                                onChange={handleFileUpload}
+                            />
+                            <Button variant="primary" size="small" onClick={() => fileInputRef.current?.click()}>
+                                {t("Load .txt file")}
+                            </Button>
                             <Button variant="secondary" size="small" onClick={() => {
                                 setEditValue(messages.join("\n"));
                                 setIsEditing(true);

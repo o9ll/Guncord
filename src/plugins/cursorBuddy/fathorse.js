@@ -1,5 +1,5 @@
 /*
- * Guncord, a Discord client mod
+ * Vencord, a Discord client mod
  * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -7,18 +7,8 @@
 /* eslint-disable */
 /* Sourced from https://raw.githubusercontent.com/nexpid/fatass-horse/5363cf9b5904211de79d2597200374340efac676/horse.js */
 
-let _fathorseMouseMove = null;
-
-export function cleanupFathorse() {
-    if (_fathorseMouseMove) {
-        window.removeEventListener("mousemove", _fathorseMouseMove);
-        _fathorseMouseMove = null;
-    }
-}
-
 // https://github.com/adryd325/oneko.js
 export default function fathorse(cfg) {
-    cleanupFathorse();
     document.getElementById("fathorse")?.remove();
 
     // generated
@@ -165,16 +155,23 @@ export default function fathorse(cfg) {
 
     if (config.shake) document.body.style.willChange = "transform";
 
-    _fathorseMouseMove = ev => {
+    function handleMouseMove(ev) {
         mousePos.x = ev.clientX;
         mousePos.y = ev.clientY;
 
         nextMove = Date.now() + freeroamStart;
         isRoaming = false;
-    };
-    window.addEventListener("mousemove", _fathorseMouseMove);
+    }
+    window.addEventListener("mousemove", handleMouseMove);
 
     requestAnimationFrame(lifecycle);
 
-    return mousePos;
+    return function destroy() {
+        window.removeEventListener("mousemove", handleMouseMove);
+        if (config.shake) {
+            document.body.style.willChange = "";
+            document.body.style.transform = "";
+        }
+        fathorse.remove();
+    };
 };

@@ -19,3 +19,4 @@ export interface CachedTranslation {
 }
 
 export type MessageWithContent = Message & { content: string; };
+

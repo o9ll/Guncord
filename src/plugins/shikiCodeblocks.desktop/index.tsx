@@ -1,23 +1,12 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import "./shiki.css";
 
+import { migratePluginSetting } from "@api/Settings";
 import { enableStyle } from "@api/Styles";
 import { Devs } from "@utils/constants";
 import definePlugin, { ReporterTestable } from "@utils/types";
@@ -30,6 +19,7 @@ import { settings } from "./settings";
 import { DeviconSetting } from "./types";
 import { clearStyles } from "./utils/createStyle";
 
+migratePluginSetting("ShikiCodeblocks", "tryHljs", "tryDiscordHighlighter");
 export default definePlugin({
     name: "ShikiCodeblocks",
     description: "Brings vscode-style codeblocks into Discord, powered by Shiki",
@@ -40,17 +30,17 @@ export default definePlugin({
 
     patches: [
         {
-            find: "codeBlock:{react(",
+            find: "codeBlock:{react:(",
             replacement: {
-                match: /codeBlock:\{react\((\i),(\i),(\i)\)\{/,
-                replace: "$&return $self.renderHighlighter($1,$2,$3);"
+                match: /codeBlock:\{react:\((\i),(\i),(\i)\)=>/,
+                replace: "$&!$self.isIgnored($1.lang)?$self.renderHighlighter($1,$2,$3):"
             }
         },
         {
             find: "#{intl::PREVIEW_NUM_LINES}",
             replacement: {
                 match: /(?<=function \i\((\i)\)\{)(?=let\{text:\i,language:)/,
-                replace: "return $self.renderHighlighter({lang:$1.language,content:$1.text});"
+                replace: "if(!$self.isIgnored($1.language))return $self.renderHighlighter({lang:$1.language,content:$1.text});"
             }
         }
     ],
@@ -70,6 +60,7 @@ export default definePlugin({
 
     // exports
     shiki,
+    isIgnored: (lang?: string) => !!lang && settings.store.ignoredLanguages.split(",").some(l => l.trim().toLowerCase() === lang.toLowerCase()),
     renderHighlighter: ({ lang, content }: { lang: string; content: string; }) => {
         return <HighlighterContainer lang={lang?.toLowerCase()} content={content} isPreview={false} />;
     },

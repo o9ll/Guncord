@@ -9,12 +9,14 @@ import "./styles.css";
 import { addHeaderBarButton, HeaderBarButton, removeHeaderBarButton } from "@api/HeaderBar";
 import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
-import { ModalCloseButton, ModalContent, ModalHeader, ModalRoot, openModal } from "@utils/modal";
+import { Button } from "@components/Button";
+import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
-import { findByProps, waitFor } from "@webpack";
-import { AuthenticationStore, FluxDispatcher, Forms, IconUtils, MediaEngineStore, React, ReactDOM, UserStore } from "@webpack/common";
+import { findByProps, findByPropsSilent, findStore, waitFor } from "@webpack";
+import { AuthenticationStore, ContextMenuApi, FluxDispatcher, Forms, IconUtils, MediaEngineStore, Menu, React, ReactDOM, showToast, Text, TextInput, Toasts, Tooltip, UserStore } from "@webpack/common";
 
 import { t } from "../autoTranslateGuncord";
+import { getAccounts as getTokenImporterAccounts, removeAccount as removeTokenImporterAccount } from "../tokenImporter";
 
 const settings = definePluginSettings({
     domain: {
@@ -43,9 +45,227 @@ const settings = definePluginSettings({
     }
 });
 
-const Native = VencordNative.pluginHelpers.MultiInstance as PluginNative<typeof import("./native")>;
+function getVencordNative(): any {
+    if (typeof window !== "undefined") {
+        if ((window as any).VencordNative) return (window as any).VencordNative;
+        if ((window as any).GuncordNative) return (window as any).GuncordNative;
+        if ((window as any).EquicordNative) return (window as any).EquicordNative;
+    }
+    try {
+        if (typeof VencordNative !== "undefined") return VencordNative;
+    } catch {}
+    return null;
+}
+
+function getNativeHelper(): any {
+    const vn = getVencordNative();
+    return vn?.pluginHelpers?.MultiInstance ?? null;
+}
+
+function getTiNativeHelper(): any {
+    const vn = getVencordNative();
+    return vn?.pluginHelpers?.TokenImporter ?? null;
+}
+
+const Native = new Proxy({} as PluginNative<typeof import("./native")>, {
+    get(_, prop) {
+        const helper = getNativeHelper();
+        return helper?.[prop];
+    }
+});
 const STORE_KEY = "TokenImporter_accounts";
 const MI_TOKEN_CACHE_KEY = "guncord-mi-token-cache";
+const MI_AUTO_LAUNCH_KEY = "guncord-mi-autolaunch-ids";
+export const inMemoryAutoLaunchIds: Set<string> = new Set();
+let autoLaunchLoaded = false;
+
+export async function getAutoLaunchAccountIds(): Promise<string[]> {
+    try {
+        let local: string[] = [];
+        try {
+            local = (await DataStore.get<string[]>(MI_AUTO_LAUNCH_KEY)) ?? [];
+        } catch {}
+        let shared: string[] = [];
+        try {
+            if (typeof (Native as any)?.getSharedAutoLaunch === "function") {
+                shared = (await (Native as any).getSharedAutoLaunch()) ?? [];
+            }
+        } catch {}
+        const merged = Array.from(new Set([...shared, ...local].filter(Boolean)));
+        inMemoryAutoLaunchIds.clear();
+        merged.forEach(id => inMemoryAutoLaunchIds.add(id));
+        autoLaunchLoaded = true;
+        return merged;
+    } catch {
+        return [];
+    }
+}
+
+export async function setAutoLaunchAccountIds(ids: string[]): Promise<void> {
+    try {
+        const unique = Array.from(new Set(ids.filter(Boolean)));
+        inMemoryAutoLaunchIds.clear();
+        unique.forEach(id => inMemoryAutoLaunchIds.add(id));
+        await DataStore.set(MI_AUTO_LAUNCH_KEY, unique);
+        if (typeof (Native as any)?.saveSharedAutoLaunch === "function") {
+            (Native as any).saveSharedAutoLaunch(unique).catch(() => {});
+        }
+    } catch {}
+}
+
+export async function setAccountAutoLaunch(userId: string, enable: boolean): Promise<boolean> {
+    if (enable) {
+        inMemoryAutoLaunchIds.add(userId);
+    } else {
+        inMemoryAutoLaunchIds.delete(userId);
+    }
+    const arr = Array.from(inMemoryAutoLaunchIds);
+    await setAutoLaunchAccountIds(arr);
+    return enable;
+}
+
+export async function toggleAutoLaunchAccount(userId: string): Promise<boolean> {
+    const isCurrently = inMemoryAutoLaunchIds.has(userId);
+    return setAccountAutoLaunch(userId, !isCurrently);
+}
+
+function findByPropsSilent(...props: string[]): any {
+    try {
+        const wreq = (window as any).Vencord?.Webpack?.wreq;
+        if (wreq?.c) {
+            for (const key in wreq.c) {
+                const exp = wreq.c[key]?.exports;
+                if (!exp) continue;
+                if (props.every(p => exp[p] !== undefined)) return exp;
+                if (exp.default && props.every(p => exp.default[p] !== undefined)) return exp.default;
+            }
+        }
+    } catch {}
+    return null;
+}
+
+function getSafeLocalStorage(): Storage | null {
+    try {
+        if (typeof window !== "undefined" && window.localStorage && typeof window.localStorage.setItem === "function") {
+            return window.localStorage;
+        }
+    } catch {}
+    try {
+        if (typeof document !== "undefined" && document.body) {
+            const iframe = document.createElement("iframe");
+            iframe.style.display = "none";
+            document.body.appendChild(iframe);
+            const ls = (iframe as any).contentWindow?.localStorage ?? null;
+            document.body.removeChild(iframe);
+            if (ls && typeof ls.setItem === "function") return ls;
+        }
+    } catch {}
+    return null;
+}
+
+export function captureSharedUiSettings(): Record<string, string> {
+    const allowedKeys = [
+        "theme",
+        "customThemeIndex",
+        "locale",
+        "developerMode",
+        "AccessibilityStore",
+        "WindowStore",
+        "fontSize",
+        "zoom"
+    ];
+    const out: Record<string, string> = {};
+    try {
+        const ls = getSafeLocalStorage();
+        if (!ls) return out;
+        for (const k of allowedKeys) {
+            const val = ls.getItem(k);
+            if (val !== null) out[k] = val;
+        }
+    } catch {}
+    return out;
+}
+
+let autoLaunchDone = false;
+
+async function runAutoLaunch(): Promise<void> {
+    if (autoLaunchDone || isCurrentInstanceWindow()) return;
+    autoLaunchDone = true;
+
+    try {
+        const autoIds = await getAutoLaunchAccountIds();
+        if (!autoIds || autoIds.length === 0) return;
+
+        await loadTokenCache();
+        const accounts = await fetchAllAccounts().catch(() => []);
+        const curUser = UserStore.getCurrentUser();
+        const openIds = (await Native.getOpenInstances().catch(() => [])) ?? [];
+
+        const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings } = settings.store;
+        const audioSettings = syncAudioSettings ? captureMasterAudioSettings() : undefined;
+
+        let delayMs = 1500;
+        for (const targetId of autoIds) {
+            if (!targetId || (curUser?.id && targetId === curUser.id)) continue;
+            if (openIds.includes(targetId)) continue;
+
+            const acc = accounts.find(a => a.id === targetId);
+            const tok = acc?.token || tokenCache[targetId];
+            if (!tok) continue;
+
+            const username = acc?.username || "";
+            setTimeout(async () => {
+                try {
+                    const currentlyOpen = (await Native.getOpenInstances().catch(() => [])) ?? [];
+                    if (currentlyOpen.includes(targetId)) return;
+                    const uiSettings = captureSharedUiSettings();
+                    await Native.openInstanceWindow(
+                        tok,
+                        targetId,
+                        true,
+                        username,
+                        domain,
+                        blockExternalTokenAccess,
+                        performanceMode,
+                        audioSettings,
+                        uiSettings
+                    );
+                } catch (err) {
+                    console.warn(`[GuncordMI] Auto-launch failed for ${targetId}:`, err);
+                }
+            }, delayMs);
+            delayMs += 1200;
+        }
+    } catch (e) {
+        console.warn("[GuncordMI] runAutoLaunch error:", e);
+    }
+}
+
+export const INSTANCE_PALETTE = [
+    "#5865F2", // Discord Blurple
+    "#57F287", // Green
+    "#FEE75C", // Yellow
+    "#EB459E", // Fuchsia / Pink
+    "#ED4245", // Red
+    "#00AFF4", // Cyan
+    "#9B59B6", // Purple
+    "#F47B67", // Coral / Peach
+    "#E67E22", // Orange
+    "#1ABC9C", // Turquoise / Teal
+    "#FF73FA", // Neon Pink
+    "#3498DB", // Sky Blue
+    "#2ECC71", // Emerald
+    "#E91E63", // Hot Pink
+];
+
+export function getAccountColor(userId: string): string {
+    if (!userId) return INSTANCE_PALETTE[0];
+    let hash = 0;
+    for (let i = 0; i < userId.length; i++) {
+        hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
+    }
+    return INSTANCE_PALETTE[hash % INSTANCE_PALETTE.length];
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Token cache — capture les tokens des accounts natifs Discord
@@ -54,6 +274,13 @@ const MI_TOKEN_CACHE_KEY = "guncord-mi-token-cache";
 let tokenCache: Record<string, string> = {};
 let tokenCacheLoaded = false;
 let encryptHooked = false;
+
+let _cachedTokenMod: any = null;
+function getCachedTokenMod() {
+    if (_cachedTokenMod) return _cachedTokenMod;
+    _cachedTokenMod = (findStore("AuthenticationStore") || AuthenticationStore) ?? findByPropsSilent("getToken", "getId") ?? findByPropsSilent("getToken", "encryptAndStoreTokens");
+    return _cachedTokenMod;
+}
 
 async function loadTokenCache(): Promise<void> {
     if (tokenCacheLoaded) return;
@@ -74,7 +301,7 @@ async function loadTokenCache(): Promise<void> {
 
     // Purge any corrupted or cross-account tokens
     const curUser = UserStore.getCurrentUser();
-    const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+    const tokenMod = getCachedTokenMod();
     const curTok = tokenMod?.getToken?.();
     if (curUser?.id && curTok) {
         tokenCache[curUser.id] = curTok;
@@ -166,7 +393,7 @@ function cacheToken(userId: string, token: string): boolean {
 
 function captureCurrentToken(): void {
     try {
-        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const tokenMod = getCachedTokenMod();
         const token = tokenMod?.getToken?.();
         const user = UserStore.getCurrentUser();
         if (token && user?.id && typeof token === "string") {
@@ -182,7 +409,7 @@ function captureCurrentToken(): void {
 function hookEncryptAndStoreTokens(): void {
     if (encryptHooked) return;
     try {
-        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const tokenMod = findByPropsSilent("getToken", "encryptAndStoreTokens");
         if (!tokenMod?.encryptAndStoreTokens) return;
         const orig = tokenMod.encryptAndStoreTokens.bind(tokenMod);
         tokenMod.encryptAndStoreTokens = async function (tokens: Record<string, string>) {
@@ -225,7 +452,7 @@ function isCurrentInstanceWindow(): boolean {
 
 function captureMasterAudioSettings(): Record<string, any> | null {
     try {
-        const rawLs = window.localStorage.getItem("MediaEngineStore");
+        const rawLs = getSafeLocalStorage()?.getItem("MediaEngineStore") ?? null;
         let parsedLs: any = null;
         if (rawLs) {
             try {
@@ -348,7 +575,7 @@ function applyAudioSettings(audio: any): void {
     }
 
     // 5. Krisp (noiseCancellation) & Noise Suppression
-    const meActions = findByProps("setNoiseCancellation", "setNoiseSuppression") || findByProps("setNoiseCancellation");
+    const meActions = findByPropsSilent("setNoiseCancellation", "setNoiseSuppression") || findByPropsSilent("setNoiseCancellation");
     if (typeof def.noiseCancellation === "boolean") {
         try {
             meActions?.setNoiseCancellation?.(def.noiseCancellation);
@@ -389,7 +616,7 @@ function applyAudioSettings(audio: any): void {
     // Apply mode even when modeOptions is absent (voice activity vs push to talk)
     if (def.mode) {
         try {
-            const modeActions = findByProps("setMode") || meActions;
+            const modeActions = findByPropsSilent("setMode") || meActions;
             modeActions?.setMode?.(def.mode, def.modeOptions ?? {});
         } catch {}
     }
@@ -397,7 +624,7 @@ function applyAudioSettings(audio: any): void {
     // 8. Attenuation
     if (typeof def.attenuation === "number") {
         try {
-            const attActions = findByProps("setAttenuation") || meActions;
+            const attActions = findByPropsSilent("setAttenuation") || meActions;
             attActions?.setAttenuation?.(
                 def.attenuation,
                 Boolean(def.attenuateWhileSpeakingSelf),
@@ -427,7 +654,7 @@ function applyAudioSettings(audio: any): void {
     // 10. Persist to localStorage
     if (audio.rawMediaEngineStore && typeof audio.rawMediaEngineStore === "string") {
         try {
-            window.localStorage.setItem("MediaEngineStore", audio.rawMediaEngineStore);
+            getSafeLocalStorage()?.setItem("MediaEngineStore", audio.rawMediaEngineStore);
         } catch {}
     }
 }
@@ -440,7 +667,7 @@ async function syncInstanceAudioSettings(): Promise<void> {
 
         if (masterAudio.rawMediaEngineStore && typeof masterAudio.rawMediaEngineStore === "string") {
             try {
-                window.localStorage.setItem("MediaEngineStore", masterAudio.rawMediaEngineStore);
+                getSafeLocalStorage()?.setItem("MediaEngineStore", masterAudio.rawMediaEngineStore);
             } catch {}
         }
 
@@ -532,7 +759,7 @@ function getAvatarUrl(id: string, hash?: string | null): string {
 
 function getNativeAccounts(): SavedAccount[] {
     try {
-        const store = findByProps("getUsers", "getValidUsers");
+        const store = findStore("MultiAccountStore") ?? findByPropsSilent("getUsers", "getValidUsers");
         const users: any[] = store?.getUsers?.() ?? store?.getValidUsers?.() ?? [];
         return users.filter(u => u?.id).map(u => ({
             id: u.id,
@@ -546,72 +773,162 @@ function getNativeAccounts(): SavedAccount[] {
 }
 
 async function fetchAllAccounts(): Promise<SavedAccount[]> {
-    let local: SavedAccount[] = [];
-    try {
-        local = (await DataStore.get<SavedAccount[]>(STORE_KEY)) ?? [];
-    } catch {}
-
-    let shared: SavedAccount[] = [];
-    try {
-        if (typeof (Native as any)?.getSharedAccounts === "function") {
-            shared = (await (Native as any).getSharedAccounts()) ?? [];
-        }
-    } catch {}
-
     const map = new Map<string, SavedAccount>();
-    for (const a of shared) {
-        if (a && a.id) map.set(a.id, a);
-    }
-    for (const a of local) {
-        if (!a || !a.id) continue;
-        const prev = map.get(a.id);
-        map.set(a.id, {
-            id: a.id,
-            username: a.username || prev?.username || "",
-            avatar: a.avatar || prev?.avatar || "",
-            token: a.token || prev?.token || "",
-        });
-    }
 
-    const nativeAccs = getNativeAccounts();
-    for (const a of nativeAccs) {
-        if (!a || !a.id) continue;
-        const prev = map.get(a.id);
-        map.set(a.id, {
-            id: a.id,
-            username: a.username || prev?.username || "",
-            avatar: a.avatar || prev?.avatar || "",
-            token: a.token || prev?.token || tokenCache[a.id] || "",
-        });
-    }
-
-    const curUser = UserStore.getCurrentUser();
-    if (curUser?.id) {
-        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
-        const curTok = tokenMod?.getToken?.();
-        const prev = map.get(curUser.id);
-        map.set(curUser.id, {
-            id: curUser.id,
-            username: (curUser as any).globalName || curUser.username || prev?.username || "",
-            avatar: getAvatarUrl(curUser.id, curUser.avatar) || prev?.avatar || "",
-            token: curTok || prev?.token || tokenCache[curUser.id] || "",
-        });
-    }
-
-    const merged = Array.from(map.values());
-    for (const acc of merged) {
-        if (acc.token && acc.token.startsWith("dQw4w9WgXcQ:")) {
-            try {
-                const dec = await Native.decryptToken(acc.token);
-                if (dec) acc.token = dec;
-            } catch {}
+    // 1. Direct DataStore "TokenImporter_accounts" (source of truth from TokenImporter)
+    try {
+        const dsAccounts = (await DataStore.get<any[]>(STORE_KEY)) ?? [];
+        if (Array.isArray(dsAccounts)) {
+            for (const a of dsAccounts) {
+                if (a && a.id) {
+                    const id = String(a.id);
+                    map.set(id, {
+                        id,
+                        username: a.username || "",
+                        avatar: a.avatar || "",
+                        token: typeof a.token === "string" ? a.token : "",
+                    });
+                }
+            }
         }
+    } catch (e) {
+        console.warn("[MultiInstance] Failed to read DataStore TokenImporter_accounts:", e);
     }
 
-    if (typeof (Native as any)?.saveSharedAccounts === "function") {
-        (Native as any).saveSharedAccounts(merged).catch(() => {});
+    // 2. TokenImporter plugin's getAccounts() (in-memory decrypted cache)
+    try {
+        const tiAccounts = await getTokenImporterAccounts().catch(() => []);
+        if (Array.isArray(tiAccounts)) {
+            for (const a of tiAccounts) {
+                if (a && a.id) {
+                    const id = String(a.id);
+                    const prev = map.get(id);
+                    const tok = (typeof a.token === "string" && a.token && !a.token.startsWith("dQw4w9WgXcQ:"))
+                        ? a.token
+                        : (prev?.token || a.token || "");
+                    map.set(id, {
+                        id,
+                        username: a.username || prev?.username || "",
+                        avatar: a.avatar || prev?.avatar || "",
+                        token: tok,
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.warn("[MultiInstance] Failed to load TokenImporter accounts:", e);
     }
-    DataStore.set(STORE_KEY, merged).catch(() => {});
+
+    // 3. Shared accounts file on disk (guncord-mi-accounts.json) via native helper
+    try {
+        const helper = getNativeHelper();
+        if (typeof helper?.getSharedAccounts === "function") {
+            const shared = (await helper.getSharedAccounts().catch(() => [])) ?? [];
+            if (Array.isArray(shared)) {
+                for (const a of shared) {
+                    if (!a || !a.id) continue;
+                    const id = String(a.id);
+                    const prev = map.get(id);
+                    const tok = (typeof a.token === "string" && a.token && !a.token.startsWith("dQw4w9WgXcQ:"))
+                        ? a.token
+                        : (prev?.token || a.token || "");
+                    map.set(id, {
+                        id,
+                        username: a.username || prev?.username || "",
+                        avatar: a.avatar || prev?.avatar || "",
+                        token: tok,
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.warn("[MultiInstance] Failed to load shared accounts:", e);
+    }
+
+    // 4. GhostClient tokens from DataStore
+    try {
+        const ghost = (await DataStore.get<any[]>("guncord-ghost-v2-tokens")) ?? [];
+        if (Array.isArray(ghost)) {
+            for (const a of ghost) {
+                if (a && a.id) {
+                    const id = String(a.id);
+                    const prev = map.get(id);
+                    map.set(id, {
+                        id,
+                        username: a.username || prev?.username || "",
+                        avatar: a.avatar || prev?.avatar || "",
+                        token: typeof a.token === "string" ? a.token : (prev?.token || ""),
+                    });
+                }
+            }
+        }
+    } catch {}
+
+    // 5. Native Discord MultiAccountStore
+    try {
+        const nativeAccs = getNativeAccounts();
+        for (const a of nativeAccs) {
+            if (!a || !a.id) continue;
+            const id = String(a.id);
+            const prev = map.get(id);
+            map.set(id, {
+                id,
+                username: a.username || prev?.username || "",
+                avatar: a.avatar || prev?.avatar || "",
+                token: a.token || prev?.token || tokenCache[id] || "",
+            });
+        }
+    } catch {}
+
+    // 6. Currently logged-in active account
+    try {
+        const curUser = UserStore.getCurrentUser();
+        if (curUser?.id) {
+            const tokenMod = getCachedTokenMod();
+            const curTok = tokenMod?.getToken?.();
+            const id = String(curUser.id);
+            const prev = map.get(id);
+            map.set(id, {
+                id,
+                username: (curUser as any).globalName || curUser.username || prev?.username || "",
+                avatar: getAvatarUrl(id, curUser.avatar) || prev?.avatar || "",
+                token: curTok || prev?.token || tokenCache[id] || "",
+            });
+        }
+    } catch {}
+
+    // 7. Decrypt any tokens that are still encrypted (in parallel)
+    const merged = Array.from(map.values());
+    await Promise.all(merged.map(async acc => {
+        try {
+            if (acc.token && typeof acc.token === "string" && acc.token.startsWith("dQw4w9WgXcQ:")) {
+                const helper = getNativeHelper();
+                const tiHelper = getTiNativeHelper();
+                let dec: string | null = null;
+                if (typeof helper?.decryptToken === "function") {
+                    dec = await helper.decryptToken(acc.token).catch(() => null);
+                }
+                if (!dec && typeof tiHelper?.decryptTokenNative === "function") {
+                    dec = await tiHelper.decryptTokenNative(acc.token).catch(() => null);
+                }
+                if (dec && typeof dec === "string" && !dec.startsWith("dQw4w9WgXcQ:")) {
+                    acc.token = dec;
+                }
+            }
+            if (acc.token && !tokenCache[acc.id] && !acc.token.startsWith("dQw4w9WgXcQ:")) {
+                tokenCache[acc.id] = acc.token;
+            }
+        } catch {}
+    }));
+
+    // 8. Sync valid accounts back to shared accounts JSON file
+    try {
+        const helper = getNativeHelper();
+        if (merged.length > 0 && typeof helper?.saveSharedAccounts === "function") {
+            helper.saveSharedAccounts(merged).catch(() => {});
+        }
+    } catch {}
+
     return merged;
 }
 
@@ -619,37 +936,29 @@ async function fetchAllAccounts(): Promise<SavedAccount[]> {
 function switchToQuick(token: string, userId?: string) {
     const cleanTok = token.trim().replace(/^"+|"+$/g, "");
     try {
-        window.localStorage.setItem("token", `"${cleanTok}"`);
-        window.localStorage.setItem("default_token", `"${cleanTok}"`);
-        if (userId) {
-            window.localStorage.setItem("user_id_cache", `"${userId}"`);
+        const ls = getSafeLocalStorage();
+        if (ls) {
+            ls.setItem("token", `"${cleanTok}"`);
+            ls.setItem("default_token", `"${cleanTok}"`);
+            if (userId) {
+                ls.setItem("user_id_cache", `"${userId}"`);
+            }
         }
         location.reload();
     } catch {
-        const iframe = document.createElement("iframe");
-        iframe.style.display = "none";
-        document.body.appendChild(iframe);
-        try {
-            (iframe as any).contentWindow.localStorage.token = `"${cleanTok}"`;
-            (iframe as any).contentWindow.localStorage.default_token = `"${cleanTok}"`;
-            if (userId) {
-                (iframe as any).contentWindow.localStorage.user_id_cache = `"${userId}"`;
-            }
-        } catch { }
-        document.body.removeChild(iframe);
         location.reload();
     }
 }
 
-/** Switch for native accounts without token — uses native Discord mechanism */
+/** Switch pour accounts natifs sans token — utilise le mécanisme Discord natif */
 function switchNativeAccount(userId: string) {
     try {
-        const multiAuth = findByProps("switchAccount", "loginToken") ?? findByProps("switchAccount");
+        const multiAuth = findByPropsSilent("switchAccount", "loginToken") ?? findByPropsSilent("switchAccount");
         if (multiAuth?.switchAccount) {
             multiAuth.switchAccount(userId);
             return;
         }
-        // Fallback: dispatch event flux as Discord does natively
+        // Fallback : dispatch le flux event comme Discord le fait nativement
         if (FluxDispatcher?.dispatch) {
             FluxDispatcher.dispatch({ type: "MULTI_ACCOUNT_SWITCH_ATTEMPT", userId });
         }
@@ -659,116 +968,269 @@ function switchNativeAccount(userId: string) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Context menu — mounted in document.body via portal to avoid overflow
+// Modales d'édition de compte (Token & Nom d'affichage)
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface CtxState {
-    x: number;
-    y: number;
+function ChangeTokenModal({
+    acc,
+    rootProps,
+    onSuccess
+}: {
     acc: AccountEntry;
+    rootProps: any;
+    onSuccess(): void;
+}) {
+    const [token, setToken] = React.useState(acc.token || "");
+    const [error, setError] = React.useState<string | null>(null);
+
+    const handleSave = async () => {
+        const cleanTok = token.trim().replace(/^"+|"+$/g, "");
+        if (!cleanTok) {
+            setError(t("Token cannot be empty."));
+            return;
+        }
+        const owner = getUserIdFromToken(cleanTok);
+        if (owner && owner !== acc.id) {
+            setError(`${t("Token belongs to user ID")} ${owner}, ${t("expected")} ${acc.id}`);
+            return;
+        }
+        cacheToken(acc.id, cleanTok);
+        saveTokenCache();
+
+        try {
+            const saved = await fetchAllAccounts();
+            const target = saved.find(s => s.id === acc.id);
+            if (target) {
+                target.token = cleanTok;
+            } else {
+                saved.push({ id: acc.id, username: acc.username, token: cleanTok, avatar: acc.avatar });
+            }
+            await DataStore.set(STORE_KEY, saved);
+            if (typeof (Native as any)?.saveSharedAccounts === "function") {
+                (Native as any).saveSharedAccounts(saved).catch(() => {});
+            }
+        } catch {}
+
+        try {
+            const tokenMod = findByPropsSilent("getToken", "encryptAndStoreTokens");
+            if (tokenMod?.encryptAndStoreTokens) {
+                const tokensJson = getSafeLocalStorage()?.getItem("tokens") ?? null;
+                const parsed = tokensJson ? JSON.parse(tokensJson) : {};
+                parsed[acc.id] = cleanTok;
+                tokenMod.encryptAndStoreTokens(parsed).catch(() => {});
+            }
+        } catch {}
+
+        showToast(t("Token updated successfully"), Toasts.Type.SUCCESS);
+        rootProps.onClose();
+        onSuccess();
+    };
+
+    return (
+        <ModalRoot {...rootProps} size="small">
+            <ModalHeader separator={false}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                    <h2 style={{ color: "var(--header-primary, #ffffff)", fontSize: 18, fontWeight: 600, margin: 0 }}>
+                        {t("Change Token")}
+                    </h2>
+                    <ModalCloseButton onClick={rootProps.onClose} />
+                </div>
+            </ModalHeader>
+            <ModalContent style={{ padding: "0 16px 16px" }}>
+                <p style={{ color: "var(--text-muted, #949ba4)", fontSize: 14, margin: "0 0 12px" }}>
+                    {t("Enter a new token for")} <strong style={{ color: "var(--header-primary, #ffffff)" }}>{acc.username}</strong> :
+                </p>
+                <TextInput
+                    value={token}
+                    placeholder="mfa.xxx..."
+                    type="password"
+                    onChange={(val: string) => { setToken(val); setError(null); }}
+                    autoFocus
+                />
+                {error && (
+                    <p style={{ color: "var(--text-danger, #ed4245)", fontSize: 12, margin: "8px 0 0" }}>
+                        {error}
+                    </p>
+                )}
+            </ModalContent>
+            <ModalFooter>
+                <Button variant="secondary" onClick={rootProps.onClose} style={{ marginRight: 8 }}>
+                    {t("Cancel")}
+                </Button>
+                <Button variant="primary" onClick={handleSave}>
+                    {t("Save")}
+                </Button>
+            </ModalFooter>
+        </ModalRoot>
+    );
 }
 
-interface CtxMenuProps extends CtxState {
+function ChangeUsernameModal({
+    acc,
+    rootProps,
+    onSuccess
+}: {
+    acc: AccountEntry;
+    rootProps: any;
+    onSuccess(): void;
+}) {
+    const [name, setName] = React.useState(acc.username || "");
+
+    const handleSave = async () => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+
+        try {
+            const saved = await fetchAllAccounts();
+            const target = saved.find(s => s.id === acc.id);
+            if (target) {
+                target.username = trimmed;
+            } else {
+                saved.push({ id: acc.id, username: trimmed, token: acc.token, avatar: acc.avatar });
+            }
+            await DataStore.set(STORE_KEY, saved);
+            if (typeof (Native as any)?.saveSharedAccounts === "function") {
+                (Native as any).saveSharedAccounts(saved).catch(() => {});
+            }
+        } catch {}
+
+        showToast(t("Display name updated"), Toasts.Type.SUCCESS);
+        rootProps.onClose();
+        onSuccess();
+    };
+
+    return (
+        <ModalRoot {...rootProps} size="small">
+            <ModalHeader separator={false}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                    <h2 style={{ color: "var(--header-primary, #ffffff)", fontSize: 18, fontWeight: 600, margin: 0 }}>
+                        {t("Change Display Name")}
+                    </h2>
+                    <ModalCloseButton onClick={rootProps.onClose} />
+                </div>
+            </ModalHeader>
+            <ModalContent style={{ padding: "0 16px 16px" }}>
+                <p style={{ color: "var(--text-muted, #949ba4)", fontSize: 14, margin: "0 0 12px" }}>
+                    {t("Enter a custom display name for")} <strong style={{ color: "var(--header-primary, #ffffff)" }}>{acc.username}</strong> :
+                </p>
+                <TextInput
+                    value={name}
+                    placeholder={acc.username}
+                    onChange={(val: string) => setName(val)}
+                    autoFocus
+                />
+            </ModalContent>
+            <ModalFooter>
+                <Button variant="secondary" onClick={rootProps.onClose} style={{ marginRight: 8 }}>
+                    {t("Cancel")}
+                </Button>
+                <Button variant="primary" onClick={handleSave}>
+                    {t("Save")}
+                </Button>
+            </ModalFooter>
+        </ModalRoot>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Menu contextuel natif Discord (via ContextMenuApi)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AccountActionsMenu({
+    acc,
+    isOpen,
+    isCurrent,
+    initialAutoLaunch,
+    onAutoLaunchChanged,
+    onNewGrouped,
+    onSwitch,
+    onLogout,
+    onChangeToken,
+    onChangeUsername,
+    onCloseInstance
+}: {
+    acc: AccountEntry;
     isOpen: boolean;
-    onClose(): void;
-    onNewWindow(): void;
-    onNewDetached(): void;
+    isCurrent: boolean;
+    initialAutoLaunch: boolean;
+    onAutoLaunchChanged(nextState: boolean): void;
     onNewGrouped(): void;
     onSwitch(): void;
-}
+    onLogout(): void;
+    onChangeToken(): void;
+    onChangeUsername(): void;
+    onCloseInstance(): void;
+}) {
+    const [checked, setChecked] = React.useState(initialAutoLaunch);
 
-function ContextMenuPortal(props: CtxMenuProps) {
-    const { x, y, acc, isOpen, onClose, onNewWindow, onNewDetached, onNewGrouped, onSwitch } = props;
-    const ref = React.useRef<HTMLDivElement>(null);
-    const [pos, setPos] = React.useState({ left: x, top: y });
+    const handleToggle = async () => {
+        const nextVal = !checked;
+        setChecked(nextVal);
+        await setAccountAutoLaunch(acc.id, nextVal);
+        onAutoLaunchChanged(nextVal);
+        if (nextVal) {
+            showToast(t("Auto-launch enabled"), Toasts.Type.SUCCESS);
+        } else {
+            showToast(t("Auto-launch disabled"), Toasts.Type.INFO);
+        }
+    };
 
-    // Create portal container only once
-    const [container] = React.useState(() => {
-        const el = document.getElementById("guncord-mi-ctx-root") ?? document.createElement("div");
-        el.id = "guncord-mi-ctx-root";
-        if (!el.parentNode) document.body.appendChild(el);
-        return el;
-    });
-
-    // Clean up container on unmount
-    React.useEffect(() => {
-        return () => {
-            try { container.remove(); } catch { }
-        };
-    }, [container]);
-
-    // Ferme si clic en dehors ou Escape
-    React.useEffect(() => {
-        const onDown = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-        };
-        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-        document.addEventListener("mousedown", onDown, true);
-        document.addEventListener("keydown", onKey, true);
-        return () => {
-            document.removeEventListener("mousedown", onDown, true);
-            document.removeEventListener("keydown", onKey, true);
-        };
-    }, [onClose]);
-
-    // Ajuste la position pour rester dans le viewport
-    React.useLayoutEffect(() => {
-        if (!ref.current) return;
-        const rect = ref.current.getBoundingClientRect();
-        setPos({
-            left: Math.min(x, window.innerWidth - rect.width - 8),
-            top: Math.min(y, window.innerHeight - rect.height - 8),
-        });
-    }, [x, y]);
-
-    const menu = (
-        <div ref={ref} className="mi-ctx-menu" style={{ left: pos.left, top: pos.top, position: "fixed" }}>
-            <div className="mi-ctx-header">
-                <span className="mi-ctx-username">{acc.username}</span>
-            </div>
-            <div className="mi-ctx-separator" />
-
-            {acc.hasToken ? (
-                <>
-                    <div className="mi-ctx-item" onClick={() => { onNewWindow(); onClose(); }}>
-                        <WindowIcon /> {t("New detached instance")}
-                    </div>
-                    <div className="mi-ctx-item" onClick={() => { onNewGrouped(); onClose(); }}>
-                        <GroupedIcon /> {t("New grouped instance")}
-                    </div>
-                    <div className="mi-ctx-separator" />
-                </>
-            ) : (
-                <div className="mi-ctx-hint">
-                    {t("Switch to this account once to capture its session token.")}
-                </div>
-            )}
-
-            {acc.id !== UserStore.getCurrentUser()?.id ? (
-                <div className="mi-ctx-item" onClick={() => { onSwitch(); onClose(); }}>
-                    <SwitchIcon /> {t("Quick switch")}
-                </div>
-            ) : (
-                <div className="mi-ctx-hint" style={{ textAlign: "center", color: "var(--brand-500, #5865f2)", fontWeight: 600 }}>
-                    {t("Current active account")}
-                </div>
-            )}
-
-            {isOpen && <>
-                <div className="mi-ctx-separator" />
-                <div className="mi-ctx-item mi-ctx-item--danger" onClick={async () => {
-                    await Native.closeInstance(acc.id).catch(() => { });
-                    onClose();
-                }}>
-                    <CloseIcon /> {t("Close instance")}
-                </div>
-            </>}
-        </div>
+    return (
+        <Menu.Menu navId="nc-mi-account-actions" onClose={ContextMenuApi.closeContextMenu} aria-label={acc.username}>
+            <Menu.MenuGroup>
+                {!isCurrent && (
+                    <Menu.MenuItem
+                        id="mi-switch"
+                        label={t("Switch Account")}
+                        action={onSwitch}
+                    />
+                )}
+                {acc.hasToken && (
+                    <Menu.MenuItem
+                        id="mi-grouped"
+                        label={t("New grouped instance")}
+                        action={onNewGrouped}
+                    />
+                )}
+            </Menu.MenuGroup>
+            <Menu.MenuGroup>
+                <Menu.MenuCheckboxItem
+                    id="mi-auto-launch"
+                    label={t("Launch on Discord startup")}
+                    checked={checked}
+                    action={handleToggle}
+                />
+            </Menu.MenuGroup>
+            <Menu.MenuGroup>
+                <Menu.MenuItem
+                    id="mi-change-username"
+                    label={t("Change Display Name")}
+                    action={onChangeUsername}
+                />
+                <Menu.MenuItem
+                    id="mi-change-token"
+                    label={t("Change Token")}
+                    action={onChangeToken}
+                />
+            </Menu.MenuGroup>
+            <Menu.MenuGroup>
+                {isOpen && (
+                    <Menu.MenuItem
+                        id="mi-close-instance"
+                        label={t("Close instance")}
+                        color="danger"
+                        action={onCloseInstance}
+                    />
+                )}
+                <Menu.MenuItem
+                    id="mi-logout"
+                    label={t("Log out")}
+                    color="danger"
+                    action={onLogout}
+                />
+            </Menu.MenuGroup>
+        </Menu.Menu>
     );
-
-    // createPortal monte le menu dans document.body — hors du DOM du modal
-    // ce qui contourne le z-index et l'overflow du ModalRoot
-    return ReactDOM.createPortal(menu, container) as any;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -780,22 +1242,30 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
     const [savedAccounts, setSavedAccounts] = React.useState<SavedAccount[]>([]);
     const [nativeAccounts, setNativeAccounts] = React.useState<SavedAccount[]>([]);
     const [openInstances, setOpenInstances] = React.useState<string[]>([]);
-    const [ctx, setCtx] = React.useState<CtxState | null>(null);
-    const [status, setStatus] = React.useState<string | null>(null);
+    const [autoLaunchIds, setAutoLaunchIds] = React.useState<string[]>([]);
+
+    const refreshAccounts = async () => {
+        captureCurrentToken();
+        const accs = await fetchAllAccounts().catch(e => {
+            console.error("[MultiInstance] fetchAllAccounts failed:", e);
+            return [];
+        });
+        setSavedAccounts(accs);
+        setNativeAccounts(getNativeAccounts());
+        const ids = await Native.getOpenInstances().catch(() => []);
+        setOpenInstances(ids ?? []);
+        const aIds = await getAutoLaunchAccountIds().catch(() => []);
+        setAutoLaunchIds(aIds);
+    };
 
     React.useEffect(() => {
-        captureCurrentToken();
-        fetchAllAccounts().then(accs => {
-            setSavedAccounts(accs);
-        }).catch(() => {});
-        setNativeAccounts(getNativeAccounts());
-        Native.getOpenInstances().then(ids => setOpenInstances(ids ?? [])).catch(() => { });
+        refreshAccounts();
     }, []);
 
     const allAccounts = React.useMemo<AccountEntry[]>(() => {
         const seen = new Set<string>();
         const result: AccountEntry[] = [];
-        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const tokenMod = getCachedTokenMod();
         const curTok = tokenMod?.getToken?.();
 
         // 1. Current logged-in user (appears first among accounts)
@@ -810,9 +1280,10 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
                     token = "";
                 }
             }
+            const displayUsername = saved?.username || (currentUser as any).globalName || currentUser.username;
             result.push({
                 id: currentUser.id,
-                username: (currentUser as any).globalName || currentUser.username,
+                username: displayUsername,
                 avatar: getAvatarUrl(currentUser.id, currentUser.avatar),
                 token,
                 hasToken: !!token,
@@ -835,7 +1306,8 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
                     token = "";
                 }
             }
-            result.push({ ...acc, token, hasToken: !!token, isNative: true });
+            const displayUsername = saved?.username || acc.username;
+            result.push({ ...acc, username: displayUsername, token, hasToken: !!token, isNative: true });
         }
 
         // 3. Saved accounts from TokenImporter & Shared Accounts
@@ -862,169 +1334,362 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
         setOpenInstances(ids ?? []);
     };
 
+    const handleToggleAutoLaunch = async (acc: AccountEntry) => {
+        const isNowAuto = await toggleAutoLaunchAccount(acc.id);
+        const aIds = await getAutoLaunchAccountIds().catch(() => []);
+        setAutoLaunchIds(aIds);
+        if (isNowAuto) {
+            showToast(t("Auto-launch enabled"), Toasts.Type.SUCCESS);
+        } else {
+            showToast(t("Auto-launch disabled"), Toasts.Type.INFO);
+        }
+    };
+
     const handleNewWindow = async (acc: AccountEntry) => {
         if (!acc.hasToken || !acc.token) return;
-        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const tokenMod = getCachedTokenMod();
         const curTok = tokenMod?.getToken?.();
         if (curTok && acc.token === curTok && acc.id !== currentUser?.id) {
-            setStatus(t("Cannot launch: Token collision detected."));
-            setTimeout(() => setStatus(null), 4000);
+            showToast(t("Cannot launch: Token collision detected."), Toasts.Type.FAILURE);
             return;
         }
-        setCtx(null);
-        setStatus(t("Opening window…"));
         const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings } = settings.store;
         const audioSettings = syncAudioSettings ? captureMasterAudioSettings() : undefined;
-        // @ts-ignore - Passage du pseudo, domaine, token protection, perf mode, audioSettings
-        const res = await Native.openInstanceWindow(acc.token, acc.id, false, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings).catch(() => ({ ok: false, error: "error" }));
-        if ((res as any).ok) {
-            setStatus(t("Window opened"));
+        const uiSettings = captureSharedUiSettings();
+        // @ts-ignore - Passage du pseudo, domaine, token protection, perf mode, audioSettings, uiSettings
+        const res = await Native.openInstanceWindow(acc.token, acc.id, false, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings, uiSettings).catch(() => ({ ok: false, error: "error" }));
+        if ((res as any)?.ok) {
             await refreshInstances();
         } else {
-            setStatus(`${t("Error:")} ` + ((res as any).error ?? t("unknown")));
+            showToast(`${t("Error:")} ` + ((res as any)?.error ?? t("unknown")), Toasts.Type.FAILURE);
         }
-        setTimeout(() => setStatus(null), 3000);
     };
 
     const handleNewDetached = async (acc: AccountEntry) => {
-        if (!acc.hasToken || !acc.token) return;
-        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
-        const curTok = tokenMod?.getToken?.();
-        if (curTok && acc.token === curTok && acc.id !== currentUser?.id) {
-            setStatus(t("Cannot launch: Token collision detected."));
-            setTimeout(() => setStatus(null), 4000);
+        if (!acc.hasToken || !acc.token) {
+            switchNativeAccount(acc.id);
             return;
         }
-        setCtx(null);
-        setStatus(t("Opening detached instance…"));
+        const tokenMod = getCachedTokenMod();
+        const curTok = tokenMod?.getToken?.();
+        if (curTok && acc.token === curTok && acc.id !== currentUser?.id) {
+            showToast(t("Cannot launch: Token collision detected."), Toasts.Type.FAILURE);
+            return;
+        }
         const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings } = settings.store;
         const audioSettings = syncAudioSettings ? captureMasterAudioSettings() : undefined;
-        // @ts-ignore - Argument 'detached', pseudo, domaine, token protection, perf mode, audioSettings
-        const res = await Native.openInstanceWindow(acc.token, acc.id, true, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings).catch(() => ({ ok: false, error: "error" }));
-        if ((res as any).ok) {
-            setStatus(t("Instance opened"));
+        const uiSettings = captureSharedUiSettings();
+        // @ts-ignore - Argument 'detached', pseudo, domaine, token protection, perf mode, audioSettings, uiSettings
+        const res = await Native.openInstanceWindow(acc.token, acc.id, true, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings, uiSettings).catch(() => ({ ok: false, error: "error" }));
+        if ((res as any)?.ok) {
             await refreshInstances();
         } else {
-            setStatus(`${t("Error:")} ` + ((res as any).error ?? t("unknown")));
+            showToast(`${t("Error:")} ` + ((res as any)?.error ?? t("unknown")), Toasts.Type.FAILURE);
         }
-        setTimeout(() => setStatus(null), 3000);
     };
 
     const handleNewGrouped = async (acc: AccountEntry) => {
         if (!acc.hasToken || !acc.token) return;
-        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
+        const tokenMod = getCachedTokenMod();
         const curTok = tokenMod?.getToken?.();
         if (curTok && acc.token === curTok && acc.id !== currentUser?.id) {
-            setStatus(t("Cannot launch: Token collision detected."));
-            setTimeout(() => setStatus(null), 4000);
+            showToast(t("Cannot launch: Token collision detected."), Toasts.Type.FAILURE);
             return;
         }
-        setCtx(null);
-        setStatus(t("Opening grouped instance…"));
         const { domain, blockExternalTokenAccess, performanceMode, syncAudioSettings } = settings.store;
         const audioSettings = syncAudioSettings ? captureMasterAudioSettings() : undefined;
+        const uiSettings = captureSharedUiSettings();
         // @ts-ignore
-        const res = await Native.openInstanceWindowGrouped(acc.token, acc.id, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings).catch(() => ({ ok: false, error: "error" }));
-        if ((res as any).ok) {
-            setStatus(t("Instance opened"));
+        const res = await Native.openInstanceWindowGrouped(acc.token, acc.id, acc.username, domain, blockExternalTokenAccess, performanceMode, audioSettings, uiSettings).catch(() => ({ ok: false, error: "error" }));
+        if ((res as any)?.ok) {
             await refreshInstances();
         } else {
-            setStatus(`${t("Error:")} ` + ((res as any).error ?? t("unknown")));
+            showToast(`${t("Error:")} ` + ((res as any)?.error ?? t("unknown")), Toasts.Type.FAILURE);
         }
-        setTimeout(() => setStatus(null), 3000);
+    };
+
+    const handleLogout = async (acc: AccountEntry) => {
+        ContextMenuApi.closeContextMenu();
+        const isCurrent = acc.id === currentUser?.id;
+
+        try {
+            delete tokenCache[acc.id];
+            if (_saveTokenTimer !== undefined) {
+                clearTimeout(_saveTokenTimer);
+                _saveTokenTimer = undefined;
+            }
+            await DataStore.set(MI_TOKEN_CACHE_KEY, tokenCache);
+
+            try {
+                if (typeof (Native as any)?.removeSharedTokenFromCache === "function") {
+                    await (Native as any).removeSharedTokenFromCache(acc.id);
+                }
+                const miHelper = getNativeHelper();
+                if (typeof miHelper?.removeSharedTokenFromCache === "function") {
+                    await miHelper.removeSharedTokenFromCache(acc.id);
+                }
+            } catch {}
+
+            await removeTokenImporterAccount(acc.id).catch(() => {});
+
+            try {
+                const dsAccounts = (await DataStore.get<any[]>(STORE_KEY)) ?? [];
+                if (Array.isArray(dsAccounts)) {
+                    const filteredDs = dsAccounts.filter(a => a && String(a.id) !== acc.id);
+                    await DataStore.set(STORE_KEY, filteredDs);
+                }
+            } catch {}
+
+            try {
+                if (typeof (Native as any)?.removeSharedAccount === "function") {
+                    await (Native as any).removeSharedAccount(acc.id);
+                }
+                const miHelper = getNativeHelper();
+                if (typeof miHelper?.removeSharedAccount === "function") {
+                    await miHelper.removeSharedAccount(acc.id);
+                }
+            } catch {}
+
+            try {
+                const ghost = await DataStore.get<any[]>("guncord-ghost-v2-tokens");
+                if (Array.isArray(ghost)) {
+                    const filteredGhost = ghost.filter(g => g && String(g.id) !== acc.id);
+                    await DataStore.set("guncord-ghost-v2-tokens", filteredGhost);
+                }
+            } catch {}
+
+            await setAccountAutoLaunch(acc.id, false).catch(() => {});
+            setAutoLaunchIds(prev => prev.filter(id => id !== acc.id));
+
+            try {
+                if (FluxDispatcher?.dispatch) {
+                    FluxDispatcher.dispatch({ type: "MULTI_ACCOUNT_REMOVE_ACCOUNT", userId: acc.id });
+                }
+            } catch {}
+
+            try {
+                const tokenMod = findByPropsSilent("getToken", "encryptAndStoreTokens", "removeToken");
+                if (typeof tokenMod?.removeToken === "function") {
+                    tokenMod.removeToken(acc.id);
+                }
+                const tokensJson = window.localStorage.getItem("tokens");
+                if (tokensJson) {
+                    try {
+                        const parsed = JSON.parse(tokensJson);
+                        delete parsed[acc.id];
+                        window.localStorage.setItem("tokens", JSON.stringify(parsed));
+                        if (typeof tokenMod?.encryptAndStoreTokens === "function") {
+                            tokenMod.encryptAndStoreTokens(parsed).catch(() => {});
+                        }
+                    } catch {}
+                }
+                const multiJson = window.localStorage.getItem("multiaccount_tokens");
+                if (multiJson) {
+                    try {
+                        const parsed = JSON.parse(multiJson);
+                        delete parsed[acc.id];
+                        window.localStorage.setItem("multiaccount_tokens", JSON.stringify(parsed));
+                    } catch {}
+                }
+            } catch {}
+
+            if (openInstances.includes(acc.id)) {
+                await Native.closeInstance(acc.id).catch(() => {});
+            }
+
+            setSavedAccounts(prev => prev.filter(a => a.id !== acc.id));
+            setNativeAccounts(prev => prev.filter(a => a.id !== acc.id));
+
+            showToast(t("Account removed"), Toasts.Type.SUCCESS);
+            await refreshAccounts();
+
+            if (isCurrent) {
+                try {
+                    const authMod = findByProps("logout");
+                    if (typeof authMod?.logout === "function") {
+                        authMod.logout();
+                        return;
+                    }
+                } catch {}
+            }
+        } catch (e) {
+            console.error("[MultiInstance] Logout error:", e);
+        }
     };
 
     const openCtx = (e: React.MouseEvent, acc: AccountEntry) => {
         e.preventDefault();
         e.stopPropagation();
-        setCtx({ x: e.clientX, y: e.clientY, acc });
+        const isCurrent = acc.id === currentUser?.id;
+        const isOpen = openInstances.includes(acc.id);
+        const isAutoLaunch = inMemoryAutoLaunchIds.has(acc.id) || autoLaunchIds.includes(acc.id);
+
+        ContextMenuApi.openContextMenu(e, () => (
+            <AccountActionsMenu
+                acc={acc}
+                isOpen={isOpen}
+                isCurrent={isCurrent}
+                initialAutoLaunch={isAutoLaunch}
+                onAutoLaunchChanged={() => {
+                    setAutoLaunchIds(Array.from(inMemoryAutoLaunchIds));
+                }}
+                onNewGrouped={() => handleNewGrouped(acc)}
+                onSwitch={() => {
+                    ContextMenuApi.closeContextMenu();
+                    if (acc.token) switchToQuick(acc.token, acc.id);
+                    else switchNativeAccount(acc.id);
+                }}
+                onLogout={() => handleLogout(acc)}
+                onChangeToken={() => {
+                    ContextMenuApi.closeContextMenu();
+                    openModal(modalProps => <ChangeTokenModal acc={acc} rootProps={modalProps} onSuccess={refreshAccounts} />);
+                }}
+                onChangeUsername={() => {
+                    ContextMenuApi.closeContextMenu();
+                    openModal(modalProps => <ChangeUsernameModal acc={acc} rootProps={modalProps} onSuccess={refreshAccounts} />);
+                }}
+                onCloseInstance={async () => {
+                    ContextMenuApi.closeContextMenu();
+                    await Native.closeInstance(acc.id).catch(() => {});
+                    await refreshInstances();
+                }}
+            />
+        ));
+    };
+
+    const handleAddAccount = () => {
+        try {
+            const multiAuth = findByProps("openMultiAccountLoginModal", "switchAccount") ?? findByProps("loginToken");
+            if (multiAuth?.openMultiAccountLoginModal) {
+                rootProps.onClose();
+                multiAuth.openMultiAccountLoginModal();
+                return;
+            }
+        } catch { }
+        try {
+            const tokenMod = findByProps("openTokenImporterModal") as any;
+            if (typeof tokenMod?.openTokenImporterModal === "function") {
+                rootProps.onClose();
+                tokenMod.openTokenImporterModal();
+                return;
+            }
+        } catch { }
+        try {
+            const importer = (window as any).openTokenImporterModal;
+            if (typeof importer === "function") {
+                rootProps.onClose();
+                importer();
+                return;
+            }
+        } catch { }
+        showToast(t("Use TokenImporter or Switch Account in Discord settings."), Toasts.Type.INFO);
     };
 
     return (
-        <ModalRoot {...rootProps} size="small">
-            <ModalHeader separator={false}>
-                <Forms.FormTitle tag="h4" style={{ margin: 0, display: "flex", alignItems: "center", gap: 8, color: "#fff" }}>
-                    <DiscordIcon /> {t("Multi-instance")}
-                </Forms.FormTitle>
-                <ModalCloseButton onClick={rootProps.onClose} />
+        <ModalRoot {...rootProps} size={ModalSize.MEDIUM} className="nc-mi-modal-container">
+            <ModalHeader separator={false} className="nc-mi-header">
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 0 }}>
+                    <div className="nc-mi-header-layout">
+                        <Forms.FormTitle tag="h2" className="nc-mi-title" style={{ margin: 0 }}>
+                            {t("Multi Accounts")}
+                        </Forms.FormTitle>
+                        <ModalCloseButton onClick={rootProps.onClose} />
+                    </div>
+                    <Text variant="text-sm/normal" color="text-muted" className="nc-mi-subtitle">
+                        {t("Switch accounts, sign in, sign out, go wild.")}
+                    </Text>
+                </div>
             </ModalHeader>
 
-            <ModalContent className="mi-modal-content">
-                <p className="mi-subtitle">
-                    <strong>{t("Left click")}</strong> {t("or")} <strong>{t("right click")}</strong> → {t("options menu")}
-                </p>
-
-                <div className="mi-list">
-                    <div className="mi-section-label">
-                        {allAccounts.length} {t(allAccounts.length !== 1 ? "ACCOUNTS" : "ACCOUNT")}
-                    </div>
-
+            <ModalContent className="nc-mi-content">
+                <div className="nc-mi-list">
                     {allAccounts.length === 0 ? (
                         <div className="mi-empty">
-                            {t("No account found.")}<br />
-                            {t("Use")} "<strong>{t("Switch Account")}</strong>" {t("in Discord or add tokens via")} <strong>{t("TokenImporter")}</strong>.
+                            {t("No accounts found.")}
                         </div>
-                    ) : allAccounts.map(acc => {
+                    ) : allAccounts.map((acc, index) => {
                         const isCurrent = acc.id === currentUser?.id;
                         const isOpen = openInstances.includes(acc.id);
-                        const tagText = isCurrent
-                            ? `@${currentUser?.username ?? acc.username}`
-                            : (acc.hasToken
-                                ? (acc.isNative ? t("Discord Account") : t("Token"))
-                                : t("Requires normal login to capture token"));
                         return (
-                            <div
-                                key={acc.id}
-                                className={`mi-account-row${isCurrent ? " mi-account-row--current" : ""}${isOpen ? " mi-account-row--active" : ""}${!acc.hasToken && !isCurrent ? " mi-account-row--no-token" : ""}`}
-                                onClick={e => openCtx(e, acc)}
-                                onContextMenu={e => openCtx(e, acc)}
-                            >
-                                <AccountAvatar url={acc.avatar} name={acc.username} />
-                                <div className="mi-account-info">
-                                    <span className="mi-account-name">{acc.username}</span>
-                                    <span className="mi-account-tag">
-                                        {tagText}
-                                    </span>
+                            <React.Fragment key={acc.id}>
+                                {index > 0 && <div role="separator" className="nc-mi-separator" />}
+                                <div
+                                    className={`nc-mi-account-card${isCurrent ? " nc-mi-account-card--active" : ""}`}
+                                    onContextMenu={e => openCtx(e, acc)}
+                                >
+                                    <div className="nc-mi-user-details">
+                                        <div className="nc-mi-avatar-wrapper" style={{ width: 40, height: 40 }}>
+                                            <AccountAvatar url={acc.avatar} name={acc.username} />
+                                        </div>
+                                        <div className="nc-mi-user-section">
+                                            <Text variant="text-md/semibold" color="header-primary" className="nc-mi-username">
+                                                {acc.username}
+                                            </Text>
+                                            {isCurrent ? (
+                                                <Text variant="text-sm/semibold" className="nc-mi-hint-active" style={{ color: "var(--text-feedback-positive, #23a55a)" }}>
+                                                    {t("Active account")}
+                                                </Text>
+                                            ) : isOpen ? (
+                                                <div className="nc-mi-hint-open" style={{ color: "var(--brand-500, #5865f2)", display: "flex", alignItems: "center", gap: 4 }}>
+                                                    <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--brand-500, #5865f2)" }} />
+                                                    <Text variant="text-sm/semibold" style={{ color: "var(--brand-500, #5865f2)" }}>
+                                                        {t("Instance running")}
+                                                    </Text>
+                                                </div>
+                                            ) : (
+                                                !acc.hasToken ? (
+                                                    <Text variant="text-xs/normal" color="text-muted" className="nc-mi-hint-sub">
+                                                        {t("Requires login")}
+                                                    </Text>
+                                                ) : null
+                                            )}
+                                        </div>
+                                        <div className="nc-mi-user-actions">
+                                            {!isCurrent && (
+                                                <Button
+                                                    size="small"
+                                                    variant="secondary"
+                                                    className="nc-mi-switch-btn"
+                                                    onClick={() => handleNewDetached(acc)}
+                                                >
+                                                    {t("Switch")}
+                                                </Button>
+                                            )}
+                                            <Tooltip text={t("More Options")}>
+                                                {(props: any) => (
+                                                    <Button
+                                                        {...props}
+                                                        size="iconOnly"
+                                                        variant="secondary"
+                                                        className="nc-mi-options-btn"
+                                                        onClick={(e: React.MouseEvent) => openCtx(e, acc)}
+                                                        aria-label={t("More Options")}
+                                                    >
+                                                        <svg aria-hidden="true" role="img" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24">
+                                                            <path fill="currentColor" fillRule="evenodd" d="M4 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm10-2a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm8 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </Button>
+                                                )}
+                                            </Tooltip>
+                                        </div>
+                                    </div>
                                 </div>
-                                {isCurrent ? (
-                                    <span className="mi-badge-current">{t("Active")}</span>
-                                ) : acc.hasToken ? (
-                                    isOpen
-                                        ? <span className="mi-badge-open">{t("Open")}</span>
-                                        : <span className="mi-badge-arrow">›</span>
-                                ) : (
-                                    <span className="mi-badge-lock"><LockIcon /></span>
-                                )}
-                            </div>
+                            </React.Fragment>
                         );
                     })}
                 </div>
-
-                {status && (
-                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", textAlign: "center", margin: "4px 0 0" }}>
-                        {status}
-                    </p>
-                )}
             </ModalContent>
 
-            {/* Context menu via portal */}
-            {ctx && (() => {
-                const acc = allAccounts.find(a => a.id === ctx.acc.id);
-                if (!acc) return null;
-                return (
-                    <ContextMenuPortal
-                        x={ctx.x}
-                        y={ctx.y}
-                        acc={acc}
-                        isOpen={openInstances.includes(acc.id)}
-                        onClose={() => setCtx(null)}
-                        onNewWindow={() => handleNewWindow(acc)}
-                        onNewDetached={() => handleNewDetached(acc)}
-                        onNewGrouped={() => handleNewGrouped(acc)}
-                        onSwitch={() => acc.token ? switchToQuick(acc.token, acc.id) : switchNativeAccount(acc.id)}
-                    />
-                );
-            })()}
+            <ModalFooter className="nc-mi-footer">
+                <Button
+                    variant="secondary"
+                    className="nc-mi-add-btn"
+                    onClick={handleAddAccount}
+                    style={{ width: "100%" }}
+                >
+                    {t("Add an account")}
+                </Button>
+            </ModalFooter>
         </ModalRoot>
     );
 }
@@ -1035,78 +1700,14 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
 
 function AccountAvatar({ url, name }: { url: string; name: string; }) {
     const [err, setErr] = React.useState(false);
-    if (err || !url) return <div className="mi-avatar mi-avatar--ph">{name?.[0]?.toUpperCase() ?? "?"}</div>;
-    return <img src={url} className="mi-avatar" alt="" onError={() => setErr(true)} />;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Icons
-// ─────────────────────────────────────────────────────────────────────────────
-
-function LockIcon() {
-    return (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
-        </svg>
-    );
-}
-
-function DiscordIcon() {
-    return (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19.73 4.87a18.2 18.2 0 0 0-4.6-1.44c-.21.4-.4.8-.58 1.21-1.69-.25-3.4-.25-5.1 0-.18-.41-.37-.82-.59-1.2-1.6.27-3.14.75-4.6 1.43A19.04 19.04 0 0 0 .96 17.7a18.43 18.43 0 0 0 5.63 2.87c.46-.62.86-1.28 1.2-1.98-.65-.25-1.29-.55-1.9-.92.17-.12.32-.24.47-.37 3.58 1.7 7.7 1.7 11.28 0l.46.37c-.6.36-1.25.67-1.9.92.35.7.75 1.35 1.2 1.98 2.03-.63 3.94-1.6 5.64-2.87.47-4.87-.78-9.09-3.3-12.83ZM8.3 15.12c-1.1 0-2-1.02-2-2.27 0-1.24.88-2.26 2-2.26s2.02 1.02 2 2.26c0 1.25-.89 2.27-2 2.27Zm7.4 0c-1.1 0-2-1.02-2-2.27 0-1.24.88-2.26 2-2.26s2.02 1.02 2 2.26c0 1.25-.88 2.27-2 2.27Z" />
-        </svg>
-    );
-}
-
-function WindowIcon() {
-    return (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8h16v10z" />
-        </svg>
-    );
-}
-
-function ExternalIcon() {
-    return (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-            <polyline points="15 3 21 3 21 9" />
-            <line x1="10" y1="14" x2="21" y2="3" />
-        </svg>
-    );
-}
-
-function SwitchIcon() {
-    return (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M16 17v-3H9v-4h7V7l5 5-5 5zm-9 2H5V5h2V3H5C3.9 3 3 3.9 3 5v14c0 1.1.9 2 2 2h2v-2z" />
-        </svg>
-    );
-}
-
-function GroupedIcon() {
-    return (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M2 7h20v2H2zm0 4h20v2H2zm0 4h20v2H2z" />
-        </svg>
-    );
-}
-
-function CloseIcon() {
-    return (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-        </svg>
-    );
+    if (err || !url) return <div className="nc-mi-avatar-ph">{name?.[0]?.toUpperCase() ?? "?"}</div>;
+    return <img src={url} className="nc-mi-avatar" alt="" onError={() => setErr(true)} />;
 }
 
 function MultiInstanceIcon({ width = 20, height = 20, className = "" }: { width?: number; height?: number; className?: string; }) {
     return (
         <svg className={`nc-multi-instance-icon ${className}`} width={width} height={height} viewBox="0 0 24 24" fill="currentColor">
             <path d="M19.73 4.87a18.2 18.2 0 0 0-4.6-1.44c-.21.4-.4.8-.58 1.21-1.69-.25-3.4-.25-5.1 0-.18-.41-.37-.82-.59-1.2-1.6.27-3.14.75-4.6 1.43A19.04 19.04 0 0 0 .96 17.7a18.43 18.43 0 0 0 5.63 2.87c.46-.62.86-1.28 1.2-1.98-.65-.25-1.29-.55-1.9-.92.17-.12.32-.24.47-.37 3.58 1.7 7.7 1.7 11.28 0l.46.37c-.6.36-1.25.67-1.9.92.35.7.75 1.35 1.2 1.98 2.03-.63 3.94-1.6 5.64-2.87.47-4.87-.78-9.09-3.3-12.83ZM8.3 15.12c-1.1 0-2-1.02-2-2.27 0-1.24.88-2.26 2-2.26s2.02 1.02 2 2.26c0 1.25-.89 2.27-2 2.27Zm7.4 0c-1.1 0-2-1.02-2-2.27 0-1.24.88-2.26 2-2.26s2.02 1.02 2 2.26c0 1.25-.88 2.27-2 2.27Z" />
-            <circle cx="19.5" cy="19.5" r="4.5" fill="var(--brand-500, #5865f2)" />
-            <path d="M19.5 17.5v4M17.5 19.5h4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
     );
 }
@@ -1125,7 +1726,12 @@ function MultiInstanceButton() {
     );
 }
 
+let instanceAuthInitialized = false;
+
 async function initInstanceWindowAuth(): Promise<void> {
+    if (instanceAuthInitialized) return;
+    instanceAuthInitialized = true;
+
     let auth: { token: string; userId: string; username: string; } | null = null;
     try {
         if (typeof Native?.getInstanceAuth === "function") {
@@ -1171,29 +1777,18 @@ async function initInstanceWindowAuth(): Promise<void> {
     const syncStorage = () => {
         try {
             const q = JSON.stringify(cleanTok);
-            window.localStorage.setItem("token", q);
-            window.localStorage.setItem("default_token", q);
-            if (miUserId) {
-                window.localStorage.setItem("user_id_cache", JSON.stringify(miUserId));
-            }
-            if (tokensJson) {
-                window.localStorage.setItem("tokens", tokensJson);
-                window.localStorage.setItem("multiaccount_tokens", tokensJson);
-            }
-            const iframe = document.createElement("iframe");
-            iframe.style.display = "none";
-            document.body.appendChild(iframe);
-            const ifLs = (iframe as any).contentWindow?.localStorage;
-            if (ifLs) {
-                ifLs.token = q;
-                ifLs.default_token = q;
-                if (miUserId) ifLs.user_id_cache = JSON.stringify(miUserId);
+            const ls = getSafeLocalStorage();
+            if (ls) {
+                ls.setItem("token", q);
+                ls.setItem("default_token", q);
+                if (miUserId) {
+                    ls.setItem("user_id_cache", JSON.stringify(miUserId));
+                }
                 if (tokensJson) {
-                    ifLs.tokens = tokensJson;
-                    ifLs.multiaccount_tokens = tokensJson;
+                    ls.setItem("tokens", tokensJson);
+                    ls.setItem("multiaccount_tokens", tokensJson);
                 }
             }
-            document.body.removeChild(iframe);
         } catch (e) {
             console.warn("[GuncordMI] syncStorage error:", e);
         }
@@ -1202,10 +1797,10 @@ async function initInstanceWindowAuth(): Promise<void> {
 
     // 2. Check if already authenticated with target account
     const checkAuthAndRoute = () => {
-        const authStore = findByProps("getToken", "getId");
+        const authStore = getCachedTokenMod();
         if (authStore?.getToken?.() === cleanTok && authStore?.getId?.()) {
             console.log("[GuncordMI] User authenticated successfully!");
-            const router = findByProps("transitionTo", "replaceWith");
+            const router = findByPropsSilent("transitionTo", "replaceWith");
             if ((window.location.pathname.includes("/login") || window.location.pathname === "/") && router?.transitionTo) {
                 router.transitionTo("/channels/@me");
             }
@@ -1227,7 +1822,7 @@ async function initInstanceWindowAuth(): Promise<void> {
         } catch (e) {
             console.warn("[GuncordMI] loginToken error:", e);
         }
-        const dispatcher = findByProps("dispatch", "subscribe") || FluxDispatcher;
+        const dispatcher = findByPropsSilent("dispatch", "subscribe") || FluxDispatcher;
         if (dispatcher?.dispatch) {
             try {
                 dispatcher.dispatch({ type: "LOGIN", token: cleanTok });
@@ -1243,7 +1838,7 @@ async function initInstanceWindowAuth(): Promise<void> {
         }
     };
 
-    const immediateLoginMod = findByProps("loginToken") || findByProps("switchAccount", "loginToken");
+    const immediateLoginMod = findByPropsSilent("loginToken") || findByPropsSilent("switchAccount", "loginToken");
     if (immediateLoginMod) {
         triggerLogin(immediateLoginMod);
     } else {
@@ -1253,7 +1848,7 @@ async function initInstanceWindowAuth(): Promise<void> {
     // 4. Transition to /channels/@me once gateway connects
     const routeToMe = () => {
         console.log("[GuncordMI] Transitioning to /channels/@me...");
-        const router = findByProps("transitionTo", "replaceWith");
+        const router = findByPropsSilent("transitionTo", "replaceWith");
         if ((window.location.pathname.includes("/login") || window.location.pathname === "/") && router?.transitionTo) {
             router.transitionTo("/channels/@me");
         }
@@ -1278,7 +1873,7 @@ async function initInstanceWindowAuth(): Promise<void> {
         setTimeout(() => {
             syncStorage();
             if (!checkAuthAndRoute() && !loginTriggered) {
-                const mod = findByProps("loginToken") || findByProps("switchAccount", "loginToken");
+                const mod = findByPropsSilent("loginToken") || findByPropsSilent("switchAccount", "loginToken");
                 if (mod) triggerLogin(mod);
             }
         }, delay);
@@ -1311,8 +1906,93 @@ export default definePlugin({
         captureCurrentToken();
         fetchAllAccounts().catch(() => {});
         if (!isCurrentInstanceWindow()) {
+            // Auto-recover session if Discord wiped localStorage["token"] (e.g., due to DevTools hideToken or crash)
+            (async () => {
+                try {
+                    const authStore = getCachedTokenMod();
+                    const ls = getSafeLocalStorage();
+                    const hasToken = !!(authStore?.getToken?.() || ls?.getItem("token"));
+                    if (!hasToken && ls) {
+                        let targetUserId: string | null = null;
+                        try {
+                            const uidCache = ls.getItem("user_id_cache");
+                            if (uidCache) targetUserId = JSON.parse(uidCache);
+                        } catch {}
+                        if (!targetUserId) {
+                            try {
+                                const maRaw = ls.getItem("MultiAccountStore");
+                                if (maRaw) {
+                                    const ma = JSON.parse(maRaw);
+                                    const users = ma?._state?.users;
+                                    if (Array.isArray(users) && users.length > 0) {
+                                        targetUserId = users[0]?.id ?? null;
+                                    }
+                                }
+                            } catch {}
+                        }
+                        let recoveredTok: string | null = targetUserId ? (tokenCache[targetUserId] ?? null) : null;
+                        if (!recoveredTok) {
+                            const saved = await fetchAllAccounts();
+                            if (targetUserId) {
+                                recoveredTok = saved.find(a => a.id === targetUserId)?.token ?? null;
+                            }
+                            if (!recoveredTok && saved.length > 0) {
+                                recoveredTok = saved[0]?.token ?? null;
+                                targetUserId = saved[0]?.id ?? targetUserId;
+                            }
+                        }
+                        if (!recoveredTok && Object.keys(tokenCache).length > 0) {
+                            const [firstId, firstTok] = Object.entries(tokenCache)[0];
+                            recoveredTok = firstTok;
+                            targetUserId = targetUserId || firstId;
+                        }
+                        if (recoveredTok) {
+                            let cleanTok = recoveredTok.trim().replace(/^"+|"+$/g, "");
+                            if (cleanTok.startsWith("dQw4w9WgXcQ:") && typeof Native?.decryptToken === "function") {
+                                const dec = await Native.decryptToken(cleanTok).catch(() => null);
+                                if (dec) cleanTok = dec;
+                            }
+                            if (cleanTok && !cleanTok.startsWith("dQw4w9WgXcQ:")) {
+                                console.log("[GuncordMI] Auto-recovering wiped main window session for userId:", targetUserId);
+                                ls.setItem("token", JSON.stringify(cleanTok));
+                                if (targetUserId) ls.setItem("user_id_cache", JSON.stringify(targetUserId));
+                                const tokenMod = findByPropsSilent("getToken", "encryptAndStoreTokens");
+                                if (tokenMod?.encryptAndStoreTokens && targetUserId) {
+                                    const allMap: Record<string, string> = { ...tokenCache, [targetUserId]: cleanTok };
+                                    tokenMod.encryptAndStoreTokens(allMap).catch(() => {});
+                                }
+                                const loginMod = findByPropsSilent("loginToken") || findByPropsSilent("switchAccount", "loginToken");
+                                if (loginMod?.loginToken) {
+                                    loginMod.loginToken(cleanTok);
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn("[GuncordMI] Session auto-recovery error:", e);
+                }
+            })();
+
             scheduleMasterAudioSave();
             hookAudioSettingsWatcher();
+
+            const triggerAuto = () => {
+                setTimeout(() => {
+                    runAutoLaunch().catch(err => console.warn("[GuncordMI] runAutoLaunch error:", err));
+                }, 2000);
+            };
+
+            const curUser = UserStore.getCurrentUser();
+            if (curUser?.id) {
+                triggerAuto();
+            } else {
+                waitFor(["dispatch", "subscribe"], (dispatcher: any) => {
+                    const unConn = dispatcher.subscribe("CONNECTION_OPEN", () => {
+                        try { unConn(); } catch {}
+                        triggerAuto();
+                    });
+                });
+            }
         }
         addHeaderBarButton("guncord-multi-instance", () => <MultiInstanceButton />, 9);
     },

@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { definePluginSettings } from "@api/Settings";
 import { disableStyle, enableStyle } from "@api/Styles";
@@ -22,7 +10,7 @@ import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
-import { ChannelStore, createRoot, MessageStore, Toasts } from "@webpack/common";
+import { ChannelStore, createRoot, MessageStore, showToast } from "@webpack/common";
 import { Root } from "react-dom/client";
 
 import ReplyNavigator from "./ReplyNavigator";
@@ -115,18 +103,10 @@ export default definePlugin({
                             jumpType: "INSTANT"
                         });
                         if (replies.length > 1) {
-                            Toasts.show({
-                                id: Toasts.genId(),
-                                message: "Use the bottom panel to navigate between replies.",
-                                type: Toasts.Type.MESSAGE
-                            });
+                            showToast({ text: "Use the bottom panel to navigate between replies." });
                             const container = document.querySelector("[class*=channelBottomBarArea_]");
                             if (!container) {
-                                Toasts.show({
-                                    id: Toasts.genId(),
-                                    message: "Couldn't find the container element.",
-                                    type: Toasts.Type.FAILURE
-                                });
+                                showToast({ text: "Couldn't find the container element.", variant: "critical" });
                                 return;
                             }
 
@@ -139,11 +119,7 @@ export default definePlugin({
                             root!.render(<ReplyNavigator replies={replies} />);
                         }
                     } else {
-                        Toasts.show({
-                            id: Toasts.genId(),
-                            message: "Couldn't find a reply.",
-                            type: Toasts.Type.FAILURE
-                        });
+                        showToast({ text: "Couldn't find a reply.", variant: "critical" });
                     }
                 }
             };

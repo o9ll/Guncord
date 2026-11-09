@@ -33,3 +33,4 @@ type Spinner = ComponentType<Omit<HTMLAttributes<HTMLDivElement>, "children"> & 
 export const Spinner = findComponentByCodeLazy('"pulsingEllipsis"') as unknown as Spinner;
 
 export const cl = classNameFactory("qrlogin-");
+

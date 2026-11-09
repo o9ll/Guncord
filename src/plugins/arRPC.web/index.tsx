@@ -1,29 +1,18 @@
 /*
- * Guncord, a modification for Discord's desktop app
- * Copyright (c) 2022 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Guncord, a Discord client mod
+ * Copyright (c) 2026 o9
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { popNotice, showNotice } from "@api/Notices";
 import { migratePluginSettings } from "@api/Settings";
-import { HeadingSecondary } from "@components/Heading";
+import { Heading } from "@components/Heading";
 import { Link } from "@components/Link";
+import { Margins } from "@components/margins";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import definePlugin, { ReporterTestable } from "@utils/types";
-import { ApplicationAssetUtils, fetchApplicationsRPC, FluxDispatcher, Toasts } from "@webpack/common";
+import { ApplicationAssetUtils, fetchApplicationsRPC, FluxDispatcher, showToast } from "@webpack/common";
 
 async function lookupAsset(applicationId: string, key: string): Promise<string> {
     return (await ApplicationAssetUtils.fetchAssetIds(applicationId, [key]))[0];
@@ -45,11 +34,11 @@ export default definePlugin({
     tags: ["Activity", "Utility"],
     authors: [Devs.Ducko],
     reporterTestable: ReporterTestable.None,
-    hidden: !IS_EQUIBOP && !IS_VESKTOP && !("legcord" in window),
+    hidden: IS_EQUIBOP || IS_VESKTOP || "legcord" in window,
 
     settingsAboutComponent: () => (
         <>
-            <HeadingSecondary>How to use arRPC</HeadingSecondary>
+            <Heading className={Margins.bottom8}>How to use arRPC</Heading>
             <Paragraph>
                 <Link href="https://github.com/OpenAsar/arrpc/tree/main#server">Follow the instructions in the GitHub repo</Link> to get the server running, and then enable the plugin.
             </Paragraph>
@@ -92,16 +81,7 @@ export default definePlugin({
             return;
         }
 
-        Toasts.show({
-            // show toast on success
-            message: "Connected to arRPC",
-            type: Toasts.Type.SUCCESS,
-            id: Toasts.genId(),
-            options: {
-                duration: 1000,
-                position: Toasts.Position.BOTTOM
-            }
-        });
+        showToast({ text: "Connected to arRPC", variant: "success" });
     },
 
     stop() {

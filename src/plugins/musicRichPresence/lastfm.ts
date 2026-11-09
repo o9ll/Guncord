@@ -64,3 +64,4 @@ export const LastFMScrobbler: ScrobblerBackend = {
         return url(`/user/${username}`);
     }
 };
+

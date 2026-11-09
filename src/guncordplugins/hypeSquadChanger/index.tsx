@@ -36,7 +36,7 @@ export async function changeHypeSquadHouse(houseId: number) {
                 res = await RestAPI.post({ url: "/hypesquad/online", body: { house_id: houseId } });
             }
         } else {
-            const TokenStore = (window as any).Vencord?.Webpack?.findByProps?.("getToken");
+            const TokenStore = (window as any).Vencord?.Webpack?.findStore?.("AuthenticationStore") || (window as any).Vencord?.Webpack?.findByProps?.("getToken", "getId");
             const token = TokenStore?.getToken?.() || (window as any).localStorage?.token?.replace(/"/g, "");
             if (!token) {
                 showToast("Impossible de récupérer le token Discord", Toasts.Type.FAILURE);
@@ -304,8 +304,17 @@ function startDomObserver() {
     if (document.querySelector("#user-profile-editing-panel, [class*='editingPanel_'], [class*='standardSidebarView_']")) {
         injectHypeSquadChangerIntoNativePanel();
     }
-    domObserver = new MutationObserver(() => {
+    domObserver = new MutationObserver(mutations => {
         if (!isPluginStarted || isHypeSquadThrottled) return;
+        let relevant = false;
+        for (const m of mutations) {
+            const target = m.target as HTMLElement;
+            if (target?.closest?.("#user-profile-editing-panel, [class*='editingPanel_'], [class*='standardSidebarView_'], [class*='layers_']")) {
+                relevant = true;
+                break;
+            }
+        }
+        if (!relevant) return;
         if (!document.querySelector("#user-profile-editing-panel, [class*='editingPanel_'], [class*='standardSidebarView_']")) return;
         isHypeSquadThrottled = true;
         requestAnimationFrame(() => {

@@ -1,20 +1,8 @@
 /*
- * Guncord, a modification for Discord's desktop app
+ * Guncord, a Discord client mod
  * Copyright (c) 2026 o9
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { definePluginSettings, Settings } from "@api/Settings";
 import { getCustomColorString } from "@equicordplugins/customUserColors";
@@ -25,10 +13,10 @@ import { useMemo, UserStore } from "@webpack/common";
 
 // Calculate a CSS color string based on the user ID
 function calculateNameColorForUser(id?: string) {
-    const { lightness } = settings.use(["lightness"]);
-    const idHash = useMemo(() => id ? h64(id) : null, [id]);
+    const { lightness, saturation, seed } = settings.use(["lightness", "saturation", "seed"]);
+    const idHash = useMemo(() => id ? h64(id + seed) : null, [id, seed]);
 
-    return idHash && `hsl(${idHash % 360n}, 100%, ${lightness}%)`;
+    return idHash && `hsl(${idHash % 360n}, ${saturation}%, ${lightness}%)`;
 }
 
 const settings = definePluginSettings({
@@ -36,6 +24,20 @@ const settings = definePluginSettings({
         description: "Lightness, in %. Change if the colors are too light or too dark",
         type: OptionType.NUMBER,
         default: 70,
+        min: 0,
+        max: 100
+    },
+    saturation: {
+        description: "Saturation, in %. Change if the colors are too vibrant or dull",
+        type: OptionType.NUMBER,
+        default: 100,
+        min: 0,
+        max: 100
+    },
+    seed: {
+        description: "Changing this will shuffle everyone's username color to a new color",
+        type: OptionType.STRING,
+        default: "",
     },
     memberListColors: {
         description: "Replace role colors in the member list",

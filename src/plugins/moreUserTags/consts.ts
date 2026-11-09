@@ -65,3 +65,4 @@ export const computePermissions: (options: {
     checkElevated?: boolean /* = true */;
     excludeGuildPermissions?: boolean /* = false */;
 }) => bigint = findByCodeLazy(".getCurrentUser()", ".computeLurkerPermissionsAllowList()");
+

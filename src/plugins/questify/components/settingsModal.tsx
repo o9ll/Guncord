@@ -30,3 +30,4 @@ export function openQuestifySettingsModal(plugin: Plugin): void {
         }
     );
 }
+

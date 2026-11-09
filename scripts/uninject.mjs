@@ -125,7 +125,7 @@ function uninject(resourcesDir) {
     if (existsSync(backupPath)) {
         try {
             if (existsSync(appAsarPath)) {
-                rmSync(appAsarPath, { force: true });
+                rmSync(appAsarPath, { recursive: true, force: true });
             }
             console.log("[Guncord] Restauration _app.asar → app.asar...");
             renameSync(backupPath, appAsarPath);

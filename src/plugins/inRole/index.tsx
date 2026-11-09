@@ -1,6 +1,6 @@
 /*
  * Guncord, a Discord client mod
- * Copyright (c) 2024 nin0dev
+ * Copyright (c) 2026 o9
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -95,6 +95,7 @@ export default definePlugin({
                         showInRoleModal(getMembersInRole(role.id, guild.id), role.id, channel.id);
                     }}
                     icon={InfoIcon}
+                    leadingAccessory={{ type: "icon", icon: InfoIcon }}
                 />
             );
         },
@@ -121,6 +122,7 @@ export default definePlugin({
                         showInRoleModal(getMembersInRole(role.id, guild.id), role.id, channel.id);
                     }}
                     icon={InfoIcon}
+                    leadingAccessory={{ type: "icon", icon: InfoIcon }}
                 />
             );
         }
