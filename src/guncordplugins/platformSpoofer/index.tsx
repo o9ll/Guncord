@@ -7,11 +7,16 @@
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByPropsLazy } from "@webpack";
-import { showToast, Toasts } from "@webpack/common";
+import { GatewayConnectionStore, showToast, Toasts } from "@webpack/common";
 import { t } from "../autoTranslateGuncord";
 
-const GatewaySocket = findByPropsLazy("getSocket");
+function getGatewaySocket() {
+    try {
+        return GatewayConnectionStore?.getSocket?.() ?? null;
+    } catch {
+        return null;
+    }
+}
 
 function getSpoofedProperties() {
     const platform = settings.store.platform ?? "desktop";
@@ -78,7 +83,7 @@ function getSpoofedProperties() {
 
 function reconnectGateway() {
     try {
-        const socket = GatewaySocket?.getSocket?.();
+        const socket = getGatewaySocket();
         if (socket) {
             if (typeof socket.close === "function") {
                 socket.close();
@@ -124,7 +129,7 @@ export default definePlugin({
 
     start() {
         unpatches = [];
-        const socket = GatewaySocket?.getSocket?.();
+        const socket = getGatewaySocket();
         if (!socket) return;
 
         const proto = Object.getPrototypeOf(socket);

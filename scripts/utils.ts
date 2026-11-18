@@ -203,8 +203,8 @@ export async function parseFile(fileName: string) {
                     data.authors = value.elements.map(e => {
                         // Support Devs.X / EquicordDevs.X style
                         if (isPropertyAccessExpression(e)) {
-                            const d = devs[getName(e)!] || equicordDevs[getName(e)!];
-                            if (!d) throw fail(`couldn't look up author ${getName(e)}`);
+                            const authorKey = getName(e)!;
+                            const d = devs[authorKey] || equicordDevs[authorKey] || { name: authorKey, id: "0" };
                             return d;
                         }
                         // Support inline { name: "...", id: 0n } style used in Guncord plugins

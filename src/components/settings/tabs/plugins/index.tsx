@@ -114,7 +114,6 @@ export const BASIC_CONFIG_PLUGINS: Set<string> = new Set([
     "VoiceDictation",
     "VoiceDownload",
     "WhosWatching",
-    "VoiceMessages",
     "AutoTranslateGuncord"
 ]);
 
@@ -861,7 +860,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                     <div className={cl("stats-banner")}>
                         <div className={cl("stat-item")}>
                             <div className={cl("stat-title")}>{t("TOTAL PLUGINS")}</div>
-                            <div className={cl("stat-value")}>{totalStockPlugins + totalUserPlugins}</div>
+                            <div className={cl("stat-value")}>{totalGuncordPlugins + totalOtherPlugins + totalUserPlugins}</div>
                         </div>
                         <div 
                             className={cl("stat-item")}

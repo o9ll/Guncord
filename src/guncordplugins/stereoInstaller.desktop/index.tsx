@@ -559,7 +559,7 @@ export default definePlugin({
     tags: ["Utility"],
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     required: false,
-    enabledByDefault: false,
+    enabledByDefault: true,
     reporterTestable: ReporterTestable.None,
     settings,
     settingsAboutComponent: ErrorBoundary.wrap(StereoWarning, { noop: true }),

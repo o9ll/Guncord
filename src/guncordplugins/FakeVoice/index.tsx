@@ -6,78 +6,194 @@
 
 import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { UserAreaButton, UserAreaRenderProps } from "@api/UserArea";
-import { findByPropsLazy } from "@webpack";
+import { find, findStore } from "@webpack";
 import definePlugin from "@utils/types";
-import { ChannelStore, ContextMenuApi, FluxDispatcher, Menu, React, SelectedChannelStore, VoiceActions, MediaEngineStore, UserStore } from "@webpack/common";
+import {
+    ChannelStore,
+    ContextMenuApi,
+    FluxDispatcher,
+    GatewayConnectionStore,
+    MediaEngineStore,
+    Menu,
+    React,
+    SelectedChannelStore
+} from "@webpack/common";
 import { t } from "../autoTranslateGuncord";
 
 let isGhostActive = false;
 let configFakeMute = true;
 let configFakeDeafen = true;
 
-// Discord Gateway socket module
-const GatewaySocket = findByPropsLazy("getSocket");
+let originalProtoVSU: any = null;
+let originalProtoSend: any = null;
+let hookedProto: any = null;
 
-/**
- * Send op:4 (Voice State Update) directly through the Gateway socket
- * with the calculated mute/deafen values.
- */
-function sendFakeVoiceState() {
+function getGatewaySocket() {
     try {
-        const channelId = SelectedChannelStore?.getVoiceChannelId?.();
-        if (!channelId) return;
+        if (GatewayConnectionStore?.getSocket) {
+            const s = GatewayConnectionStore.getSocket();
+            if (s) return s;
+        }
+    } catch {}
 
-        const socket = GatewaySocket?.getSocket?.();
-        if (!socket) return;
+    try {
+        const store = findStore("GatewayConnectionStore")
+            ?? find((m: any) => typeof m?.getSocket === "function" && typeof m?.isTryingToConnect === "function")
+            ?? find((m: any) => typeof m?.default?.getSocket === "function");
+        const socket = store?.getSocket?.() ?? store?.default?.getSocket?.();
+        if (socket) return socket;
+    } catch {}
 
-        const channel = ChannelStore?.getChannel?.(channelId);
+    try {
+        const direct = find((m: any) => typeof m?.voiceStateUpdate === "function" && typeof m?.presenceUpdate === "function");
+        if (direct) return direct;
+    } catch {}
 
-        // If active, use our fake states. If inactive, restore the real Discord states.
-        const muteState = isGhostActive ? configFakeMute : MediaEngineStore.isSelfMute();
-        const deafState = isGhostActive ? configFakeDeafen : MediaEngineStore.isSelfDeaf();
+    return null;
+}
 
-        socket.send(4, {
-            guild_id: channel?.guild_id ?? null,
-            channel_id: channelId,
-            self_mute: muteState,
-            self_deaf: deafState,
-            self_video: false,
-        });
+function hookSocket(socket: any) {
+    if (!socket) return socket;
+
+    try {
+        const proto = Object.getPrototypeOf(socket);
+        if (proto && !hookedProto) {
+            hookedProto = proto;
+
+            if (typeof proto.voiceStateUpdate === "function") {
+                originalProtoVSU = proto.voiceStateUpdate;
+                proto.voiceStateUpdate = function (args: any, ...rest: any[]) {
+                    if (isGhostActive && args) {
+                        if (configFakeDeafen) {
+                            args.selfDeaf = true;
+                            args.selfMute = true;
+                        } else if (configFakeMute) {
+                            args.selfMute = true;
+                        }
+                    }
+                    return originalProtoVSU.call(this, args, ...rest);
+                };
+            }
+
+            if (typeof proto.send === "function") {
+                originalProtoSend = proto.send;
+                proto.send = function (op: number, data: any, ...rest: any[]) {
+                    if (op === 4 && isGhostActive && data) {
+                        if (configFakeDeafen) {
+                            data.self_deaf = true;
+                            data.self_mute = true;
+                        } else if (configFakeMute) {
+                            data.self_mute = true;
+                        }
+                    }
+                    return originalProtoSend.call(this, op, data, ...rest);
+                };
+            }
+        }
+
+        if (typeof socket.voiceStateUpdate === "function" && socket.voiceStateUpdate !== proto?.voiceStateUpdate && !socket.__fakeVoiceHooked) {
+            socket.__fakeVoiceHooked = true;
+            const origInstVSU = socket.voiceStateUpdate;
+            socket.voiceStateUpdate = function (args: any, ...rest: any[]) {
+                if (isGhostActive && args) {
+                    if (configFakeDeafen) {
+                        args.selfDeaf = true;
+                        args.selfMute = true;
+                    } else if (configFakeMute) {
+                        args.selfMute = true;
+                    }
+                }
+                return origInstVSU.call(this, args, ...rest);
+            };
+        }
+
+        if (typeof socket.send === "function" && socket.send !== proto?.send && !socket.__fakeVoiceSendHooked) {
+            socket.__fakeVoiceSendHooked = true;
+            const origInstSend = socket.send;
+            socket.send = function (op: number, data: any, ...rest: any[]) {
+                if (op === 4 && isGhostActive && data) {
+                    if (configFakeDeafen) {
+                        data.self_deaf = true;
+                        data.self_mute = true;
+                    } else if (configFakeMute) {
+                        data.self_mute = true;
+                    }
+                }
+                return origInstSend.call(this, op, data, ...rest);
+            };
+        }
     } catch (e) {
-        console.error("[FakeVoice] sendFakeVoiceState error:", e);
+        console.error("[FakeVoice] hookSocket error:", e);
+    }
+
+    return socket;
+}
+
+function unhookSocket() {
+    try {
+        if (hookedProto) {
+            if (originalProtoVSU) {
+                hookedProto.voiceStateUpdate = originalProtoVSU;
+                originalProtoVSU = null;
+            }
+            if (originalProtoSend) {
+                hookedProto.send = originalProtoSend;
+                originalProtoSend = null;
+            }
+            hookedProto = null;
+        }
+    } catch (e) {
+        console.error("[FakeVoice] unhookSocket error:", e);
     }
 }
 
 /**
- * Instantly override the Gateway packet with our target state.
+ * Instantly override the Gateway voice state with our target state.
  */
-const syncState = () => {
-    if (!SelectedChannelStore?.getVoiceChannelId?.()) return;
-    lastSyncTime = Date.now();
-    sendFakeVoiceState();
-};
+function syncState() {
+    try {
+        const channelId = SelectedChannelStore?.getVoiceChannelId?.();
+        if (!channelId) return;
 
-let lastSyncTime = 0;
+        const socket = getGatewaySocket();
+        if (!socket) return;
+        hookSocket(socket);
 
-/**
- * Called when Discord itself toggles mute/deafen — re-assert our fake state immediately.
- */
-function onVoiceStateChange(event: any) {
-    if (!isGhostActive) return;
+        const channel = ChannelStore?.getChannel?.(channelId);
+        const guildId = channel?.guild_id ?? null;
 
-    // Prevent infinite loops: if we just sent a sync < 1000ms ago, ignore the server's echo
-    if (Date.now() - lastSyncTime < 1000) return;
+        const fakeMute = isGhostActive ? (configFakeMute || configFakeDeafen) : (MediaEngineStore?.isSelfMute?.() ?? false);
+        const fakeDeaf = isGhostActive ? configFakeDeafen : (MediaEngineStore?.isSelfDeaf?.() ?? false);
 
-    // Prevent spam: only re-assert if the voice state update is actually for OUR user
-    if (event?.type === "VOICE_STATE_UPDATES") {
-        const myId = UserStore.getCurrentUser()?.id;
-        const myUpdate = event.voiceStates?.find((v: any) => v.userId === myId);
-        if (!myUpdate) return;
+        if (typeof socket.voiceStateUpdate === "function") {
+            socket.voiceStateUpdate({
+                guildId,
+                channelId,
+                selfMute: fakeMute,
+                selfDeaf: fakeDeaf,
+                selfVideo: false,
+                preferredRegion: null
+            });
+        } else if (typeof socket.send === "function") {
+            socket.send(4, {
+                guild_id: guildId,
+                channel_id: channelId,
+                self_mute: fakeMute,
+                self_deaf: fakeDeaf,
+                self_video: false
+            });
+        }
+    } catch (e) {
+        console.error("[FakeVoice] syncState error:", e);
     }
+}
 
-    lastSyncTime = Date.now();
-    // Send it on the next tick so Discord's internal packet goes first
-    setTimeout(sendFakeVoiceState, 0);
+function onVoiceChange() {
+    hookSocket(getGatewaySocket());
+    if (isGhostActive) {
+        setTimeout(syncState, 50);
+        setTimeout(syncState, 250);
+    }
 }
 
 function FakeDeafenIcon({ className }: { className?: string }) {
@@ -107,7 +223,7 @@ function GhostContextMenu() {
                         configFakeMute = nextState;
                         configFakeDeafen = nextState;
                         forceUpdate();
-                        if (isGhostActive) sendFakeVoiceState();
+                        if (isGhostActive) syncState();
                     }}
                 />
                 <Menu.MenuSeparator />
@@ -118,7 +234,7 @@ function GhostContextMenu() {
                     action={() => {
                         configFakeMute = !configFakeMute;
                         forceUpdate();
-                        if (isGhostActive) sendFakeVoiceState();
+                        if (isGhostActive) syncState();
                     }}
                 />
                 <Menu.MenuCheckboxItem
@@ -128,7 +244,7 @@ function GhostContextMenu() {
                     action={() => {
                         configFakeDeafen = !configFakeDeafen;
                         forceUpdate();
-                        if (isGhostActive) sendFakeVoiceState();
+                        if (isGhostActive) syncState();
                     }}
                 />
             </Menu.MenuGroup>
@@ -164,17 +280,28 @@ export default definePlugin({
     dependencies: ["CommandsAPI", "UserAreaAPI"],
 
     start() {
-        // Re-assert our fake state whenever Discord internally updates voice state
-        FluxDispatcher.subscribe("AUDIO_TOGGLE_SELF_MUTE", onVoiceStateChange);
-        FluxDispatcher.subscribe("AUDIO_TOGGLE_SELF_DEAF", onVoiceStateChange);
-        FluxDispatcher.subscribe("VOICE_STATE_UPDATES", onVoiceStateChange);
+        const socket = getGatewaySocket();
+        if (socket) hookSocket(socket);
+
+        FluxDispatcher.subscribe("AUDIO_TOGGLE_SELF_MUTE", onVoiceChange);
+        FluxDispatcher.subscribe("AUDIO_TOGGLE_SELF_DEAF", onVoiceChange);
+        FluxDispatcher.subscribe("VOICE_CHANNEL_SELECT", onVoiceChange);
+        FluxDispatcher.subscribe("RTC_CONNECTION_STATE", onVoiceChange);
+        if (isGhostActive && SelectedChannelStore?.getVoiceChannelId?.()) {
+            syncState();
+        }
     },
 
     stop() {
-        FluxDispatcher.unsubscribe("AUDIO_TOGGLE_SELF_MUTE", onVoiceStateChange);
-        FluxDispatcher.unsubscribe("AUDIO_TOGGLE_SELF_DEAF", onVoiceStateChange);
-        FluxDispatcher.unsubscribe("VOICE_STATE_UPDATES", onVoiceStateChange);
-        isGhostActive = false;
+        FluxDispatcher.unsubscribe("AUDIO_TOGGLE_SELF_MUTE", onVoiceChange);
+        FluxDispatcher.unsubscribe("AUDIO_TOGGLE_SELF_DEAF", onVoiceChange);
+        FluxDispatcher.unsubscribe("VOICE_CHANNEL_SELECT", onVoiceChange);
+        FluxDispatcher.unsubscribe("RTC_CONNECTION_STATE", onVoiceChange);
+        if (isGhostActive) {
+            isGhostActive = false;
+            syncState();
+        }
+        unhookSocket();
     },
 
     userAreaButton: {
@@ -191,7 +318,7 @@ export default definePlugin({
                 configFakeMute = !configFakeMute;
                 isGhostActive = configFakeMute;
                 syncState();
-                sendBotMessage(ctx.channel.id, { content: `👻 **Fake Mute** is ${isGhostActive ? t("enabled") : t("disabled")}.` });
+                sendBotMessage(ctx.channel.id, { content: `**Fake Mute** is ${isGhostActive ? t("enabled") : t("disabled")}.` });
             },
         },
         {
@@ -202,7 +329,7 @@ export default definePlugin({
                 configFakeDeafen = !configFakeDeafen;
                 isGhostActive = configFakeDeafen;
                 syncState();
-                sendBotMessage(ctx.channel.id, { content: `👻 **Fake Deafen** is ${isGhostActive ? t("enabled") : t("disabled")}.` });
+                sendBotMessage(ctx.channel.id, { content: `**Fake Deafen** is ${isGhostActive ? t("enabled") : t("disabled")}.` });
             },
         },
         {
@@ -215,7 +342,7 @@ export default definePlugin({
                 configFakeDeafen = next;
                 isGhostActive = next;
                 syncState();
-                sendBotMessage(ctx.channel.id, { content: `👻 **Fake Deafen & Mute** are ${isGhostActive ? t("enabled") : t("disabled")}.` });
+                sendBotMessage(ctx.channel.id, { content: `**Fake Deafen & Mute** are ${isGhostActive ? t("enabled") : t("disabled")}.` });
             },
         },
     ]

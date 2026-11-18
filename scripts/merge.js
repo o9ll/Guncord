@@ -1,42 +1,10 @@
 const fs = require('fs');
 const current = {
-  "1020801845490356245": [
-    {
-      "badge": "https://i.imgur.com/SxrexRu.png",
-      "tooltip": "Early Verified Developer",
-      "auto": true
-    },
-    {
-      "badge": "https://i.imgur.com/YR1DCoB.png",
-      "tooltip": "Early Supporter",
-      "auto": true
-    },
-    {
-      "badge": "https://i.imgur.com/Wyw0BqM.png",
-      "tooltip": "Partner",
-      "auto": true
-    }
-  ]
+  "1020801845490356245": []
 };
 
 const old = {
-  "1020801845490356245": [
-    {
-      "badge": "https://i.imgur.com/SxrexRu.png",
-      "tooltip": "Early Verified Developer",
-      "auto": true
-    },
-    {
-      "badge": "https://i.imgur.com/YR1DCoB.png",
-      "tooltip": "Early Supporter",
-      "auto": true
-    },
-    {
-      "badge": "https://i.imgur.com/Wyw0BqM.png",
-      "tooltip": "Partner",
-      "auto": true
-    }
-  ]
+  "1020801845490356245": []
 };
 
 const result = { ...current };

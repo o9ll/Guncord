@@ -98,6 +98,79 @@ export default {};
             contents: `export function tPlugin(key) { return key; }`
         }));
 
+        // ── src/api/guncord_base64.ts (~135 KB base64 image) ──────────
+        build.onResolve({ filter: /guncord_base64/ }, args => ({
+            path: args.path,
+            namespace: "ext-stub-gunB64"
+        }));
+        build.onLoad({ filter: /.*/, namespace: "ext-stub-gunB64" }, () => ({
+            loader: "js",
+            contents: `export const GUNCORD_ICON_DATA_URI = "";`
+        }));
+
+        // ── api/i18n (~258 KB) ──────────────────────────────────────────────
+        build.onResolve({ filter: /api[/\\]i18n/ }, args => ({
+            path: args.path,
+            namespace: "ext-stub-i18n"
+        }));
+        build.onLoad({ filter: /.*/, namespace: "ext-stub-i18n" }, () => ({
+            loader: "js",
+            contents: `
+export function getActiveLanguage() { return "en"; }
+export function t(key) { return key; }
+export function tPlugin(key) { return key; }
+export const translations = {};
+export const LANGUAGES = [{ code: "en", name: "English" }];
+export const LANGUAGE_FLAGS = { en: "" };
+export default { t: (key) => key };
+`
+        }));
+
+        // ── avatarData.ts (~230 KB base64) ─────────────────────────────────
+        build.onResolve({ filter: /avatarData/ }, args => ({
+            path: args.path,
+            namespace: "ext-stub-avatarData"
+        }));
+        build.onLoad({ filter: /.*/, namespace: "ext-stub-avatarData" }, () => ({
+            loader: "js",
+            contents: `export const GUNCORD_AVATAR_BASE64 = ""; export const defaultAvatarData = ""; export default "";`
+        }));
+
+        // ── guncordLogo.ts (~230 KB base64) ──────────────────────────────
+        build.onResolve({ filter: /guncordLogo/ }, args => ({
+            path: args.path,
+            namespace: "ext-stub-ncLogo"
+        }));
+        build.onLoad({ filter: /.*/, namespace: "ext-stub-ncLogo" }, () => ({
+            loader: "js",
+            contents: `export const GUNCORD_LOGO = ""; export const GUNCORD_IMAGE_ICON = ""; export default "";`
+        }));
+
+        // ── jsqr (~256 KB QR scanner) ──────────────────────────────────────
+        build.onResolve({ filter: /^jsqr/ }, args => ({
+            path: args.path,
+            namespace: "ext-stub-jsqr"
+        }));
+        build.onLoad({ filter: /.*/, namespace: "ext-stub-jsqr" }, () => ({
+            loader: "js",
+            contents: `export default function jsQR() { return null; }`
+        }));
+
+        // ── soundcordHelper (~200 KB) ──────────────────────────────────────
+        build.onResolve({ filter: /soundcordHelper/ }, args => ({
+            path: args.path,
+            namespace: "ext-stub-soundcord"
+        }));
+        build.onLoad({ filter: /.*/, namespace: "ext-stub-soundcord" }, () => ({
+            loader: "js",
+            contents: `
+export const playerState = { isPlaying: false, track: null };
+export async function resolveSoundCordStream() { return null; }
+export async function searchSoundCordTracks() { return []; }
+export default {};
+`
+        }));
+
     }
 };
 
@@ -169,6 +242,7 @@ const buildConfigs = [
         ...commonOptions,
         outfile: "dist/browser/extension.js",
         minify: true,
+        legalComments: "none",
         plugins: [
             extensionStubPlugin,
             globPlugins("web"),

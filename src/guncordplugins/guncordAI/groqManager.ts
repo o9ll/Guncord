@@ -12,9 +12,11 @@ const logger = new Logger("GroqManager");
 const DS_API_KEY = "groq-shared-api-key";
 
 const DEFAULT_GROQ_MODELS = [
-    "openai/gpt-oss-20b",
-    "openai/gpt-oss-120b",
     "qwen/qwen3.8-27b",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
     "allam-2-7b",
 ] as const;
 
@@ -51,9 +53,11 @@ async function refreshGroqModels(apiKey: string): Promise<string[]> {
                     );
                 if (apiModels.length > 0) {
                     const preferredOrder = [
-                        "openai/gpt-oss-20b",
-                        "openai/gpt-oss-120b",
                         "qwen/qwen3.8-27b",
+                        "llama-3.3-70b-versatile",
+                        "llama-3.1-8b-instant",
+                        "openai/gpt-oss-120b",
+                        "openai/gpt-oss-20b",
                         "allam-2-7b",
                     ];
                     apiModels.sort((a, b) => {

@@ -115,6 +115,7 @@ export let StickersPersistedStore: any;
 export let GIFPickerViewStore: any;
 export let MessageRequestStore: any;
 export let SelfPresenceStore: any;
+export let GatewayConnectionStore: any;
 
 /**
  * @see jsdoc of {@link t.useStateFromStores}
@@ -201,6 +202,7 @@ waitForStore("SessionsStore", m => SessionsStore = m);
 waitForStore("GuildAvailabilityStore", m => GuildAvailabilityStore = m);
 waitForStore("UserGuildJoinRequestStore", m => UserGuildJoinRequestStore = m);
 waitForStore("BasicGuildStore", m => BasicGuildStore = m);
+waitForStore("GatewayConnectionStore", m => GatewayConnectionStore = m);
 waitForStore("ThemeStore", m => {
     ThemeStore = m;
     // Importing this directly causes all webpack commons to be imported, which can easily cause circular dependencies.

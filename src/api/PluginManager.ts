@@ -427,8 +427,6 @@ export const initPluginManager = onlyOnce(function init() {
             "PrevNames",
             "AutoDeco",
             "autoDeco",
-            "FollowUser",
-            "followUser",
             "RealtimeTimestamps",
             "realtimeTimestamps",
             "CrashHandler",

@@ -477,22 +477,26 @@ async function handleStrangerSelect(username: string, switcher?: any) {
 
 
 function getQuickSwitcherElements(): { container: HTMLElement | null; input: HTMLInputElement | null } {
-    // 1. Must strictly be the Discord QuickSwitcher modal container
+    // 1. Never match if settings view is open
+    if (document.querySelector('[class*="standardSidebarView_"], [class*="settings_"]')) {
+        return { container: null, input: null };
+    }
+
+    // 2. Must strictly be the Discord QuickSwitcher modal container inside a modal layer
     const container = document.querySelector<HTMLElement>(
         '[class*="quickswitcher_"], [class*="quickSwitcher_"], [class*="quickswitcher-"], [class*="quickSwitcher-"]'
     );
     if (!container) return { container: null, input: null };
 
-    // 2. Reject if inside settings or sidebar views
-    if (container.closest('[class*="standardSidebarView_"], [class*="settings_"], [class*="sidebarRegion_"]')) {
-        return { container: null, input: null };
-    }
+    // 3. Must be inside a modal dialog or layer
+    const modal = container.closest('[role="dialog"], [class*="modal_"], [class*="layer_"]');
+    if (!modal) return { container: null, input: null };
 
-    // 3. Find input strictly inside this QuickSwitcher container
+    // 4. Find input strictly inside this QuickSwitcher container
     const input = container.querySelector<HTMLInputElement>(
-        'input[class*="input_"], input[role="combobox"], input[aria-autocomplete="list"], input'
+        'input[class*="input_"], input[role="combobox"], input[aria-autocomplete="list"]'
     );
-    if (!input) return { container: null, input: null };
+    if (!input || !container.contains(input)) return { container: null, input: null };
 
     return { container, input };
 }
@@ -618,7 +622,15 @@ function updateButtonPosition(btn: HTMLElement, container: HTMLElement, input: H
 
 function mountSearchButton(switcher?: any) {
     const { container, input } = getQuickSwitcherElements();
-    if (!container) return;
+    if (!container || !input) {
+        document.querySelectorAll("#guncord-validsearch-btn").forEach(el => el.remove());
+        return;
+    }
+
+    // Purge any stray button instances outside this container
+    document.querySelectorAll("#guncord-validsearch-btn").forEach(el => {
+        if (!container.contains(el)) el.remove();
+    });
 
     if (getComputedStyle(container).position === "static") {
         container.style.position = "relative";
@@ -630,11 +642,6 @@ function mountSearchButton(switcher?: any) {
 
     let btn = container.querySelector<HTMLElement>("#guncord-validsearch-btn");
     if (!btn) {
-        const orphan = document.getElementById("guncord-validsearch-btn");
-        if (orphan && orphan !== btn) {
-            orphan.remove();
-        }
-
         btn = document.createElement("div");
         btn.id = "guncord-validsearch-btn";
         btn.className = "guncord-validsearch-btn";
@@ -1077,8 +1084,7 @@ export default definePlugin({
                 if (container) {
                     mountSearchButton(activeSwitcher);
                 } else {
-                    const btn = document.getElementById("guncord-validsearch-btn");
-                    if (btn) btn.remove();
+                    document.querySelectorAll("#guncord-validsearch-btn").forEach(b => b.remove());
                 }
             });
         });
@@ -1088,6 +1094,8 @@ export default definePlugin({
         const { container: initialContainer } = getQuickSwitcherElements();
         if (initialContainer) {
             mountSearchButton(activeSwitcher);
+        } else {
+            document.querySelectorAll("#guncord-validsearch-btn").forEach(b => b.remove());
         }
 
         // 1. Subscribe to Gateway member chunks
@@ -1146,7 +1154,7 @@ export default definePlugin({
             switcherObserver = null;
         }
         document.getElementById("guncord-validsearch-css")?.remove();
-        document.getElementById("guncord-validsearch-btn")?.remove();
+        document.querySelectorAll("#guncord-validsearch-btn").forEach(b => b.remove());
 
         if (boundOnChunk) {
             try { FluxDispatcher.unsubscribe("GUILD_MEMBERS_CHUNK", boundOnChunk); } catch {}

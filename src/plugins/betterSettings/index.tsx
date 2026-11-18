@@ -191,7 +191,9 @@ export default definePlugin({
     // Thus, we sanity check webpack modules
     Layer(props: LayerProps) {
         try {
-            [FocusLock.$$vencordGetWrappedComponent(), ComponentDispatch, Classes.layer].forEach(e => e.test);
+            [FocusLock.$$vencordGetWrappedComponent?.(), ComponentDispatch, Classes.layer].forEach(e => {
+                if (e == null) throw new Error("Component missing");
+            });
         } catch {
             new Logger("BetterSettings").error("Failed to find some components");
             return props.children;

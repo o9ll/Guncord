@@ -293,7 +293,7 @@ function isMessageObject(m: unknown): m is LoggedMessageJSON {
 
 export default definePlugin({
     name: "MessageLoggerEnhanced",
-    enabledByDefault: false,
+    enabledByDefault: true,
     required: false,
     authors: [Devs.Aria, EquicordDevs.keircn],
     description: "Improves MessageLogger with edited message history, ghost ping detection and more",
@@ -306,7 +306,7 @@ export default definePlugin({
             replacement: [
                 {
                     match: /(?<=\.get\({url.+?then\()(\i)=>\(/,
-                    replace: "async $1=>($self.isEnabled()&&await $self.processMessageFetch($1),"
+                    replace: "async $1=>(await $self.processMessageFetch?.($1),"
                 },
                 {
                     match: /(?<=type:"LOAD_MESSAGES_SUCCESS",.{1,100})messages:(\i)/,
@@ -361,6 +361,8 @@ export default definePlugin({
         }
     ],
     settings,
+
+    isEnabled: () => settings.store.enabled,
 
     processMessageFetch,
     openLogModal,

@@ -37,6 +37,7 @@ import * as $ProfileSections from "./ProfileSections";
 import * as $ServerList from "./ServerList";
 import * as $Settings from "./Settings";
 import * as $Styles from "./Styles";
+import * as $SurfaceClasses from "./SurfaceClasses";
 import * as $Themes from "./Themes";
 import * as $UserSettings from "./UserSettings";
 import * as $UserPlugins from "./UserPlugins";
@@ -173,6 +174,11 @@ export const AudioPlayer = $AudioPlayer;
  * An API allowing you to add buttons to the user area panel.
  */
 export const UserArea = $UserArea;
+
+/**
+ * An API allowing plugins to attach data attributes and props to stable layout surfaces.
+ */
+export const SurfaceClasses = $SurfaceClasses;
 
 /**
  * Just used to identify if user is on Equicord as Vencord doesn't have this.

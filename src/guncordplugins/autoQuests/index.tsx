@@ -1085,19 +1085,7 @@ function teardownHistoryListener() {
 function isCurrentlyOnQuestPage(): boolean {
     if (typeof window === "undefined" || !window.location) return false;
     const pathname = window.location.pathname || "";
-    if (pathname.includes("quest-home")) {
-        return true;
-    }
-    if (typeof document !== "undefined") {
-        const selectedQuestTab = document.querySelector(
-            'a[href*="/quest-home"][aria-selected="true"], [data-list-item-id*="quest-home"][aria-selected="true"], [data-list-item-id*="quest-home"].selected_f5f62a, [data-list-item-id*="quest-home"][class*="selected"]'
-        );
-        if (selectedQuestTab) return true;
-
-        const questHomeContainer = document.querySelector('[class*="questHome"], [data-quest-home]');
-        if (questHomeContainer) return true;
-    }
-    return false;
+    return pathname === "/quest-home" || pathname.startsWith("/quest-home/") || pathname.startsWith("/discovery/quests");
 }
 
 function FloatingQuestWidget() {
@@ -1108,7 +1096,10 @@ function FloatingQuestWidget() {
     useEffect(() => {
         const checkLocation = () => {
             const onQuest = isCurrentlyOnQuestPage();
-            setIsOnQuestTab(prev => (prev !== onQuest ? onQuest : prev));
+            setIsOnQuestTab(prev => {
+                if (!onQuest) setExpanded(false);
+                return prev !== onQuest ? onQuest : prev;
+            });
         };
 
         checkLocation();

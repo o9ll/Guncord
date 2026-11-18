@@ -141,13 +141,13 @@ interface LogEntry {
     attachments?: LogAttachment[];
 }
 
-const MAX_LOGS = 10000;
+const MAX_LOGS = 0;
 const PAGE_SIZE = 40;
 let logs: LogEntry[] = [];
 
 function getLogsLimit(): number {
     const userLimit = settings.store.maxLogsLimit;
-    if (userLimit && userLimit > 0) return userLimit;
+    if (typeof userLimit === "number") return userLimit;
     return MAX_LOGS;
 }
 
@@ -273,7 +273,8 @@ async function loadPersistLogs() {
             }));
             const seen = new Set(logs.map(l => l.id));
             const fresh = parsed.filter(l => !seen.has(l.id));
-            logs = fresh.concat(logs).slice(0, getLogsLimit());
+            const limit = getLogsLimit();
+            logs = limit > 0 ? fresh.concat(logs).slice(0, limit) : fresh.concat(logs);
             logCount = Math.max(logCount, logs.length);
             globalVersion++;
             for (const fn of updateListeners) {
@@ -287,8 +288,10 @@ function savePersistLogs() {
     try {
         const limit = settings.store.maxLogsLimit && settings.store.maxLogsLimit > 0
             ? settings.store.maxLogsLimit
-            : MAX_PERSISTENT_LOGS;
-        const persistentFiltered = logs.filter(l => PERSISTENT_TYPES.has(l.type)).slice(0, limit);
+            : (settings.store.maxLogsLimit === 0 ? 0 : MAX_PERSISTENT_LOGS);
+        const persistentFiltered = limit > 0
+            ? logs.filter(l => PERSISTENT_TYPES.has(l.type)).slice(0, limit)
+            : logs.filter(l => PERSISTENT_TYPES.has(l.type));
         const toSave = persistentFiltered.map(l => ({
             id: l.id,
             timestamp: l.timestamp,
@@ -346,7 +349,7 @@ function fmtNow(): string {
 function pushLog(entry: Omit<LogEntry, "id" | "timestamp" | "timeStr">) {
     const now = Date.now();
     const limit = getLogsLimit();
-    if (logs.length >= limit) {
+    if (limit > 0 && logs.length >= limit) {
         logs.length = limit - 1;
     }
     const newLog: LogEntry = { id: `${now}_${logCount++}`, timestamp: now, timeStr: fmtNow(), ...(entry as any) };
@@ -1552,7 +1555,7 @@ function subscribeToEvents() {
         if (!d.guildId || !d.user?.id || !isGuildLoggingEnabled(d.guildId)) return;
         const b = uInfo(d.user.id); const g = getGuild(d.guildId);
         if (d.communicationDisabledUntil) {
-            pushLog({ type: "guild_timeout", content: t("Temporarily excluded (Timeout)"), ...b, guildId: d.guildId, guildName: g?.name });
+            pushLog({ type: "guild_timeout", content: t("Exclu temporairement (Timeout)"), ...b, guildId: d.guildId, guildName: g?.name });
         }
     });
 
@@ -1568,8 +1571,8 @@ function subscribeToEvents() {
         if (changed) scheduleFlush();
     });
 
-    // Capture logout/disconnect (partial because the plugin stops if fully disconnected)
-    sub("LOGOUT", () => { pushLog({ type: "user_disconnect", content: t("Account logout"), authorName: "System" }); });
+    // Capture logout/disconnect (partiel car le plugin s'arrête si déco totale)
+    sub("LOGOUT", () => { pushLog({ type: "user_disconnect", content: t("Déconnexion du account"), authorName: "System" }); });
 }
 
 export default definePlugin({

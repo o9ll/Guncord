@@ -328,7 +328,7 @@ const ctxPatch: NavContextMenuPatchCallback = (children, props) => {
 
 export default definePlugin({
     name: "FollowUser",
-    enabledByDefault: false,
+    enabledByDefault: true,
     description: "Follows a user in voice channels. Right-click user → Follow User. White heart in header = active following (left-click = join voice channel, right-click = unfollow). Auto-unfollows after inactivity.",
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     settings,

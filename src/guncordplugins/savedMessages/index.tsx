@@ -704,7 +704,7 @@ export function SavedMessagesBanner() {
 export default definePlugin({
     name: "SavedMessages",
     description: "Telegram-style Saved Messages DM with fast local storage. Zero transit with Discord servers.",
-    enabledByDefault: true,
+    enabledByDefault: false,
     startAt: StartAt.WebpackReady,
     authors: [{ name: ".zp", id: 1020801845490356245n }],
     dependencies: ["MessageEventsAPI"],
